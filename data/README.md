@@ -1,0 +1,1 @@
+Execute the `download.sh` script to populate this directory with data files.

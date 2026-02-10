@@ -1,0 +1,19 @@
+[project]
+name = "memory"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "bilby>=2.7.1",
+    "gwosc>=0.8.1",
+    "gwpy>=3.0.14",
+    "h5py>=3.15.1",
+    "ipykernel>=7.2.0",
+    "lalsuite>=7.26.4",
+    "matplotlib>=3.10.8",
+    "numpy>=2.2.6",
+    "pesummary>=1.6",
+    "seaborn>=0.13.2",
+    "setuptools<81",
+]
