@@ -3,7 +3,7 @@ name = "memory"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11,<3.12"
 dependencies = [
     "bilby>=2.7.1",
     "gwosc>=0.8.1",
@@ -16,4 +16,6 @@ dependencies = [
     "pesummary>=1.6",
     "seaborn>=0.13.2",
     "setuptools<81",
+    "gwsurrogate>=1.1.8",
+    "spherical-functions>=2023.0.2",
 ]
