@@ -44,10 +44,18 @@ from utilties.kde_contour import kdeplot
 # Configure numpyro
 device_count = int(os.environ.get("TGRPOP_DEVICE_COUNT", 1))
 numpyro.set_host_device_count(device_count)
-numpyro.set_platform("gpu")
+platform = os.environ.get("TGRPOP_PLATFORM")
+if platform is None:
+    try:
+        # Prefer GPU when present, otherwise fall back to CPU.
+        jax.devices("gpu")
+        platform = "gpu"
+    except Exception:
+        platform = "cpu"
+numpyro.set_platform(platform)
 numpyro.enable_x64()
 
-print(f"Using {device_count} devices")
+print(f"Using {device_count} devices on {platform}")
 
 align_spin_prior = bilby.gw.prior.AlignedSpin()
 
@@ -132,8 +140,8 @@ def read_injection_file(
         q = injections["mass_ratio"]
         a1 = injections["a_1"]
         a2 = injections["a_2"]
-        c1 = injections["cos_tilt_1"]
-        c2 = injections["cos_tilt_2"]
+        c1 = np.clip(injections["cos_tilt_1"], -1.0, 1.0)
+        c2 = np.clip(injections["cos_tilt_2"], -1.0, 1.0)
         s1 = np.sin(np.arccos(c1))
         s2 = np.sin(np.arccos(c2))
         injections["chi_eff"] = (a1 * c1 + q * a2 * c2) / (1 + q)
@@ -206,7 +214,7 @@ def generate_data(
         pooled_phi = np.concatenate([
             np.asarray(e[parameter_name]).ravel() for e in event_posteriors
         ])
-        dphi_scale = np.std(pooled_phi)
+        dphi_scale = max(np.nanstd(pooled_phi), 1e-12)
     else:
         dphi_scale = 1
 
@@ -232,7 +240,15 @@ def generate_data(
         cost1s.append(event_posterior["cos_tilt_1"][idxs])
         cost2s.append(event_posterior["cos_tilt_2"][idxs])
         zs.append(event_posterior["redshift"][idxs])
-        log_pdraw.append(event_posterior["log_prior"][idxs])
+        if "log_prior" in event_posterior.dtype.names:
+            log_pdraw.append(event_posterior["log_prior"][idxs])
+        elif "prior" in event_posterior.dtype.names:
+            log_pdraw.append(np.log(np.clip(event_posterior["prior"][idxs], 1e-300, None)))
+        else:
+            raise KeyError(
+                "Posterior samples must contain either 'log_prior' or 'prior' "
+                "for reweighting."
+            )
 
         if use_tgr:
             d = 3
@@ -358,7 +374,7 @@ def generate_tgr_only_data(event_posteriors, parameter_name,
         pooled_phi = np.concatenate([
             np.asarray(e[parameter_name]).ravel() for e in event_posteriors
         ])
-        dphi_scale = np.std(pooled_phi)
+        dphi_scale = max(np.nanstd(pooled_phi), 1e-12)
     else:
         dphi_scale = 1
 
@@ -423,7 +439,7 @@ def make_joint_model(
     a1_a2s = event_data_array[4:6]
     a1_a2_dphis = event_data_array[4:7]
     zs = event_data_array[7]
-    pdraw = event_data_array[8]
+    log_pdraw = event_data_array[8]
 
     m1s_sel = injection_data_array[0]
     qs_sel = injection_data_array[1]
@@ -497,7 +513,7 @@ def make_joint_model(
         log_m1_powerlaw_density(m1s)
         + log_q_powerlaw_density(qs, m1s)
         + log_redshift_powerlaw(zs)
-        - safe_log(pdraw)
+        - log_pdraw
     )
 
     # Evaluate the selection term
@@ -886,7 +902,7 @@ def main():
             injection_file = os.path.join(repo_dir,
                                       "data/selection/mixture-real_o3_o4a-cartesian_spins_20250503134659UTC.hdf")
         else:
-            raise ValueError(f"Unrecognizedinjection runs: {args.injection_runs}")
+            raise ValueError(f"Unrecognized injection runs: {args.injection_runs}")
     else:
         injection_file = args.injection_file
     print(f"Using injection file: {injection_file}")
@@ -1012,11 +1028,21 @@ def main():
     for filename in event_files:
         with h5py.File(filename, "r") as f:
             if args.param_key:
-                # Search for keys containing param_key
-                keys = [k for k in f.keys() if args.param_key in k]
+                # Search for matching groups with posterior samples.
+                keys = [
+                    k for k in f.keys()
+                    if (
+                        args.param_key in k
+                        and isinstance(f[k], h5py.Group)
+                        and "posterior_samples" in f[k]
+                    )
+                ]
             else:
-                # Search for keys containing "posterior_samples"
-                keys = [k for k in f.keys() if "posterior_samples" in f[k]]
+                # Search for groups containing "posterior_samples".
+                keys = [
+                    k for k in f.keys()
+                    if isinstance(f[k], h5py.Group) and "posterior_samples" in f[k]
+                ]
             if len(keys) != 1:
                 raise KeyError(
                     f"Expected 1 key with 'posterior_samples' in {filename}, "
