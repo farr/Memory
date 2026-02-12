@@ -1,4 +1,5 @@
 import copy
+import scipy
 import numpy as np
 import gwsurrogate
 import spherical_functions
@@ -7,6 +8,7 @@ from scipy.integrate import cumulative_trapezoid as cumtrapz
 import lal
 import lalsimulation as lalsim
 
+from gw_residuals import _ensure_bilby_calibration_keys
 
 def evaluate_surrogate(
     path_to_surrogate, sample, config, return_dynamics=False, ellMax=4
@@ -108,7 +110,9 @@ def evaluate_surrogate(
         return h_modes, t
 
 
-def evaluate_surrogate_with_LAL(sample, config, lmax=4):
+def evaluate_surrogate_with_LAL(
+        sample, config, lmax=4
+):
     """Evaluate NRSur7dq4 using LALSimulation and return polarizations.
 
     This function calls `lalsimulation.SimInspiralChooseTDWaveform`
@@ -172,7 +176,7 @@ def evaluate_surrogate_with_LAL(sample, config, lmax=4):
         s2x,
         s2y,
         s2z,
-        f_low,
+        -1, #f_low,
         f_ref,
         distance,
         None,
@@ -189,11 +193,19 @@ def evaluate_surrogate_with_LAL(sample, config, lmax=4):
             ).data.data
 
     t = np.arange(len(h_modes[(2, 2)])) * deltaT
-
+    
+    t += float(
+        lalsim.SphHarmTimeSeriesGetMode(
+            h_modes_lal, 2, 2
+        ).epoch
+    )
+    
     return h_modes, t
 
 
-def evaluate_surrogate_with_LAL_as_polarizations(sample, config, lmax=4):
+def evaluate_surrogate_with_LAL_as_polarizations(
+        sample, config, lmax=4
+):
     """Evaluate NRSur7dq4 using LALSimulation and return polarizations.
 
     This function calls `lalsimulation.SimInspiralChooseTDWaveform`
@@ -276,7 +288,9 @@ def evaluate_surrogate_with_LAL_as_polarizations(sample, config, lmax=4):
     return hp, hc
 
 
-def map_modes_to_polarizations(modes, t, sample, longAscNodes=0.0):
+def map_modes_to_polarizations(
+        modes, t, sample, longAscNodes=0.0
+):
     """Project spherical-harmonic modes onto plus and cross polarizations.
 
     This function reconstructs the strain polarizations from a set of
@@ -329,7 +343,9 @@ def map_modes_to_polarizations(modes, t, sample, longAscNodes=0.0):
     return h_plus, h_cross
 
 
-def compute_angular_integral_factor(tuple1, tuple2, tuple3=None):
+def compute_angular_integral_factor(
+        tuple1, tuple2, tuple3=None
+):
     """Compute angular coupling using Wigner 3j symbols.
 
     Evaluates the integral of three spin-weighted spherical harmonics
@@ -372,7 +388,9 @@ def compute_angular_integral_factor(tuple1, tuple2, tuple3=None):
     return prefactor * w3j1 * w3j2
 
 
-def compute_angular_factors(ell_max=6, spin_weight=-2):
+def compute_angular_factors(
+        ell_max=6, spin_weight=-2
+):
     """Precompute angular factors for nonlinear memory calculations.
 
     Parameters
@@ -525,3 +543,162 @@ def compute_memory_correction(
                     )
 
     return h_memory
+
+def compute_memory_and_map_to_polarizations(
+        sample, config, angular_factors=None, lmax=4
+):
+    """
+    """
+    # evaluate surrogate
+    h, t = evaluate_surrogate_with_LAL(sample, config, lmax=4)
+    
+    # memory
+    h_memory = compute_memory_correction(
+        h, t, sample, angular_factors=angular_factors, return_memory_only=True
+    )
+    
+    hp_memory, hc_memory = map_modes_to_polarizations(h_memory, t, sample)
+
+    return hp_memory, hc_memory, t
+
+def insert_waveform(h, t_target, input_idx, target_idx):
+    """
+    Return an array the same length as t_target where waveform h is 'inserted'
+    so that h[input_idx] aligns with output[target_idx].
+
+    Outside the overlap region, the output is filled with the nearest boundary
+    value of h (constant extension), matching the intent of your original code.
+    """
+    h = np.asarray(h).ravel()
+    n = h.size
+    m = np.asarray(t_target).size
+
+    if n == 0:
+        return np.zeros(m)
+    if m == 0:
+        return np.zeros(0, dtype=h.dtype)
+
+    input_idx = int(input_idx)
+    target_idx = int(target_idx)
+
+    if not (0 <= input_idx < n):
+        raise IndexError(f"input_idx={input_idx} is out of bounds for h of length {n}")
+
+    # Where h[0] would land in the target
+    start = target_idx - input_idx          # can be negative
+    end   = start + n                       # EXCLUSIVE end in target coordinates
+
+    out = np.empty(m, dtype=h.dtype)
+
+    # No overlap: h entirely before target
+    if end <= 0:
+        out.fill(h[-1])
+        return out
+
+    # No overlap: h entirely after target
+    if start >= m:
+        out.fill(h[0])
+        return out
+
+    # Overlap region in target (exclusive end, Python slicing style)
+    ov_start = max(start, 0)
+    ov_end   = min(end, m)
+
+    # Corresponding overlap region in h
+    h_start = ov_start - start              # >= 0
+    h_end   = h_start + (ov_end - ov_start) # exclusive
+
+    # Insert overlap
+    out[ov_start:ov_end] = h[h_start:h_end]
+
+    # Constant-fill left side with first valid inserted value
+    if ov_start > 0:
+        out[:ov_start] = h[h_start]
+
+    # Constant-fill right side with last valid inserted value
+    if ov_end < m:
+        out[ov_end:] = h[h_end - 1]
+
+    return out
+
+def insert_memory_into_time_array(hp, hc, t, sample, config, fd):
+    """
+    """
+    fs = config.sampling_frequency
+    deltaT = 1 / fs
+
+    t_data = np.arange(2*(fd.size - 1)) * deltaT + config.start_time
+    
+    input_idx = np.argmin(abs(t))
+    target_idx = np.argmin(abs(t_data - sample['geocent_time']))
+
+    delta_t = sample['geocent_time'] - (t_data[target_idx] - t[input_idx])
+    
+    hp_inserted = insert_waveform(hp, t_data, input_idx, target_idx)
+    hc_inserted = insert_waveform(hc, t_data, input_idx, target_idx)
+    
+    return hp_inserted, hc_inserted, delta_t
+
+def polarizations_to_FD(hp_memory, hc_memory, delta_t, config, roll_on=0.2):
+    """
+    """
+    # window
+    alpha = 2 * roll_on / config.duration
+    window = scipy.signal.windows.tukey(hp_memory.size, alpha)
+    
+    # fft
+    fs = config.sampling_frequency
+    deltaT = 1 / fs
+
+    freqs = np.fft.rfftfreq(hp_memory.size, delta_t)
+    hp_memory_FD = np.fft.rfft(window * hp_memory) * deltaT * np.exp(-1j * 2 * np.pi * freqs * delta_t)
+    hc_memory_FD = np.fft.rfft(window * hc_memory) * deltaT * np.exp(-1j * 2 * np.pi * freqs * delta_t)
+    
+    return hp_memory_FD, hc_memory_FD
+
+def project_to_detectors(hp, hc, sample, ifos):
+    """
+    """
+    pols = {
+        "plus": hp,
+        "cross": hc,
+    }
+    
+    n_points = int(ifos[0].calibration_model.n_points)
+    sample_normalized = _ensure_bilby_calibration_keys(
+        sample, tuple(ifo.name for ifo in ifos), n_points
+    )
+
+    out: Dict[str, np.ndarray] = {}
+    for ifo in ifos:
+        model_fd = ifo.get_detector_response(pols, sample_normalized)
+        out[ifo.name] = model_fd
+        
+    return out
+
+def compute_memories(res, ell_max=4):
+    """
+    """
+    ifos = res['ifos']
+    config = res['config']
+    samples = res['samples']
+    
+    angular_factors = compute_angular_factors(ell_max)
+
+    h_memories_in_det = []
+    for i, sample in enumerate(samples):
+        hp, hc, t = compute_memory_and_map_to_polarizations(
+            sample, config, angular_factors=angular_factors, lmax=ell_max
+        )
+
+        hp_inserted, hc_inserted, delta_t = insert_memory_into_time_array(
+            hp, hc, t, sample, config, res['fd']['H1']['model'][i]
+        )
+
+        hp_FD, hc_FD = polarizations_to_FD(hp_inserted, hc_inserted, delta_t, config)
+        
+        h_memory_in_det = project_to_detectors(hp_FD, hc_FD, sample, ifos)
+
+        h_memories_in_det.append(h_memory_in_det)
+
+    return h_memories_in_det
