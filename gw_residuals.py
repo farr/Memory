@@ -30,7 +30,11 @@ LOGGER = logging.getLogger("gw_residuals")
 
 @dataclass
 class AnalysisConfig:
-    """Configuration for gravitational wave analysis."""
+    """Configuration for gravitational wave analysis.
+    
+    Stores both parsed analysis parameters and the complete raw config dictionary
+    from the PESummary file, allowing access to any settings not explicitly parsed.
+    """
     label: str
     event: str
     detectors: Tuple[str, ...]
@@ -43,6 +47,8 @@ class AnalysisConfig:
     maximum_frequency: Optional[Dict[str, float]]
     reference_frequency: float
     waveform_approximant: str
+    config_dict: Dict[str, Dict[str, Any]]
+    """Complete config.ini settings as section -> key -> value dict."""
 
 
 # ----------------------------
@@ -261,6 +267,7 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
         maximum_frequency=max_freq,
         reference_frequency=float(reference_frequency),
         waveform_approximant=waveform_approximant,
+        config_dict=cfg,
     )
 
 
