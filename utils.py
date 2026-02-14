@@ -10,18 +10,16 @@ import lalsimulation as lalsim
 
 from gw_residuals import _ensure_bilby_calibration_keys
 
-def evaluate_surrogate(
-    path_to_surrogate, sample, config, return_dynamics=False, ellMax=4
-):
-    """Evaluate the NRSur7dq4 surrogate model and return waveform modes.
 
-    This function evaluates the NRSur7dq4 time-domain surrogate using
-    `gwsurrogate` and returns inertial-frame gravitational-wave modes.
+def evaluate_surrogate_with_LAL(sample, res, ell_max=4):
+    """Evaluate NRSur7dq4 using LALSimulation and return spherical-harmonic modes.
+
+    This function calls `lalsimulation.SimInspiralChooseTDModes`
+    with the NRSur7dq4 approximant and returns the time-domain
+    spin-weighted spherical-harmonic modes.
 
     Parameters
     ----------
-    path_to_surrogate : str
-        Path to the NRSur7dq4 surrogate HDF5 file.
     sample : dict
         Dictionary of source parameters containing:
         - 'mass_1', 'mass_2' : float
@@ -42,11 +40,9 @@ def evaluate_surrogate(
             Dictionary of low-frequency cutoffs in Hz.
         - reference_frequency : float
             Reference frequency in Hz.
-    return_dynamics : bool, optional
-        If True, also return the surrogate precessing dynamics.
-        Default is False.
-    ellMax : int, optional
-        Maximum spherical-harmonic ℓ mode to evaluate. Default is 4.
+    ell_max : int, optional
+        Maximum ℓ mode included in the waveform model.
+        Default is 4.
 
     Returns
     -------
@@ -54,95 +50,7 @@ def evaluate_surrogate(
         Dictionary of complex waveform modes {(ℓ, m): h_ℓm(t)}.
         Each value is a NumPy array.
     t : ndarray
-        Time array in seconds.
-    dyn : dict, optional
-        Dictionary of precessing dynamics (only if
-        `return_dynamics=True`).
-    """
-    # Extract masses and spins
-    mass_1 = sample["mass_1"]
-    mass_2 = sample["mass_2"]
-    M_total = mass_1 + mass_2
-
-    chiA = np.array([sample["spin_1x"], sample["spin_1y"], sample["spin_1z"]])
-    chiB = np.array([sample["spin_2x"], sample["spin_2y"], sample["spin_2z"]])
-
-    # Enforce m1 >= m2 for NRSur7dq4
-    if mass_2 > mass_1:
-        mass_1, mass_2 = mass_2, mass_1
-        chiA, chiB = chiB, chiA
-
-    q = mass_1 / mass_2
-
-    # Get frequencies, time spacing, and phi_ref
-    fs = config.sampling_frequency
-    dt = 1 / fs
-
-    f_low = config.minimum_frequency["H1"]
-    f_ref = config.reference_frequency
-
-    phi_ref = sample["phase"]
-
-    # Load the surrogate model
-    sur = gwsurrogate.LoadSurrogate(path_to_surrogate)
-
-    # Evaluate the surrogate waveform
-    precessing_opts = {"return_dynamics": return_dynamics}
-
-    t, h_modes, dyn = sur(
-        q,
-        chiA,
-        chiB,
-        M=M_total,
-        dist_mpc=sample["luminosity_distance"],
-        units="mks",
-        dt=dt,
-        f_low=f_low,
-        f_ref=f_ref,
-        phi_ref=phi_ref,
-        precessing_opts=precessing_opts,
-        ellMax=ellMax,
-    )
-
-    if return_dynamics:
-        return h_modes, t, dyn
-    else:
-        return h_modes, t
-
-
-def evaluate_surrogate_with_LAL(
-        sample, config, lmax=4
-):
-    """Evaluate NRSur7dq4 using LALSimulation and return polarizations.
-
-    This function calls `lalsimulation.SimInspiralChooseTDWaveform`
-    with the NRSur7dq4 approximant and returns the plus and cross
-    polarizations.
-
-    Parameters
-    ----------
-    sample : dict
-        Dictionary of source parameters containing masses (solar masses),
-        spins (dimensionless), luminosity distance (Mpc),
-        inclination angle `theta_jn` (radians), and phase (radians).
-    config : object
-        Configuration object with attributes:
-        - sampling_frequency : float
-            Sampling frequency in Hz.
-        - minimum_frequency : dict
-            Dictionary of low-frequency cutoffs in Hz.
-        - reference_frequency : float
-            Reference frequency in Hz.
-    lmax : int, optional
-        Maximum ℓ mode included internally in the waveform model.
-        Default is 4.
-
-    Returns
-    -------
-    hp : lal.REAL8TimeSeries
-        Plus polarization time series.
-    hc : lal.REAL8TimeSeries
-        Cross polarization time series.
+        Time array in seconds corresponding to the modes.
     """
     mass_1 = sample["mass_1"] * lal.MSUN_SI
     mass_2 = sample["mass_2"] * lal.MSUN_SI
@@ -159,11 +67,11 @@ def evaluate_surrogate_with_LAL(
 
     phiRef = sample["phase"]
 
-    fs = config.sampling_frequency
+    fs = res["config"].sampling_frequency
     deltaT = 1 / fs
 
-    f_low = config.minimum_frequency["H1"]
-    f_ref = config.reference_frequency
+    f_low = res["config"].minimum_frequency[res["ifos"][0].name]
+    f_ref = res["config"].reference_frequency
 
     h_modes_lal = lalsim.SimInspiralChooseTDModes(
         phiRef,
@@ -176,36 +84,30 @@ def evaluate_surrogate_with_LAL(
         s2x,
         s2y,
         s2z,
-        -1, #f_low,
+        -1,  # f_low,
         f_ref,
         distance,
         None,
-        lmax,
+        ell_max,
         lalsim.NRSur7dq4,
     )
 
     h_modes = {}
 
-    for L in range(2, lmax + 1):
+    for L in range(2, ell_max + 1):
         for M in range(-L, L + 1):
             h_modes[(L, M)] = lalsim.SphHarmTimeSeriesGetMode(
                 h_modes_lal, L, M
             ).data.data
 
     t = np.arange(len(h_modes[(2, 2)])) * deltaT
-    
-    t += float(
-        lalsim.SphHarmTimeSeriesGetMode(
-            h_modes_lal, 2, 2
-        ).epoch
-    )
-    
+
+    t += float(lalsim.SphHarmTimeSeriesGetMode(h_modes_lal, 2, 2).epoch)
+
     return h_modes, t
 
 
-def evaluate_surrogate_with_LAL_as_polarizations(
-        sample, config, lmax=4
-):
+def evaluate_surrogate_with_LAL_as_polarizations(sample, res, ell_max=4):
     """Evaluate NRSur7dq4 using LALSimulation and return polarizations.
 
     This function calls `lalsimulation.SimInspiralChooseTDWaveform`
@@ -218,15 +120,17 @@ def evaluate_surrogate_with_LAL_as_polarizations(
         Dictionary of source parameters containing masses (solar masses),
         spins (dimensionless), luminosity distance (Mpc),
         inclination angle `theta_jn` (radians), and phase (radians).
-    config : object
-        Configuration object with attributes:
-        - sampling_frequency : float
-            Sampling frequency in Hz.
-        - minimum_frequency : dict
-            Dictionary of low-frequency cutoffs in Hz.
-        - reference_frequency : float
-            Reference frequency in Hz.
-    lmax : int, optional
+    res : dict
+        Result dictionary containing:
+        - 'ifos' : list
+            Interferometer objects.
+        - 'config' : object
+            Configuration object.
+        - 'samples' : list of dict
+            Posterior samples.
+        - 'fd' : dict
+            Frequency-domain waveform data used for sizing arrays.
+    ell_max : int, optional
         Maximum ℓ mode included internally in the waveform model.
         Default is 4.
 
@@ -257,11 +161,11 @@ def evaluate_surrogate_with_LAL_as_polarizations(
     eccentricity = 0.0
     meanPerAno = 0.0
 
-    fs = config.sampling_frequency
+    fs = res["config"].sampling_frequency
     deltaT = 1 / fs
 
-    f_low = config.minimum_frequency["H1"]
-    f_ref = config.reference_frequency
+    f_low = res["config"].minimum_frequency[res["ifos"][0].name]
+    f_ref = res["config"].reference_frequency
 
     hp, hc = lalsim.SimInspiralChooseTDWaveform(
         mass_1,
@@ -288,9 +192,7 @@ def evaluate_surrogate_with_LAL_as_polarizations(
     return hp, hc
 
 
-def map_modes_to_polarizations(
-        modes, t, sample, longAscNodes=0.0
-):
+def map_modes_to_polarizations(modes, t, sample, longAscNodes=0.0):
     """Project spherical-harmonic modes onto plus and cross polarizations.
 
     This function reconstructs the strain polarizations from a set of
@@ -343,9 +245,7 @@ def map_modes_to_polarizations(
     return h_plus, h_cross
 
 
-def compute_angular_integral_factor(
-        tuple1, tuple2, tuple3=None
-):
+def compute_angular_integral_factor(tuple1, tuple2, tuple3=None):
     """Compute angular coupling using Wigner 3j symbols.
 
     Evaluates the integral of three spin-weighted spherical harmonics
@@ -388,15 +288,13 @@ def compute_angular_integral_factor(
     return prefactor * w3j1 * w3j2
 
 
-def compute_angular_factors(
-        ell_max=6, spin_weight=-2
-):
-    """Precompute angular factors for nonlinear memory calculations.
+def compute_angular_factors(ell_max=4, spin_weight=-2):
+    """Precompute angular factors for memory calculations.
 
     Parameters
     ----------
     ell_max : int, optional
-        Maximum ℓ mode included in the computation. Default is 6.
+        Maximum ℓ mode included in the computation. Default is 4.
     spin_weight : int, optional
         Spin weight of the waveform modes. Default is -2.
 
@@ -440,7 +338,7 @@ def compute_angular_factors(
 def compute_memory_correction(
     h, t, sample, ell_max=None, s=-2, angular_factors=None, return_memory_only=False
 ):
-    """Compute the nonlinear gravitational-wave memory correction.
+    """Compute the gravitational-wave memory correction.
 
     This function computes the Christodoulou memory contribution from
     a set of spherical-harmonic waveform modes and optionally adds it
@@ -493,8 +391,6 @@ def compute_memory_correction(
         h_memory = copy.deepcopy(h)
 
     modes = [mode for mode in h.keys() if mode[0] <= ell_max]
-    if ell_max is None:
-        ell_max = max([mode[0] for mode in modes])
 
     for mode1 in modes:
         for mode2 in modes:
@@ -544,30 +440,107 @@ def compute_memory_correction(
 
     return h_memory
 
+
 def compute_memory_and_map_to_polarizations(
-        sample, config, angular_factors=None, lmax=4
+    sample, res, angular_factors=None, ell_max=4
 ):
-    """
+    """Compute the memory and project it to plus/cross polarizations.
+
+    This function evaluates the NRSur7dq4 surrogate using LALSimulation
+    to obtain spherical-harmonic modes, computes the
+    (Christodoulou) memory contribution, and maps the resulting
+    memory modes onto the plus and cross strain polarizations.
+
+    Parameters
+    ----------
+    sample : dict
+        Dictionary of source parameters containing:
+        - 'mass_1', 'mass_2' : float
+            Component masses in solar masses.
+        - 'spin_1x', 'spin_1y', 'spin_1z' : float
+            Dimensionless spin components of the primary.
+        - 'spin_2x', 'spin_2y', 'spin_2z' : float
+            Dimensionless spin components of the secondary.
+        - 'luminosity_distance' : float
+            Luminosity distance in Mpc.
+        - 'theta_jn' : float
+            Inclination angle (radians).
+        - 'phase' : float
+            Reference orbital phase (radians).
+    res : dict
+        Result dictionary containing:
+        - 'ifos' : list
+            Interferometer objects.
+        - 'config' : object
+            Configuration object.
+        - 'samples' : list of dict
+            Posterior samples.
+        - 'fd' : dict
+            Frequency-domain waveform data used for sizing arrays.
+    angular_factors : dict, optional
+        Precomputed angular factors from `compute_angular_factors`.
+        If None, angular factors are computed internally.
+    ell_max : int, optional
+        Maximum ℓ mode included in the memory calculation.
+        Default is 4.
+
+    Returns
+    -------
+    hp_memory : ndarray
+        Plus polarization of the memory contribution.
+    hc_memory : ndarray
+        Cross polarization of the memory contribution.
+    t : ndarray
+        Time array in seconds corresponding to the memory waveform.
     """
     # evaluate surrogate
-    h, t = evaluate_surrogate_with_LAL(sample, config, lmax=4)
-    
+    h, t = evaluate_surrogate_with_LAL(sample, res, ell_max=4)
+
     # memory
     h_memory = compute_memory_correction(
         h, t, sample, angular_factors=angular_factors, return_memory_only=True
     )
-    
+
     hp_memory, hc_memory = map_modes_to_polarizations(h_memory, t, sample)
 
     return hp_memory, hc_memory, t
 
-def insert_waveform(h, t_target, input_idx, target_idx):
-    """
-    Return an array the same length as t_target where waveform h is 'inserted'
-    so that h[input_idx] aligns with output[target_idx].
 
-    Outside the overlap region, the output is filled with the nearest boundary
-    value of h (constant extension), matching the intent of your original code.
+def insert_waveform(h, t_target, input_idx, target_idx):
+    """Insert a waveform into a target time array with constant extension.
+
+    This function returns an array with the same length as `t_target`
+    in which the waveform `h` is inserted such that
+    `h[input_idx]` aligns with the element at `target_idx`
+    in the output array. Outside the region where `h` overlaps
+    the target array, the output is filled by constant extension
+    using the nearest boundary value of `h`.
+
+    Parameters
+    ----------
+    h : array_like
+        One-dimensional waveform array to be inserted.
+    t_target : array_like
+        Target time array defining the desired output length.
+        Only its length is used.
+    input_idx : int
+        Index in `h` that should align with `target_idx`
+        in the output array.
+    target_idx : int
+        Index in the output array at which `h[input_idx]`
+        will be placed.
+
+    Returns
+    -------
+    ndarray
+        Array of length `len(t_target)` containing the inserted
+        waveform with constant boundary extension outside the
+        overlap region.
+
+    Raises
+    ------
+    IndexError
+        If `input_idx` is out of bounds for the input waveform `h`.
     """
     h = np.asarray(h).ravel()
     n = h.size
@@ -585,8 +558,8 @@ def insert_waveform(h, t_target, input_idx, target_idx):
         raise IndexError(f"input_idx={input_idx} is out of bounds for h of length {n}")
 
     # Where h[0] would land in the target
-    start = target_idx - input_idx          # can be negative
-    end   = start + n                       # EXCLUSIVE end in target coordinates
+    start = target_idx - input_idx  # can be negative
+    end = start + n  # EXCLUSIVE end in target coordinates
 
     out = np.empty(m, dtype=h.dtype)
 
@@ -602,11 +575,11 @@ def insert_waveform(h, t_target, input_idx, target_idx):
 
     # Overlap region in target (exclusive end, Python slicing style)
     ov_start = max(start, 0)
-    ov_end   = min(end, m)
+    ov_end = min(end, m)
 
     # Corresponding overlap region in h
-    h_start = ov_start - start              # >= 0
-    h_end   = h_start + (ov_end - ov_start) # exclusive
+    h_start = ov_start - start  # >= 0
+    h_end = h_start + (ov_end - ov_start)  # exclusive
 
     # Insert overlap
     out[ov_start:ov_end] = h[h_start:h_end]
@@ -621,49 +594,153 @@ def insert_waveform(h, t_target, input_idx, target_idx):
 
     return out
 
+
 def insert_memory_into_time_array(hp, hc, t, sample, config, fd):
-    """
+    """Insert memory polarizations into the analysis time array.
+
+    This function aligns the time-domain memory waveform with the
+    detector data time grid by matching the memory peak to the
+    geocentric coalescence time. The waveform is inserted into a
+    target array of appropriate length and padded using constant
+    boundary extension outside the overlap region.
+
+    Parameters
+    ----------
+    hp : ndarray
+        Plus polarization memory strain in the time domain.
+    hc : ndarray
+        Cross polarization memory strain in the time domain.
+    t : ndarray
+        Time array (seconds) corresponding to `hp` and `hc`.
+    sample : dict
+        Dictionary containing:
+        - 'geocent_time' : float
+            Geocentric coalescence time (seconds).
+    config : object
+        Configuration object with attributes:
+        - sampling_frequency : float
+            Sampling frequency in Hz.
+        - start_time : float
+            Start time of the analysis segment (seconds).
+    fd : ndarray
+        Frequency-domain waveform array for a given detector.
+        Used to determine the target time-series length.
+
+    Returns
+    -------
+    hp_inserted : ndarray
+        Plus polarization memory strain aligned to the analysis grid.
+    hc_inserted : ndarray
+        Cross polarization memory strain aligned to the analysis grid.
+    delta_t : float
+        Effective time shift applied when aligning the waveform.
     """
     fs = config.sampling_frequency
     deltaT = 1 / fs
 
-    t_data = np.arange(2*(fd.size - 1)) * deltaT + config.start_time
-    
-    input_idx = np.argmin(abs(t))
-    target_idx = np.argmin(abs(t_data - sample['geocent_time']))
+    t_data = np.arange(2 * (fd.size - 1)) * deltaT + config.start_time
 
-    delta_t = sample['geocent_time'] - (t_data[target_idx] - t[input_idx])
-    
+    input_idx = np.argmin(abs(t))
+    target_idx = np.argmin(abs(t_data - sample["geocent_time"]))
+
+    delta_t = sample["geocent_time"] - (t_data[target_idx] - t[input_idx])
+
     hp_inserted = insert_waveform(hp, t_data, input_idx, target_idx)
     hc_inserted = insert_waveform(hc, t_data, input_idx, target_idx)
-    
+
     return hp_inserted, hc_inserted, delta_t
 
+
 def polarizations_to_FD(hp_memory, hc_memory, delta_t, config, roll_on=0.2):
-    """
+    """Convert time-domain memory polarizations to the frequency domain.
+
+    This function applies a Tukey window to the time-domain memory
+    polarizations, performs a real FFT, and applies the appropriate
+    time-shift phase factor.
+
+    Parameters
+    ----------
+    hp_memory : ndarray
+        Plus polarization memory strain in the time domain.
+    hc_memory : ndarray
+        Cross polarization memory strain in the time domain.
+    delta_t : float
+        Time shift (seconds) applied when aligning the waveform.
+    config : object
+        Configuration object with attributes:
+        - sampling_frequency : float
+            Sampling frequency in Hz.
+        - duration : float
+            Duration of the analysis segment in seconds.
+    roll_on : float, optional
+        Duration (seconds) of the Tukey window roll-on region.
+        Default is 0.2.
+
+    Returns
+    -------
+    hp_memory_FD : ndarray
+        Frequency-domain plus polarization memory strain.
+    hc_memory_FD : ndarray
+        Frequency-domain cross polarization memory strain.
     """
     # window
     alpha = 2 * roll_on / config.duration
     window = scipy.signal.windows.tukey(hp_memory.size, alpha)
-    
+
     # fft
     fs = config.sampling_frequency
     deltaT = 1 / fs
 
-    freqs = np.fft.rfftfreq(hp_memory.size, delta_t)
-    hp_memory_FD = np.fft.rfft(window * hp_memory) * deltaT * np.exp(-1j * 2 * np.pi * freqs * delta_t)
-    hc_memory_FD = np.fft.rfft(window * hc_memory) * deltaT * np.exp(-1j * 2 * np.pi * freqs * delta_t)
-    
+    freqs = np.fft.rfftfreq(hp_memory.size, deltaT)
+    hp_memory_FD = (
+        np.fft.rfft(window * hp_memory)
+        * deltaT
+        * np.exp(-1j * 2 * np.pi * freqs * delta_t)
+    )
+    hc_memory_FD = (
+        np.fft.rfft(window * hc_memory)
+        * deltaT
+        * np.exp(-1j * 2 * np.pi * freqs * delta_t)
+    )
+
     return hp_memory_FD, hc_memory_FD
 
+
 def project_to_detectors(hp, hc, sample, ifos):
-    """
+    """Project polarizations onto detector responses.
+
+    This function computes the detector response for each interferometer
+    given plus and cross polarizations in the frequency domain. It
+    applies antenna pattern factors and calibration corrections using
+    Bilby-compatible calibration parameters.
+
+    Parameters
+    ----------
+    hp : ndarray
+        Frequency-domain plus polarization strain.
+    hc : ndarray
+        Frequency-domain cross polarization strain.
+    sample : dict
+        Dictionary of source parameters including sky location,
+        polarization angle, geocentric time, and calibration parameters.
+    ifos : list
+        List of interferometer objects with:
+        - name : str
+        - calibration_model : object
+        - get_detector_response(...) method
+
+    Returns
+    -------
+    dict
+        Dictionary mapping interferometer name to complex
+        frequency-domain strain:
+        {ifo_name: h_fd}.
     """
     pols = {
         "plus": hp,
         "cross": hc,
     }
-    
+
     n_points = int(ifos[0].calibration_model.n_points)
     sample_normalized = _ensure_bilby_calibration_keys(
         sample, tuple(ifo.name for ifo in ifos), n_points
@@ -673,32 +750,140 @@ def project_to_detectors(hp, hc, sample, ifos):
     for ifo in ifos:
         model_fd = ifo.get_detector_response(pols, sample_normalized)
         out[ifo.name] = model_fd
-        
+
     return out
 
-def compute_memories(res, ell_max=4):
+
+def make_memories(res, angular_factors=None, ell_max=4):
+    """Compute memory waveforms for a set of posterior samples.
+
+    This function computes the gravitational-wave memory
+    contribution for each sample in a result dictionary, projects the
+    memory onto detector responses, and returns the detector-frame
+    frequency-domain memory waveforms.
+
+    Parameters
+    ----------
+    res : dict
+        Result dictionary containing:
+        - 'ifos' : list
+            Interferometer objects.
+        - 'config' : object
+            Configuration object.
+        - 'samples' : list of dict
+            Posterior samples.
+        - 'fd' : dict
+            Frequency-domain waveform data used for sizing arrays.
+    angular_factors : dict, optional
+        Precomputed angular factors (from `compute_angular_factors`).
+        If None, they are computed on the fly.
+    ell_max : int, optional
+        Maximum ℓ mode included in the memory calculation.
+        Default is 4.
+
+    Returns
+    -------
+    list of dict
+        List of detector-frame memory waveforms, one per sample.
+        Each entry is a dictionary:
+        {ifo_name: h_memory_fd}.
     """
-    """
-    ifos = res['ifos']
-    config = res['config']
-    samples = res['samples']
-    
-    angular_factors = compute_angular_factors(ell_max)
+    ifos = res["ifos"]
+    config = res["config"]
+    samples = res["samples"]
+
+    if angular_factors is None:
+        angular_factors = compute_angular_factors(ell_max)
 
     h_memories_in_det = []
     for i, sample in enumerate(samples):
         hp, hc, t = compute_memory_and_map_to_polarizations(
-            sample, config, angular_factors=angular_factors, lmax=ell_max
+            sample, res, angular_factors=angular_factors, ell_max=ell_max
         )
 
         hp_inserted, hc_inserted, delta_t = insert_memory_into_time_array(
-            hp, hc, t, sample, config, res['fd']['H1']['model'][i]
+            hp, hc, t, sample, config, res["fd"][ifos[0].name]["model"][i]
         )
 
         hp_FD, hc_FD = polarizations_to_FD(hp_inserted, hc_inserted, delta_t, config)
-        
+
         h_memory_in_det = project_to_detectors(hp_FD, hc_FD, sample, ifos)
 
         h_memories_in_det.append(h_memory_in_det)
 
     return h_memories_in_det
+
+
+def compute_memory_variables_likelihoods_and_weights(res, h_memories_in_dets):
+    """Compute Gaussian amplitude parameters and importance weights for memory.
+
+    This function evaluates, for each posterior sample, the optimal
+    Gaussian amplitude estimator for the memory contribution.
+    It computes the maximum-likelihood amplitude, its uncertainty,
+    a random draw from the corresponding Gaussian distribution,
+    and the associated log-weight and log-likelihood contribution.
+
+    The calculation is performed by combining inner products across
+    all detectors.
+
+    Parameters
+    ----------
+    res : dict
+        Result dictionary containing:
+        - 'ifos' : list
+            List of interferometer objects with a
+            `template_template_inner_product` method.
+        - 'fd' : dict
+            Frequency-domain data products, including:
+            res['fd'][ifo_name]['residual']
+            which contains residual frequency-domain data for each sample.
+    h_memories_in_dets : list of dict
+        List (indexed by sample) of detector-frame memory waveforms.
+        Each entry is a dictionary:
+        {ifo_name: h_memory_fd}.
+
+    Returns
+    -------
+    ndarray
+        Array of shape (n_samples, 5) where each row contains:
+        - A_hat : float
+            Maximum-likelihood amplitude estimator.
+        - A_sigma : float
+            Standard deviation of the Gaussian amplitude posterior.
+        - A_sample : float
+            Random draw from the Gaussian posterior.
+        - log_weight : float
+            Logarithmic importance weight associated with the
+            marginalization over amplitude.
+        - log_likelihood : float
+            Log-likelihood contribution including the memory term.
+    """
+    memory_variables_likelihoods_and_weights = []
+    for k in range(len(res["fd"][res["ifos"][0].name]["residual"])):
+        hrs = 0.0
+        hhs = 0.0
+        rrs = 0.0
+        for det in res["ifos"]:
+            hrs += det.template_template_inner_product(
+                h_memories_in_dets[k][det.name], res["fd"][det.name]["residual"][k]
+            )
+            hhs += det.template_template_inner_product(
+                h_memories_in_dets[k][det.name], h_memories_in_dets[k][det.name]
+            )
+            rrs += det.template_template_inner_product(
+                res["fd"][det.name]["residual"][k], res["fd"][det.name]["residual"][k]
+            )
+        A_hat = np.real(hrs / hhs)
+        A_sigma = 1 / np.sqrt(np.real(hhs))
+        A_sample = np.random.normal(loc=A_hat, scale=A_sigma)
+        log_weight = 0.5 * A_hat * np.conjugate(hrs) - 0.5 * np.log(2 * np.pi * hhs)
+        log_likelihood = -0.5 * rrs + log_weight
+
+        memory_variables_likelihoods_and_weights.append(
+            [A_hat, A_sigma, A_sample, log_weight, log_likelihood]
+        )
+    memory_variables_likelihoods_and_weights = np.array(
+        memory_variables_likelihoods_and_weights
+    )
+
+    return memory_variables_likelihoods_and_weights
