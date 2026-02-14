@@ -11,7 +11,7 @@ import lalsimulation as lalsim
 from utilities.gw_residuals import _ensure_bilby_calibration_keys
 
 
-def evaluate_surrogate_with_LAL(sample, res, ell_max=4):
+def evaluate_surrogate_with_LAL(sample, res, approximant=lalsim.NRSur7dq4, ell_max=4):
     """Evaluate NRSur7dq4 using LALSimulation and return spherical-harmonic modes.
 
     This function calls `lalsimulation.SimInspiralChooseTDModes`
@@ -40,6 +40,9 @@ def evaluate_surrogate_with_LAL(sample, res, ell_max=4):
             Dictionary of low-frequency cutoffs in Hz.
         - reference_frequency : float
             Reference frequency in Hz.
+    approximant : lalsim.Approximant
+        Waveform approximant with which to generate modes.
+        Default is lalsim.NRSur7dq4.
     ell_max : int, optional
         Maximum ℓ mode included in the waveform model.
         Default is 4.
@@ -89,7 +92,7 @@ def evaluate_surrogate_with_LAL(sample, res, ell_max=4):
         distance,
         None,
         ell_max,
-        lalsim.NRSur7dq4,
+        approximant,
     )
 
     h_modes = {}
@@ -107,7 +110,7 @@ def evaluate_surrogate_with_LAL(sample, res, ell_max=4):
     return h_modes, t
 
 
-def evaluate_surrogate_with_LAL_as_polarizations(sample, res, ell_max=4):
+def evaluate_surrogate_with_LAL_as_polarizations(sample, res, approximant=lalsim.NRSur7dq4, ell_max=4):
     """Evaluate NRSur7dq4 using LALSimulation and return polarizations.
 
     This function calls `lalsimulation.SimInspiralChooseTDWaveform`
@@ -130,6 +133,9 @@ def evaluate_surrogate_with_LAL_as_polarizations(sample, res, ell_max=4):
             Posterior samples.
         - 'fd' : dict
             Frequency-domain waveform data used for sizing arrays.
+    approximant : lalsim.Approximant
+        Waveform approximant with which to generate modes.
+        Default is lalsim.NRSur7dq4.
     ell_max : int, optional
         Maximum ℓ mode included internally in the waveform model.
         Default is 4.
@@ -186,7 +192,7 @@ def evaluate_surrogate_with_LAL_as_polarizations(sample, res, ell_max=4):
         f_low,
         f_ref,
         lal.CreateDict(),
-        lalsim.NRSur7dq4,
+        approximant,
     )
 
     return hp, hc
@@ -442,7 +448,7 @@ def compute_memory_correction(
 
 
 def compute_memory_and_map_to_polarizations(
-    sample, res, angular_factors=None, ell_max=4
+    sample, res, angular_factors=None, approximant=lalsim.NRSur7dq4, ell_max=4
 ):
     """Compute the memory and project it to plus/cross polarizations.
 
@@ -480,6 +486,9 @@ def compute_memory_and_map_to_polarizations(
     angular_factors : dict, optional
         Precomputed angular factors from `compute_angular_factors`.
         If None, angular factors are computed internally.
+    approximant : lalsim.Approximant
+        Waveform approximant with which to generate modes.
+        Default is lalsim.NRSur7dq4.
     ell_max : int, optional
         Maximum ℓ mode included in the memory calculation.
         Default is 4.
@@ -494,7 +503,7 @@ def compute_memory_and_map_to_polarizations(
         Time array in seconds corresponding to the memory waveform.
     """
     # evaluate surrogate
-    h, t = evaluate_surrogate_with_LAL(sample, res, ell_max=4)
+    h, t = evaluate_surrogate_with_LAL(sample, res, approximant=approximant, ell_max=ell_max)
 
     # memory
     h_memory = compute_memory_correction(
@@ -754,7 +763,7 @@ def project_to_detectors(hp, hc, sample, ifos):
     return out
 
 
-def make_memories(res, angular_factors=None, ell_max=4):
+def make_memories(res, angular_factors=None, approximant=lalsim.NRSur7dq4, ell_max=4):
     """Compute memory waveforms for a set of posterior samples.
 
     This function computes the gravitational-wave memory
@@ -777,6 +786,9 @@ def make_memories(res, angular_factors=None, ell_max=4):
     angular_factors : dict, optional
         Precomputed angular factors (from `compute_angular_factors`).
         If None, they are computed on the fly.
+    approximant : lalsim.Approximant
+        Waveform approximant with which to generate modes.
+        Default is lalsim.NRSur7dq4.
     ell_max : int, optional
         Maximum ℓ mode included in the memory calculation.
         Default is 4.
@@ -798,7 +810,7 @@ def make_memories(res, angular_factors=None, ell_max=4):
     h_memories_in_det = []
     for i, sample in enumerate(samples):
         hp, hc, t = compute_memory_and_map_to_polarizations(
-            sample, res, angular_factors=angular_factors, ell_max=ell_max
+            sample, res, angular_factors=angular_factors, approximant=approximant, ell_max=ell_max
         )
 
         hp_inserted, hc_inserted, delta_t = insert_memory_into_time_array(
