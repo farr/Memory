@@ -76,6 +76,9 @@ def evaluate_surrogate_with_LAL(sample, res, approximant=lalsim.NRSur7dq4, ell_m
     f_low = res["config"].minimum_frequency[res["ifos"][0].name]
     f_ref = res["config"].reference_frequency
 
+    if approximant == lalsim.NRSur7dq4:
+        f_low = -1
+        
     h_modes_lal = lalsim.SimInspiralChooseTDModes(
         phiRef,
         deltaT,
@@ -87,7 +90,7 @@ def evaluate_surrogate_with_LAL(sample, res, approximant=lalsim.NRSur7dq4, ell_m
         s2x,
         s2y,
         s2z,
-        -1,  # f_low,
+        f_low,
         f_ref,
         distance,
         None,
