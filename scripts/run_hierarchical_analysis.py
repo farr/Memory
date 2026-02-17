@@ -75,7 +75,37 @@ dVdzdt_interp = (
 def read_injection_file(
     vt_file, ifar_threshold=1000, use_tilts=False, snr_inspiral_cut=0, snr_cut=0
 ):
-    """Read injection file and extract relevant data."""
+    """Read an HDF5 injection/selection file and extract relevant data.
+
+    Applies IFAR and SNR cuts to determine which injections were "found",
+    then extracts source-frame masses, spins, redshifts, and draw priors.
+    Also computes derived spin quantities (chi_eff, chi_p) and converts
+    the analysis time to years.
+
+    Parameters
+    ----------
+    vt_file : str
+        Path to the HDF5 injection file.
+    ifar_threshold : float
+        Inverse false-alarm rate threshold (yr); injections with min FAR
+        below 1/ifar_threshold are considered found.
+    use_tilts : bool
+        If False, reweight the draw prior by the aligned-spin prior
+        (marginalizing over tilt angles).
+    snr_inspiral_cut : float
+        Inspiral SNR threshold; injections above this are also considered found.
+    snr_cut : float
+        Network optimal SNR threshold; injections above this are also
+        considered found.
+
+    Returns
+    -------
+    dict
+        Dictionary with arrays: 'mass_1_source', 'mass_ratio', 'redshift',
+        'a_1', 'a_2', 'cos_tilt_1', 'cos_tilt_2', 'spin1z', 'spin2z',
+        'chi_eff', 'chi_p', 'prior', 'found', 'total_generated',
+        'analysis_time'.
+    """
     injections = {}
 
     with h5py.File(vt_file, "r") as f:
@@ -184,7 +214,46 @@ def generate_data(
     prng=None,
     scale_tgr=False,
 ):
-    """Generate data arrays for analysis."""
+    """Build per-event data arrays for the joint population model.
+
+    Resamples posterior samples with importance weights, assembles arrays of
+    (m1, q, spins, redshift, TGR parameter) per event, and computes KDE
+    bandwidth matrices via the conditional covariance of the spin/TGR
+    dimensions. Also loads and processes the injection data for selection
+    effects.
+
+    Parameters
+    ----------
+    event_posteriors : list of structured ndarray
+        Per-event posterior sample arrays with named fields.
+    injection_file : str
+        Path to the HDF5 injection/selection file.
+    parameter_name : str
+        Name of the TGR deviation parameter column (e.g., 'dchi_2').
+    use_tgr : bool
+        Whether to include the TGR parameter in the KDE.
+    use_tilts : bool
+        Whether to include tilt angles in the data arrays.
+    ifar_threshold : float
+        IFAR threshold passed to `read_injection_file`.
+    N_samples : int
+        Number of posterior samples to draw per event.
+    snr_cut : float
+        Network SNR cut passed to `read_injection_file`.
+    snr_inspiral_cut : float
+        Inspiral SNR cut passed to `read_injection_file`.
+    prng : None, int, or numpy.random.Generator
+        Random state for reproducible resampling.
+    scale_tgr : bool
+        If True, divide TGR parameter values by their pooled standard
+        deviation across all events.
+
+    Returns
+    -------
+    tuple
+        (event_data_array, injection_data_array, BW_matrices,
+        BW_matrices_sel, Nobs, Ndraw, dphi_scale)
+    """
     Nobs = len(event_posteriors)
 
     print(f"Using {Nobs} events!")
@@ -359,7 +428,31 @@ def generate_data(
 
 def generate_tgr_only_data(event_posteriors, parameter_name,
                            N_samples=2000, prng=None, scale_tgr=False):
-    """Generate TGR-only data arrays."""
+    """Build simplified data arrays for the TGR-only model.
+
+    Resamples the TGR deviation parameter from each event posterior and
+    computes per-event 1D KDE bandwidths using Silverman's rule.
+
+    Parameters
+    ----------
+    event_posteriors : list of structured ndarray
+        Per-event posterior sample arrays with named fields.
+    parameter_name : str
+        Name of the TGR deviation parameter column.
+    N_samples : int
+        Number of posterior samples to draw per event.
+    prng : None, int, or numpy.random.Generator
+        Random state for reproducible resampling.
+    scale_tgr : bool
+        If True, divide TGR parameter values by their pooled standard
+        deviation across all events.
+
+    Returns
+    -------
+    tuple
+        (dphis, bws_tgr, Nobs, dphi_scale) where dphis is shape
+        (Nobs, N_samples), bws_tgr is shape (Nobs,).
+    """
     Nobs = len(event_posteriors)
 
     print(f"Using {Nobs} events!")
@@ -399,7 +492,28 @@ def generate_tgr_only_data(event_posteriors, parameter_name,
 
 def make_tgr_only_model(dphis, bws_tgr, Nobs, mu_tgr_scale=None,
                         sigma_tgr_scale=None):
-    """Define TGR-only model."""
+    """Numpyro model for TGR-only hierarchical inference.
+
+    Defines a two-hyperparameter model (mu_tgr, sigma_tgr) describing a
+    Gaussian population distribution for the TGR deviation parameter.
+    The per-event likelihood is a KDE-smoothed sum over posterior samples,
+    where the KDE bandwidth is added in quadrature with sigma_tgr.
+
+    Parameters
+    ----------
+    dphis : jnp.ndarray
+        TGR parameter samples, shape (Nobs, N_samples).
+    bws_tgr : jnp.ndarray
+        Per-event KDE bandwidths, shape (Nobs,).
+    Nobs : int
+        Number of observed events.
+    mu_tgr_scale : float or None
+        Half-width of the uniform prior on mu_tgr. If None, auto-scaled
+        from the data.
+    sigma_tgr_scale : float or None
+        Upper bound of the uniform prior on sigma_tgr. If None, auto-scaled
+        from the data.
+    """
     dphi_scale = jnp.maximum(1e-6, jnp.max(jnp.abs(dphis)))
     if mu_tgr_scale is None:
         mu_tgr_scale = 1
@@ -431,7 +545,43 @@ def make_joint_model(
     mu_tgr_scale=None,
     sigma_tgr_scale=None,
 ):
-    """Define joint model for population analysis."""
+    """Numpyro model jointly fitting astrophysical population and TGR parameters.
+
+    Combines a power-law + Gaussian bump primary mass function, power-law
+    mass ratio, power-law-in-(1+z) redshift distribution, Beta-like spin
+    magnitude distribution (via multivariate normal in KDE space), and
+    optional spin tilt mixture model, with Gaussian TGR hyperparameters
+    (mu_tgr, sigma_tgr). Includes selection-effect correction via
+    importance-weighted injection sums and effective-sample-size
+    regularization terms.
+
+    Parameters
+    ----------
+    event_data_array : ndarray
+        Shape (10, Nobs, N_samples): rows are m1, q, cos_tilt_1,
+        cos_tilt_2, a_1, a_2, dphi, z, log_pdraw, kde_weights.
+    injection_data_array : ndarray
+        Shape (8, N_inj): rows are m1, q, cos_tilt_1, cos_tilt_2,
+        a_1/spin1z, a_2/spin2z, z, prior.
+    BW_matrices : ndarray
+        Per-event KDE bandwidth matrices for spin+TGR dimensions,
+        shape (Nobs, d, d) where d=3 if use_tgr else d=2.
+    BW_matrices_sel : ndarray
+        Per-event KDE bandwidth matrices for spin dimensions only,
+        shape (Nobs, 2, 2).
+    Nobs : int
+        Number of observed events.
+    Ndraw : int
+        Total number of simulated injections drawn.
+    use_tilts : bool
+        Whether to include the spin tilt mixture model.
+    use_tgr : bool
+        Whether to include TGR hyperparameters in the model.
+    mu_tgr_scale : float or None
+        Half-width of the uniform prior on mu_tgr.
+    sigma_tgr_scale : float or None
+        Upper bound of the uniform prior on sigma_tgr.
+    """
     m1s = event_data_array[0]
     qs = event_data_array[1]
     cost1s = event_data_array[2]
@@ -657,7 +807,21 @@ def make_joint_model(
 
 
 def get_samples_df(fit):
-    """Convert fit results to DataFrame."""
+    """Convert an ArviZ InferenceData posterior into a flat pandas DataFrame.
+
+    Stacks chains and draws into a single 'sample' dimension, excluding
+    any 'neff' diagnostic variables.
+
+    Parameters
+    ----------
+    fit : arviz.InferenceData
+        Inference result containing a posterior group.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per sample, one column per non-neff parameter.
+    """
     stacked_samples = fit.posterior.stack(sample=("chain", "draw"))
     samples_df = pd.DataFrame()
     for k, v in stacked_samples.data_vars.items():
@@ -667,9 +831,23 @@ def get_samples_df(fit):
 
 
 def create_plots(fit_joint, fit_tgr, parameter, outdir):
-    """Create and save plots comparing joint and TGR-only models.
+    """Create and save diagnostic plots comparing joint and TGR-only models.
 
-    If either fit is None, plotting will proceed using only the available fit(s).
+    Generates: population KDE distribution, hyperparameter pairplot,
+    TGR corner plot (overlaid if both fits available), and full joint
+    model corner plot. Also saves per-fit CSV sample files. If either
+    fit is None, plotting proceeds using only the available fit(s).
+
+    Parameters
+    ----------
+    fit_joint : arviz.InferenceData or None
+        Joint model inference result.
+    fit_tgr : arviz.InferenceData or None
+        TGR-only model inference result.
+    parameter : str
+        TGR parameter name (used for axis labels).
+    outdir : str
+        Directory to save plots and sample CSV files.
     """
     # Collect available fits
     fits = [("joint", fit_joint), ("tgr", fit_tgr)]
@@ -780,7 +958,13 @@ def create_plots(fit_joint, fit_tgr, parameter, outdir):
 
 
 def main():
-    """Main function to run the analysis."""
+    """CLI entry point for the hierarchical population analysis.
+
+    Parses command-line arguments, loads event posteriors from HDF5 files,
+    runs the joint and/or TGR-only MCMC via numpyro NUTS, saves results
+    as NetCDF and CSV, optionally creates diagnostic plots, and prints
+    summary statistics with R-hat and effective sample size.
+    """
     parser = argparse.ArgumentParser(
         description="Run gravitational wave population analysis with TGR parameters"
     )
@@ -913,7 +1097,10 @@ def main():
         os.makedirs(outdir)
 
     def check_output_files_exist():
-        """Check if all expected output files exist."""
+        """Check if all expected output files already exist in outdir.
+
+        Returns (all_exist, existing_files, missing_files).
+        """
         required_files = []
 
         if args.model in ("joint", "both"):
