@@ -23,15 +23,13 @@ This fetches `NRSur7dq4_v1.0.h5` (surrogate model) and `posterior_samples_NRSur7
 
 ### Run the main analysis
 ```bash
-uv run --with "jax numpyro arviz corner" python scripts/run_hierarchical_analysis.py \
+uv run python scripts/run_hierarchical_analysis.py \
     dchi_2 "path/to/posteriors/*.h5" \
     --injection-file path/to/injections.hdf \
     --model both --n-warmup 1000 --n-sample 1000 --n-chains 4 \
     --outdir results/
 ```
 Key args: `--model {joint,tgr,both}`, `--scale-tgr`, `--use-tilts`, `--no-plots`, `--force`.
-
-Note: all dependencies including `jax`, `numpyro`, `arviz`, and `corner` are declared in `pyproject.toml`.
 
 ### End-to-end smoke test
 ```bash
