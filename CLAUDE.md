@@ -31,7 +31,7 @@ uv run --with "jax numpyro arviz corner" python scripts/run_analysis.py \
 ```
 Key args: `--model {joint,tgr,both}`, `--scale-tgr`, `--use-tilts`, `--no-plots`, `--force`.
 
-Note: `jax`, `numpyro`, `arviz`, and `corner` are runtime deps not in `pyproject.toml`; pass them via `uv run --with`.
+Note: all dependencies including `jax`, `numpyro`, `arviz`, and `corner` are declared in `pyproject.toml`.
 
 ### End-to-end smoke test
 ```bash
@@ -79,11 +79,12 @@ Results go to `data/test_e2e/`. The test script auto-downloads data if missing a
 **`scripts/compute_gw_memory_for_GWTC.py`** — Catalog-level GW memory computation for GWTC events.
 - Computes memory waveforms, detector projections, and likelihoods across a catalog
 - Uses multiprocessing for parallel event processing
+- Outputs per-event `{output_dir}/{event_name}/memory_results.h5` with datasets: `A_hat` (ML amplitude), `A_sigma` (posterior std), `A_sample` (posterior draws), `log_weight`, `log_likelihood`, grouped by waveform label
 - Currently only the surrogate waveform path is working
 
 ### Data flow
 - **TGR population analysis:** Event posteriors (HDF5) → KDE smoothing → numpyro hierarchical model → NUTS MCMC → ArviZ posterior → NetCDF + plots
-- **Memory computation:** Event posteriors → surrogate waveform → memory correction → detector projection → memory SNR/likelihood
+- **Memory computation:** Event posteriors → surrogate waveform → memory correction → detector projection → per-event `memory_results.h5` (amplitude posteriors, likelihoods, weights)
 
 ### Key patterns
 - HDF5 parameter key lookup uses multiple naming conventions with fallbacks

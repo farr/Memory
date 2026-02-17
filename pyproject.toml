@@ -19,4 +19,9 @@ dependencies = [
     "numba<0.63",
     "gwsurrogate>=1.1.8",
     "spherical-functions>=2023.0.2",
+    "jax>=0.4.25,<0.6.1",
+    "jaxlib==0.4.38; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "numpyro",
+    "arviz",
+    "corner",
 ]
