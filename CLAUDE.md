@@ -23,7 +23,7 @@ This fetches `NRSur7dq4_v1.0.h5` (surrogate model) and `posterior_samples_NRSur7
 
 ### Run the main analysis
 ```bash
-uv run --with "jax numpyro arviz corner" python scripts/run_analysis.py \
+uv run --with "jax numpyro arviz corner" python scripts/run_hierarchical_analysis.py \
     dchi_2 "path/to/posteriors/*.h5" \
     --injection-file path/to/injections.hdf \
     --model both --n-warmup 1000 --n-sample 1000 --n-chains 4 \
@@ -70,7 +70,7 @@ Results go to `data/test_e2e/`. The test script auto-downloads data if missing a
 
 ### Scripts
 
-**`scripts/run_analysis.py`** — Population-level MCMC inference orchestrator.
+**`scripts/run_hierarchical_analysis.py`** — Population-level MCMC inference orchestrator.
 - Two model types: `make_tgr_only_model()` (2-param mu/sigma TGR) and `make_joint_model()` (full population + TGR)
 - KDE-based likelihood from posterior samples
 - numpyro NUTS sampler with multi-chain/multi-device support
@@ -89,6 +89,6 @@ Results go to `data/test_e2e/`. The test script auto-downloads data if missing a
 ### Key patterns
 - HDF5 parameter key lookup uses multiple naming conventions with fallbacks
 - bilby config parsing handles several alias patterns for the same setting
-- JAX platform/device setup happens at module level in `run_analysis.py` before other imports
+- JAX platform/device setup happens at module level in `run_hierarchical_analysis.py` before other imports
 - The `data/NRSur7dq4.h5` symlink must exist for surrogate evaluation to work
 - Scripts add the project root to `sys.path` and import from `utilities/` directly

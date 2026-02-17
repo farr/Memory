@@ -2,10 +2,10 @@
 
 set -euo pipefail
 
-# End-to-end smoke test for scripts/run_analysis.py using a tiny dataset.
+# End-to-end smoke test for scripts/run_hierarchical_analysis.py using a tiny dataset.
 #
 # This script can optionally download a small remote subset first (via
-# tests/get_test_data.sh), then run run_analysis.py with small MCMC settings.
+# tests/get_test_data.sh), then run run_hierarchical_analysis.py with small MCMC settings.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -188,7 +188,7 @@ fi
 export TGRPOP_PLATFORM="${TGRPOP_PLATFORM:-cpu}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 
-"${RUNNER[@]}" "${REPO_DIR}/scripts/run_analysis.py" \
+"${RUNNER[@]}" "${REPO_DIR}/scripts/run_hierarchical_analysis.py" \
     "${SELECTED_PARAMETER}" \
     "${POSTERIOR_GLOB}" \
     --injection-file "${INJECTION_FILE}" \
