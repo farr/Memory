@@ -79,6 +79,10 @@ def read_injection_file(
     Also computes derived spin quantities (chi_eff, chi_p) and converts
     the analysis time to years.
 
+    Sources:
+    - https://iopscience.iop.org/article/10.3847/2515-5172/ac2ba7
+    - https://zenodo.org/records/16740117/preview/gwtc-4_o4a_sensitivity-estimates.md
+
     Parameters
     ----------
     vt_file : str
