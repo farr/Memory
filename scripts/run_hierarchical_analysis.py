@@ -192,9 +192,6 @@ def read_injection_file(
     for key in injections:
         injections[key] = np.asarray(injections[key])
 
-    for key in injections:
-        injections[key] = np.array(injections[key])
-
     return injections
 
 
