@@ -4,9 +4,13 @@ Script to run gravitational wave population analysis with TGR parameters.
 Converted from analysis_notebook.ipynb
 """
 
+import sys
 import os
 import argparse
 from glob import glob
+from pathlib import Path
+
+REPO_DIR = Path(__file__).resolve().parent.parent
 
 # Set environment variables
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -1073,10 +1077,10 @@ def main():
 
     if args.injection_file is None:
         if args.injection_runs == 'o4a':
-            injection_file = os.path.join(repo_dir,
+            injection_file = os.path.join(REPO_DIR,
                                       "data/selection/mixture-real_o4a-cartesian_spins_20250503134659UTC.hdf")
         elif args.injection_runs == 'o3+o4a':
-            injection_file = os.path.join(repo_dir,
+            injection_file = os.path.join(REPO_DIR,
                                       "data/selection/mixture-real_o3_o4a-cartesian_spins_20250503134659UTC.hdf")
         else:
             raise ValueError(f"Unrecognized injection runs: {args.injection_runs}")
