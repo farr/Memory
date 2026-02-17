@@ -48,16 +48,16 @@ Results go to `data/test_e2e/`. The test script auto-downloads data if missing a
 
 ## Architecture
 
-### `utilities/` package
+### `memory/` package
 
-**`utilities/gw_residuals.py`** — Low-level GW data handling and residual computation.
+**`memory/gw_residuals.py`** — Low-level GW data handling and residual computation.
 - `AnalysisConfig` dataclass for config management
 - Config parsing with multi-convention fallback (`_get_cfg`, `_cfg_first_match`)
 - GWOSC strain downloading, bilby WaveformGenerator/InterferometerList setup
 - Spline calibration attachment with flexible key matching
 - `compute_one_sample_fd()`: main entry point for frequency-domain residual computation
 
-**`utilities/gw_memory.py`** — Surrogate waveform evaluation, memory physics, and detector projection.
+**`memory/gw_memory.py`** — Surrogate waveform evaluation, memory physics, and detector projection.
 - `evaluate_surrogate_with_LAL()`: evaluate NRSur7dq4 (or other approximants) via LALSimulation for SH modes
 - `compute_memory_correction()`: GW memory correction via Wigner 3j angular integrals
 - `compute_memory_and_map_to_polarizations()`: memory correction mapped to h+/hx polarizations
@@ -66,7 +66,7 @@ Results go to `data/test_e2e/`. The test script auto-downloads data if missing a
 - `project_to_detectors()`: project polarizations onto detector network
 - `compute_memory_variables_likelihoods_and_weights()`: compute memory SNRs, likelihoods, and Bayes factors
 
-**`utilities/kde_contour.py`** — Bounded 1D/2D KDE implementations for posterior visualization.
+**`memory/kde_contour.py`** — Bounded 1D/2D KDE implementations for posterior visualization.
 
 ### Scripts
 
@@ -96,4 +96,4 @@ Results go to `data/test_e2e/`. The test script auto-downloads data if missing a
 - bilby config parsing handles several alias patterns for the same setting
 - JAX platform/device setup happens at module level in `run_hierarchical_analysis.py` before other imports
 - The `data/NRSur7dq4.h5` symlink must exist for surrogate evaluation to work
-- Scripts add the project root to `sys.path` and import from `utilities/` directly
+- The `memory` package is installed in dev mode via `uv sync` (hatchling build-system in `pyproject.toml`)

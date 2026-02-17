@@ -4,16 +4,9 @@ Script to run gravitational wave population analysis with TGR parameters.
 Converted from analysis_notebook.ipynb
 """
 
-import sys
 import os
 import argparse
 from glob import glob
-
-script_path = os.path.abspath(__file__)
-script_dir = os.path.dirname(script_path)
-repo_dir = os.path.dirname(script_dir)
-if repo_dir not in sys.path:
-    sys.path.insert(0, repo_dir)
 
 # Set environment variables
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -39,7 +32,7 @@ import pandas as pd
 from jax.scipy.special import logsumexp
 
 # Import local modules
-from utilties.kde_contour import kdeplot
+from memory.kde_contour import kdeplot
 
 # Configure numpyro
 device_count = int(os.environ.get("TGRPOP_DEVICE_COUNT", 1))

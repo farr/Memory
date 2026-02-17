@@ -8,7 +8,7 @@ from scipy.integrate import cumulative_trapezoid as cumtrapz
 import lal
 import lalsimulation as lalsim
 
-from utilities.gw_residuals import _ensure_bilby_calibration_keys
+from memory.gw_residuals import _ensure_bilby_calibration_keys
 
 
 def evaluate_surrogate_with_LAL(sample, res, approximant=lalsim.NRSur7dq4, ell_max=4):
