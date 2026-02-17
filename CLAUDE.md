@@ -35,8 +35,8 @@ Note: all dependencies including `jax`, `numpyro`, `arviz`, and `corner` are dec
 
 ### End-to-end smoke test
 ```bash
-./scripts/get_test_data.sh --num-events 2          # download small dataset from LIGO servers
-./scripts/test_run_analysis_e2e.sh --num-events 2 --model both  # run analysis
+./tests/get_test_data.sh --num-events 2          # download small dataset from LIGO servers
+./tests/test_run_analysis_e2e.sh --num-events 2 --model both  # run analysis
 ```
 Results go to `data/test_e2e/`. The test script auto-downloads data if missing and falls back to available TGR parameters if the requested one isn't present.
 
