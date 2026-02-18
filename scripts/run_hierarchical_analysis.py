@@ -167,10 +167,10 @@ def main():
     parser.add_argument(
         "--memory-dir",
         type=str,
-        default=None,
+        required=True,
         help=(
             "Directory with per-event memory results "
-            "({dir}/{event_name}/memory_results.h5). When provided, "
+            "({dir}/{event_name}/memory_results.h5). "
             "A_sample and log_weight from these files supply the TGR parameter."
         ),
     )
@@ -324,18 +324,16 @@ def main():
         f.write(" ".join(sys.argv) + "\n")
     print(f"Saved command to: {command_file_path}")
 
-    # Load memory data if provided
-    memory_data = None
-    if args.memory_dir:
-        waveform_label = args.waveform_label or args.param_key
-        memory_data = load_memory_data(event_files, args.memory_dir, waveform_label)
-        print(f"Loaded memory data for {len(memory_data)} events from {args.memory_dir}")
+    # Load memory data
+    waveform_label = args.waveform_label or args.param_key
+    memory_data = load_memory_data(event_files, args.memory_dir, waveform_label)
+    print(f"Loaded memory data for {len(memory_data)} events from {args.memory_dir}")
 
-        # Save memory_dir path to output directory
-        memory_dir_path = os.path.join(outdir, "memory_dir.txt")
-        with open(memory_dir_path, "w") as f:
-            f.write(f"{args.memory_dir}\n")
-        print(f"Saved memory_dir path to: {memory_dir_path}")
+    # Save memory_dir path to output directory
+    memory_dir_path = os.path.join(outdir, "memory_dir.txt")
+    with open(memory_dir_path, "w") as f:
+        f.write(f"{args.memory_dir}\n")
+    print(f"Saved memory_dir path to: {memory_dir_path}")
 
     # Loading in the event posteriors
     event_posteriors = []
@@ -377,7 +375,7 @@ def main():
     ) = generate_data(
         event_posteriors,
         injection_file,
-        args.parameter,
+        memory_data,
         ifar_threshold=args.ifar_threshold,
         use_tgr=True,
         snr_inspiral_cut=args.snr_inspiral_cut,
@@ -386,7 +384,6 @@ def main():
         use_tilts=args.use_tilts,
         prng=seed,
         scale_tgr=args.scale_tgr,
-        memory_data=memory_data,
     )
 
     # store dphi_scale in output directory
@@ -397,10 +394,9 @@ def main():
 
     if args.model in ("tgr", "both"):
         event_data_tgr, bws_tgr, _, dphi_scale = generate_tgr_only_data(
-            event_posteriors, args.parameter,
+            event_posteriors, memory_data,
             N_samples=args.n_samples_per_event, prng=seed,
             scale_tgr=args.scale_tgr,
-            memory_data=memory_data,
         )
     else:
         event_data_tgr, bws_tgr, _, dphi_scale = None, None, None, 1

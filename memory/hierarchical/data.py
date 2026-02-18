@@ -219,7 +219,7 @@ def read_injection_file(
 def generate_data(
     event_posteriors,
     injection_file,
-    parameter_name,
+    memory_data,
     use_tgr=True,
     use_tilts=False,
     ifar_threshold=1000,
@@ -228,7 +228,6 @@ def generate_data(
     snr_inspiral_cut=0,
     prng=None,
     scale_tgr=False,
-    memory_data=None,
 ):
     """Build per-event data arrays for the joint population model.
 
@@ -244,8 +243,10 @@ def generate_data(
         Per-event posterior sample arrays with named fields.
     injection_file : str
         Path to the HDF5 injection/selection file.
-    parameter_name : str
-        Name of the TGR deviation parameter column (e.g., 'dchi_2').
+    memory_data : list of dict
+        Per-event memory data from `load_memory_data`.  The TGR parameter
+        values (``A_sample``) and importance weights (``log_weight``) are
+        taken from these dicts.
     use_tgr : bool
         Whether to include the TGR parameter in the KDE.
     use_tilts : bool
@@ -263,10 +264,6 @@ def generate_data(
     scale_tgr : bool
         If True, divide TGR parameter values by their pooled standard
         deviation across all events.
-    memory_data : list of dict or None
-        Per-event memory data from `load_memory_data`.  When provided,
-        the TGR parameter values and importance weights are taken from
-        these dicts instead of from `event_posteriors`.
 
     Returns
     -------
@@ -299,20 +296,15 @@ def generate_data(
         prng = np.random.default_rng(prng)
 
     if scale_tgr:
-        if memory_data is not None:
-            pooled_phi = np.concatenate([
-                md["A_sample"].ravel() for md in memory_data
-            ])
-        else:
-            pooled_phi = np.concatenate([
-                np.asarray(e[parameter_name]).ravel() for e in event_posteriors
-            ])
+        pooled_phi = np.concatenate([
+            md["A_sample"].ravel() for md in memory_data
+        ])
         dphi_scale = max(np.nanstd(pooled_phi), 1e-12)
     else:
         dphi_scale = 1
 
     for i_event, event_posterior in enumerate(tqdm(event_posteriors)):
-        md = memory_data[i_event] if memory_data is not None else None
+        md = memory_data[i_event]
 
         # instead of picking the first N_samples, pick N_samples randomly
         # use this already to apply the weights (should be more efficient
@@ -323,16 +315,15 @@ def generate_data(
         else:
             w = np.ones(len(event_posterior))
 
-        if md is not None:
-            if len(md["A_sample"]) != len(event_posterior):
-                raise ValueError(
-                    f"Memory data length ({len(md['A_sample'])}) does not "
-                    f"match posterior length ({len(event_posterior)}) for "
-                    f"event {md['event_name']}"
-                )
-            log_w = np.log(np.clip(w, 1e-300, None)) + md["log_weight"]
-            log_w -= log_w.max()
-            w = np.exp(log_w)
+        if len(md["A_sample"]) != len(event_posterior):
+            raise ValueError(
+                f"Memory data length ({len(md['A_sample'])}) does not "
+                f"match posterior length ({len(event_posterior)}) for "
+                f"event {md['event_name']}"
+            )
+        log_w = np.log(np.clip(w, 1e-300, None)) + md["log_weight"]
+        log_w -= log_w.max()
+        w = np.exp(log_w)
 
         idxs = prng.choice(len(event_posterior), size=N_samples,
                            replace=True, p=w/w.sum())
@@ -354,10 +345,7 @@ def generate_data(
         a1s.append(event_posterior["a_1"][idxs])
         a2s.append(event_posterior["a_2"][idxs])
 
-        if md is not None:
-            dphis.append(md["A_sample"][idxs] / dphi_scale)
-        else:
-            dphis.append(event_posterior[parameter_name][idxs] / dphi_scale)
+        dphis.append(md["A_sample"][idxs] / dphi_scale)
 
         cost1s.append(event_posterior["cos_tilt_1"][idxs])
         cost2s.append(event_posterior["cos_tilt_2"][idxs])
@@ -479,20 +467,21 @@ def generate_data(
     )
 
 
-def generate_tgr_only_data(event_posteriors, parameter_name,
-                           N_samples=2000, prng=None, scale_tgr=False,
-                           memory_data=None):
+def generate_tgr_only_data(event_posteriors, memory_data,
+                           N_samples=2000, prng=None, scale_tgr=False):
     """Build simplified data arrays for the TGR-only model.
 
-    Resamples the TGR deviation parameter from each event posterior and
+    Resamples the memory amplitude from each event's memory results and
     computes per-event 1D KDE bandwidths using Silverman's rule.
 
     Parameters
     ----------
     event_posteriors : list of structured ndarray
         Per-event posterior sample arrays with named fields.
-    parameter_name : str
-        Name of the TGR deviation parameter column.
+    memory_data : list of dict
+        Per-event memory data from `load_memory_data`.  The TGR parameter
+        values (``A_sample``) and importance weights (``log_weight``) are
+        taken from these dicts.
     N_samples : int
         Number of posterior samples to draw per event.
     prng : None, int, or numpy.random.Generator
@@ -500,10 +489,6 @@ def generate_tgr_only_data(event_posteriors, parameter_name,
     scale_tgr : bool
         If True, divide TGR parameter values by their pooled standard
         deviation across all events.
-    memory_data : list of dict or None
-        Per-event memory data from `load_memory_data`.  When provided,
-        the TGR parameter values and importance weights are taken from
-        these dicts instead of from `event_posteriors`.
 
     Returns
     -------
@@ -521,14 +506,9 @@ def generate_tgr_only_data(event_posteriors, parameter_name,
         prng = np.random.default_rng(prng)
 
     if scale_tgr:
-        if memory_data is not None:
-            pooled_phi = np.concatenate([
-                md["A_sample"].ravel() for md in memory_data
-            ])
-        else:
-            pooled_phi = np.concatenate([
-                np.asarray(e[parameter_name]).ravel() for e in event_posteriors
-            ])
+        pooled_phi = np.concatenate([
+            md["A_sample"].ravel() for md in memory_data
+        ])
         dphi_scale = max(np.nanstd(pooled_phi), 1e-12)
     else:
         dphi_scale = 1
@@ -536,19 +516,12 @@ def generate_tgr_only_data(event_posteriors, parameter_name,
     # Construct the event posterior arrays
     dphis = []
     bws_tgr = []
-    for i_event, event_posterior in enumerate(event_posteriors):
-        md = memory_data[i_event] if memory_data is not None else None
-
-        if md is not None:
-            w = np.exp(md["log_weight"] - md["log_weight"].max())
-            w /= w.sum()
-            idxs = prng.choice(len(md["A_sample"]), size=N_samples,
-                               replace=True, p=w)
-            dphis.append(md["A_sample"][idxs] / dphi_scale)
-        else:
-            idxs = prng.choice(len(event_posterior), size=N_samples,
-                               replace=True)
-            dphis.append(event_posterior[parameter_name][idxs] / dphi_scale)
+    for md in memory_data:
+        w = np.exp(md["log_weight"] - md["log_weight"].max())
+        w /= w.sum()
+        idxs = prng.choice(len(md["A_sample"]), size=N_samples,
+                           replace=True, p=w)
+        dphis.append(md["A_sample"][idxs] / dphi_scale)
 
         bws_tgr.append(
             np.std(dphis[-1]) * N_samples ** (-1.0 / 5)
