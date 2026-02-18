@@ -43,7 +43,7 @@ def read_injection_file(
     dict
         Dictionary with arrays: 'mass_1_source', 'mass_ratio', 'redshift',
         'a_1', 'a_2', 'cos_tilt_1', 'cos_tilt_2', 'spin1z', 'spin2z',
-        'chi_eff', 'chi_p', 'prior', 'found', 'total_generated',
+        'chi_eff', 'chi_p', 'log_prior', 'found', 'total_generated',
         'analysis_time'.
     """
     injections = {}
@@ -97,15 +97,15 @@ def read_injection_file(
         ]
 
         if use_tilts:
-            prior = np.exp(ln_prior)
+            log_prior = ln_prior
         else:
-            prior = np.exp(
+            log_prior = (
                 ln_prior
                 + np.log(align_spin_prior.prob(events["spin1z"]))
                 + np.log(align_spin_prior.prob(events["spin2z"]))
             )
 
-        injections["prior"] = prior / events["weights"]
+        injections["log_prior"] = log_prior - np.log(events["weights"])
 
         q = injections["mass_ratio"]
         a1 = injections["a_1"]
@@ -119,7 +119,7 @@ def read_injection_file(
             [a1 * s1, a2 * s2 * q * (4 * q + 3) / (4 + 3 * q)],
             axis=0,
         )
-        injections["prior_effective_spin"] = injections["prior"]
+        injections["prior_effective_spin"] = injections["log_prior"]
 
         injections["found"] = found.sum()
         injections["total_generated"] = f.attrs["total_generated"]
@@ -335,7 +335,7 @@ def generate_data(
                 injection_data["a_1"],
                 injection_data["a_2"],
                 injection_data["redshift"],
-                injection_data["prior"],
+                injection_data["log_prior"],
             ]
         )
     else:
@@ -348,7 +348,7 @@ def generate_data(
                 injection_data["spin1z"],
                 injection_data["spin2z"],
                 injection_data["redshift"],
-                injection_data["prior"],
+                injection_data["log_prior"],
             ]
         )
 

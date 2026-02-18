@@ -95,7 +95,7 @@ def make_joint_model(
         cos_tilt_2, a_1, a_2, dphi, z, log_pdraw, kde_weights.
     injection_data_array : ndarray
         Shape (8, N_inj): rows are m1, q, cos_tilt_1, cos_tilt_2,
-        a_1/spin1z, a_2/spin2z, z, prior.
+        a_1/spin1z, a_2/spin2z, z, log_prior.
     BW_matrices : ndarray
         Per-event KDE bandwidth matrices for spin+TGR dimensions,
         shape (Nobs, d, d) where d=3 if use_tgr else d=2.
@@ -130,7 +130,7 @@ def make_joint_model(
     cost2s_sel = injection_data_array[3]
     a1_a2_sel = injection_data_array[4:6]
     zs_sel = injection_data_array[6]
-    pdraw_sel = injection_data_array[7]
+    log_pdraw_sel = injection_data_array[7]
 
     # Model parameters
     alpha = numpyro.sample("alpha", dist.Uniform(-4, 12))
@@ -188,10 +188,6 @@ def make_joint_model(
         interp_val = jnp.clip(interp_val, a_min=1e-300)
         return lamb * jnp.log1p(redshifts) + jnp.log(interp_val)
 
-    # Evaluate the per event probabilities
-    def safe_log(x):
-        return jnp.log(jnp.clip(x, a_min=1e-300))
-
     log_wts = (
         log_m1_powerlaw_density(m1s)
         + log_q_powerlaw_density(qs, m1s)
@@ -204,7 +200,7 @@ def make_joint_model(
         log_m1_powerlaw_density(m1s_sel)
         + log_q_powerlaw_density(qs_sel, m1s_sel)
         + log_redshift_powerlaw(zs_sel)
-        - safe_log(pdraw_sel)
+        - log_pdraw_sel
     )
 
     # Adding the tilt
