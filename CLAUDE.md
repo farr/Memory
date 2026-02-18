@@ -109,6 +109,17 @@ Key quantities per posterior sample (computed in `compute_memory_variables_likel
 - **`log_weight`** = log likelihood ratio (memory-marginalized vs no-memory): `0.5 * A_hat * hrs - 0.5 * log(2π * hhs)`. Used as importance weight to reweight original posterior samples to include memory effects.
 - **`log_likelihood`** = full amplitude-marginalized log-likelihood: `-0.5 * rrs + log_weight`
 
+### Injection draw prior Jacobian correction (`data.py:read_injection_file`)
+
+The injection file field `lnpdraw_mass1_source_mass2_source_redshift_spin1x_spin1y_spin1z_spin2x_spin2y_spin2z` stores the draw prior density in **Cartesian spin coordinates**. The population model uses spherical spin parameters (`a`, `cos_tilt`) or aligned-spin (`chi_z`). A Jacobian correction of `2*log(a_1) + 2*log(a_2)` is needed to convert from the Cartesian density (which includes a `1/a²` factor per spin) to the spherical/marginalized density used by the model.
+
+This correction applies to both the `use_tilts=True` and `use_tilts=False` branches. For `use_tilts=False`, an additional `AlignedSpin` prior factor converts from the full spherical draw prior to the marginal draw prior over `chi_z = a*cos(tilt)`.
+
+**Sources consulted:**
+- O1+O2+O3 Search Sensitivity Estimates (Zenodo 5636816): *"sampling PDFs are computed in terms of the variates recorded in the summary files"* and *"We define the injected spin distribution over Cartesian spin components."*
+- GWTC-4.0 Cumulative Search Sensitivity Estimates (Zenodo 16740128): provides both Cartesian and polar spin versions of the same injection files, confirming they are *"completely equivalent and only differ in the spin variables over which the draw probabilities are defined."*
+- O3 Search Sensitivity Estimates (Zenodo 5546676)
+
 ### Key patterns
 - HDF5 parameter key lookup uses multiple naming conventions with fallbacks
 - bilby config parsing handles several alias patterns for the same setting

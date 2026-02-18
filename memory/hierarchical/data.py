@@ -173,12 +173,29 @@ def read_injection_file(
             "lnpdraw_mass1_source_mass2_source_redshift_spin1x_spin1y_spin1z_spin2x_spin2y_spin2z"
         ]
 
+        # The draw prior density (ln_prior) is defined w.r.t. Cartesian spin
+        # coordinates: p_draw(m1, m2, z, s1x, s1y, s1z, s2x, s2y, s2z).
+        # The population model uses spherical spin parameters (a, cos_tilt)
+        # or aligned-spin (chi_z). To convert the draw prior to the
+        # marginalized parameter space, we need to:
+        #   1. Factor out the Cartesian spin density, which for isotropic
+        #      uniform spins is p_Cart(sx, sy, sz) = 1/(4*pi*a^2). This
+        #      amounts to adding 2*log(a) per spin (the 4*pi is constant
+        #      and cancels in importance-weight ratios).
+        #   2. For use_tilts=False, add the aligned-spin marginal draw
+        #      prior p_aligned(chi_z) = -log|chi_z|/2, since the model
+        #      describes chi_z = a*cos(tilt) directly.
+        log_jacobian = (
+            2 * np.log(np.clip(injections["a_1"], 1e-30, None))
+            + 2 * np.log(np.clip(injections["a_2"], 1e-30, None))
+        )
+
         if use_tilts:
-            log_prior = ln_prior
+            log_prior = ln_prior + log_jacobian
         else:
-            # TODO: check if this is correct
             log_prior = (
                 ln_prior
+                + log_jacobian
                 + np.log(align_spin_prior.prob(events["spin1z"]))
                 + np.log(align_spin_prior.prob(events["spin2z"]))
             )
