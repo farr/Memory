@@ -256,13 +256,14 @@ def process_event_wrapper(task):
     # Rebuild args namespace (safer for multiprocessing)
     args = argparse.Namespace(**args_dict)
 
-    event_dir = Path(filepath) / event
-    if event_dir.exists() and not overwrite:
+    event_dir = Path(args.output_dir) / event
+    if event_dir.exists() and not args.overwrite:
         return
 
     try:
         results = process_event(filepath, event, args)
-    except:
+    except Exception as e:
+        print(f"Error processing event {event}: {e}")
         return None
         
     if len(results) == 0:
