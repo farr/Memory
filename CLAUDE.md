@@ -66,16 +66,25 @@ Results go to `data/test_e2e/`. The test script auto-downloads data if missing a
 
 **`memory/kde_contour.py`** — Bounded 1D/2D KDE implementations for posterior visualization.
 
+**`memory/hierarchical/`** — Subpackage for hierarchical TGR population analysis (data loading, numpyro models, plotting).
+
+- **`memory/hierarchical/data.py`** — Data loading and preparation.
+  - `read_injection_file()`: reads an HDF5 injection/selection file, applies IFAR and SNR cuts, computes derived spin quantities (chi_eff, chi_p), and returns a dict of arrays with injection parameters and draw priors
+  - `generate_data()`: builds per-event data arrays for the joint model — resamples posteriors with importance weights, assembles (m1, q, spins, redshift, TGR param) arrays, computes KDE bandwidth matrices via conditional covariance, and loads the injection data
+  - `generate_tgr_only_data()`: builds the simplified data arrays for the TGR-only model — resamples the TGR parameter from each event posterior and computes per-event 1D KDE bandwidths
+
+- **`memory/hierarchical/models.py`** — Numpyro model definitions and cosmology globals.
+  - Module-level cosmology setup: `Planck15_LAL`, `zinterp`, `dVdzdt_interp`
+  - `make_tgr_only_model()`: numpyro model with two hyperparameters (mu_tgr, sigma_tgr) describing a Gaussian population distribution for the TGR deviation parameter; likelihood is a KDE-smoothed sum over per-event posterior samples
+  - `make_joint_model()`: numpyro model jointly fitting astrophysical population (power-law + Gaussian bump mass function, power-law mass ratio, power-law redshift, spin magnitude/tilt distributions) and TGR hyperparameters; includes selection-effect correction and effective-sample-size regularization
+
+- **`memory/hierarchical/plotting.py`** — Plotting and ArviZ post-processing.
+  - `get_samples_df()`: converts an ArviZ InferenceData posterior into a flat pandas DataFrame (chains × draws)
+  - `create_plots()`: generates diagnostic plots — population KDE, hyperparameter pairplot, TGR corner plot, and full joint corner plot; saves PNGs and per-fit CSV sample files
+
 ### Scripts
 
-**`scripts/run_hierarchical_analysis.py`** — Population-level MCMC inference orchestrator.
-- `read_injection_file()`: reads an HDF5 injection/selection file, applies IFAR and SNR cuts, computes derived spin quantities (chi_eff, chi_p), and returns a dict of arrays with injection parameters and draw priors
-- `generate_data()`: builds per-event data arrays for the joint model — resamples posteriors with importance weights, assembles (m1, q, spins, redshift, TGR param) arrays, computes KDE bandwidth matrices via conditional covariance, and loads the injection data
-- `generate_tgr_only_data()`: builds the simplified data arrays for the TGR-only model — resamples the TGR parameter from each event posterior and computes per-event 1D KDE bandwidths
-- `make_tgr_only_model()`: numpyro model with two hyperparameters (mu_tgr, sigma_tgr) describing a Gaussian population distribution for the TGR deviation parameter; likelihood is a KDE-smoothed sum over per-event posterior samples
-- `make_joint_model()`: numpyro model jointly fitting astrophysical population (power-law + Gaussian bump mass function, power-law mass ratio, power-law redshift, spin magnitude/tilt distributions) and TGR hyperparameters; includes selection-effect correction and effective-sample-size regularization
-- `get_samples_df()`: converts an ArviZ InferenceData posterior into a flat pandas DataFrame (chains × draws)
-- `create_plots()`: generates diagnostic plots — population KDE, hyperparameter pairplot, TGR corner plot, and full joint corner plot; saves PNGs and per-fit CSV sample files
+**`scripts/run_hierarchical_analysis.py`** — Thin CLI wrapper for the hierarchical population analysis. Imports functions from `memory.hierarchical`, handles argument parsing, file I/O, and MCMC orchestration.
 - `main()`: CLI entry point — parses arguments, loads event posteriors from HDF5, runs joint and/or TGR-only MCMC via NUTS, saves results as NetCDF/CSV, optionally creates plots, and prints summary statistics with R-hat and ESS
 - Outputs: NetCDF (`.nc`), CSV (`.dat`), corner plots (PNG)
 
