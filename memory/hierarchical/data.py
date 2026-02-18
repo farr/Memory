@@ -176,6 +176,7 @@ def read_injection_file(
         if use_tilts:
             log_prior = ln_prior
         else:
+            # TODO: check if this is correct
             log_prior = (
                 ln_prior
                 + np.log(align_spin_prior.prob(events["spin1z"]))
@@ -335,6 +336,17 @@ def generate_data(
 
         idxs = prng.choice(len(event_posterior), size=N_samples,
                            replace=True, p=w/w.sum())
+
+        # TODO: check sampling efficiency by computing the effective sample size
+        # and comparing it to the number of samples drawn
+        neff = np.sum(w) ** 2 / np.sum(w**2)
+        if neff < N_samples:
+            # warn too few samples
+            print(
+                f"Warning: effective sample size {neff} is less than the number "
+                f"of samples drawn {N_samples} for event "
+                f"{event_posterior['event_name']}"
+            )
 
         m1s.append(event_posterior["mass_1_source"][idxs])
         qs.append(event_posterior["mass_ratio"][idxs])

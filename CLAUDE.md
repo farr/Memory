@@ -98,6 +98,17 @@ Results go to `data/test_e2e/`. The test script auto-downloads data if missing a
 - **TGR population analysis:** Event posteriors (HDF5) → KDE smoothing → numpyro hierarchical model → NUTS MCMC → ArviZ posterior → NetCDF + plots
 - **Memory computation:** Event posteriors → surrogate waveform → memory correction → detector projection → per-event `memory_results.h5` (amplitude posteriors, likelihoods, weights)
 
+### Memory likelihood math (Farr et al.)
+
+The memory signal model adds a memory waveform `h_m(θ)` scaled by amplitude `A_m` to the residual `r(θ) = d - R(θ)h(θ)`. GR predicts `A_m = 1`.
+
+Key quantities per posterior sample (computed in `compute_memory_variables_likelihoods_and_weights`):
+- **Inner products:** `hrs = <h_m|r>`, `hhs = <h_m|h_m>`, `rrs = <r|r>` (noise-weighted, summed over detectors)
+- **ML amplitude:** `A_hat = Re{hrs} / hhs`
+- **Amplitude uncertainty:** `A_sigma = 1 / sqrt(hhs)`
+- **`log_weight`** = log likelihood ratio (memory-marginalized vs no-memory): `0.5 * A_hat * hrs - 0.5 * log(2π * hhs)`. Used as importance weight to reweight original posterior samples to include memory effects.
+- **`log_likelihood`** = full amplitude-marginalized log-likelihood: `-0.5 * rrs + log_weight`
+
 ### Key patterns
 - HDF5 parameter key lookup uses multiple naming conventions with fallbacks
 - bilby config parsing handles several alias patterns for the same setting
