@@ -1,11 +1,88 @@
 """Data loading and preparation for hierarchical TGR population analysis."""
 
+import os
+import re
+
 import numpy as np
 import h5py
 import bilby
 from tqdm import tqdm
 
 align_spin_prior = bilby.gw.prior.AlignedSpin()
+
+
+def load_memory_data(event_files, memory_dir, waveform_label=None):
+    """Load per-event memory results to use as the TGR parameter source.
+
+    For each event file, extracts the event name (e.g., GW190814_211039),
+    looks up ``{memory_dir}/{event_name}/memory_results.h5``, and reads
+    the ``A_sample`` and ``log_weight`` datasets from the specified
+    waveform group.
+
+    Parameters
+    ----------
+    event_files : list of str
+        Paths to the PE posterior files (used to extract event names).
+    memory_dir : str
+        Directory containing per-event subdirectories with
+        ``memory_results.h5`` files.
+    waveform_label : str or None
+        HDF5 group name inside each memory file.  If None, the first
+        available group is used.
+
+    Returns
+    -------
+    list of dict
+        One dict per event with keys ``'A_sample'`` (1-D float array),
+        ``'log_weight'`` (1-D float array), and ``'event_name'`` (str).
+
+    Raises
+    ------
+    FileNotFoundError
+        If a memory results file cannot be found for an event.
+    KeyError
+        If the requested waveform label is not present in the file.
+    """
+    memory_data = []
+    for event_file in event_files:
+        basename = os.path.basename(event_file)
+        match = re.search(r"(GW\d{6}_\d{6})", basename)
+        if match is None:
+            raise ValueError(
+                f"Could not extract event name from filename: {basename}"
+            )
+        event_name = match.group(1)
+
+        mem_path = os.path.join(memory_dir, event_name, "memory_results.h5")
+        if not os.path.exists(mem_path):
+            raise FileNotFoundError(
+                f"Memory results file not found for {event_name}: {mem_path}"
+            )
+
+        with h5py.File(mem_path, "r") as f:
+            if waveform_label is not None:
+                if waveform_label not in f:
+                    raise KeyError(
+                        f"Waveform label '{waveform_label}' not found in "
+                        f"{mem_path}; available: {list(f.keys())}"
+                    )
+                grp = f[waveform_label]
+            else:
+                keys = list(f.keys())
+                if not keys:
+                    raise KeyError(f"No groups found in {mem_path}")
+                grp = f[keys[0]]
+
+            a_sample = grp["A_sample"][()]
+            log_weight = grp["log_weight"][()]
+
+        memory_data.append({
+            "A_sample": np.asarray(a_sample),
+            "log_weight": np.asarray(log_weight),
+            "event_name": event_name,
+        })
+
+    return memory_data
 
 
 def read_injection_file(
@@ -150,6 +227,7 @@ def generate_data(
     snr_inspiral_cut=0,
     prng=None,
     scale_tgr=False,
+    memory_data=None,
 ):
     """Build per-event data arrays for the joint population model.
 
@@ -184,6 +262,10 @@ def generate_data(
     scale_tgr : bool
         If True, divide TGR parameter values by their pooled standard
         deviation across all events.
+    memory_data : list of dict or None
+        Per-event memory data from `load_memory_data`.  When provided,
+        the TGR parameter values and importance weights are taken from
+        these dicts instead of from `event_posteriors`.
 
     Returns
     -------
@@ -216,15 +298,21 @@ def generate_data(
         prng = np.random.default_rng(prng)
 
     if scale_tgr:
-        # find std(phi) pooled over all events
-        pooled_phi = np.concatenate([
-            np.asarray(e[parameter_name]).ravel() for e in event_posteriors
-        ])
+        if memory_data is not None:
+            pooled_phi = np.concatenate([
+                md["A_sample"].ravel() for md in memory_data
+            ])
+        else:
+            pooled_phi = np.concatenate([
+                np.asarray(e[parameter_name]).ravel() for e in event_posteriors
+            ])
         dphi_scale = max(np.nanstd(pooled_phi), 1e-12)
     else:
         dphi_scale = 1
 
-    for event_posterior in tqdm(event_posteriors):
+    for i_event, event_posterior in enumerate(tqdm(event_posteriors)):
+        md = memory_data[i_event] if memory_data is not None else None
+
         # instead of picking the first N_samples, pick N_samples randomly
         # use this already to apply the weights (should be more efficient
         # than applying the weights after the fact, after trimming the
@@ -233,6 +321,18 @@ def generate_data(
             w = event_posterior["weights"]
         else:
             w = np.ones(len(event_posterior))
+
+        if md is not None:
+            if len(md["A_sample"]) != len(event_posterior):
+                raise ValueError(
+                    f"Memory data length ({len(md['A_sample'])}) does not "
+                    f"match posterior length ({len(event_posterior)}) for "
+                    f"event {md['event_name']}"
+                )
+            log_w = np.log(np.clip(w, 1e-300, None)) + md["log_weight"]
+            log_w -= log_w.max()
+            w = np.exp(log_w)
+
         idxs = prng.choice(len(event_posterior), size=N_samples,
                            replace=True, p=w/w.sum())
 
@@ -241,7 +341,11 @@ def generate_data(
 
         a1s.append(event_posterior["a_1"][idxs])
         a2s.append(event_posterior["a_2"][idxs])
-        dphis.append(event_posterior[parameter_name][idxs] / dphi_scale)
+
+        if md is not None:
+            dphis.append(md["A_sample"][idxs] / dphi_scale)
+        else:
+            dphis.append(event_posterior[parameter_name][idxs] / dphi_scale)
 
         cost1s.append(event_posterior["cos_tilt_1"][idxs])
         cost2s.append(event_posterior["cos_tilt_2"][idxs])
@@ -364,7 +468,8 @@ def generate_data(
 
 
 def generate_tgr_only_data(event_posteriors, parameter_name,
-                           N_samples=2000, prng=None, scale_tgr=False):
+                           N_samples=2000, prng=None, scale_tgr=False,
+                           memory_data=None):
     """Build simplified data arrays for the TGR-only model.
 
     Resamples the TGR deviation parameter from each event posterior and
@@ -383,6 +488,10 @@ def generate_tgr_only_data(event_posteriors, parameter_name,
     scale_tgr : bool
         If True, divide TGR parameter values by their pooled standard
         deviation across all events.
+    memory_data : list of dict or None
+        Per-event memory data from `load_memory_data`.  When provided,
+        the TGR parameter values and importance weights are taken from
+        these dicts instead of from `event_posteriors`.
 
     Returns
     -------
@@ -400,10 +509,14 @@ def generate_tgr_only_data(event_posteriors, parameter_name,
         prng = np.random.default_rng(prng)
 
     if scale_tgr:
-        # find std(phi) pooled over all events
-        pooled_phi = np.concatenate([
-            np.asarray(e[parameter_name]).ravel() for e in event_posteriors
-        ])
+        if memory_data is not None:
+            pooled_phi = np.concatenate([
+                md["A_sample"].ravel() for md in memory_data
+            ])
+        else:
+            pooled_phi = np.concatenate([
+                np.asarray(e[parameter_name]).ravel() for e in event_posteriors
+            ])
         dphi_scale = max(np.nanstd(pooled_phi), 1e-12)
     else:
         dphi_scale = 1
@@ -411,14 +524,22 @@ def generate_tgr_only_data(event_posteriors, parameter_name,
     # Construct the event posterior arrays
     dphis = []
     bws_tgr = []
-    for event_posterior in event_posteriors:
-        idxs = prng.choice(len(event_posterior), size=N_samples,
-                           replace=True)
-        dphis.append(event_posterior[parameter_name][idxs] / dphi_scale)
+    for i_event, event_posterior in enumerate(event_posteriors):
+        md = memory_data[i_event] if memory_data is not None else None
+
+        if md is not None:
+            w = np.exp(md["log_weight"] - md["log_weight"].max())
+            w /= w.sum()
+            idxs = prng.choice(len(md["A_sample"]), size=N_samples,
+                               replace=True, p=w)
+            dphis.append(md["A_sample"][idxs] / dphi_scale)
+        else:
+            idxs = prng.choice(len(event_posterior), size=N_samples,
+                               replace=True)
+            dphis.append(event_posterior[parameter_name][idxs] / dphi_scale)
 
         bws_tgr.append(
-            np.std(event_posterior[parameter_name][idxs])
-            * N_samples ** (-1.0 / 5)
+            np.std(dphis[-1]) * N_samples ** (-1.0 / 5)
         )
 
     bws_tgr = np.array(bws_tgr)

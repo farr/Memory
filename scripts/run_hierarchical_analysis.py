@@ -44,6 +44,7 @@ print(f"Using {device_count} devices on {platform}")
 from memory.hierarchical import (
     generate_data,
     generate_tgr_only_data,
+    load_memory_data,
     make_tgr_only_model,
     make_joint_model,
     get_samples_df,
@@ -162,6 +163,25 @@ def main():
         "--scale-tgr",
         action="store_true",
         help="Scale TGR parameters by the standard deviation of the data",
+    )
+    parser.add_argument(
+        "--memory-dir",
+        type=str,
+        default=None,
+        help=(
+            "Directory with per-event memory results "
+            "({dir}/{event_name}/memory_results.h5). When provided, "
+            "A_sample and log_weight from these files supply the TGR parameter."
+        ),
+    )
+    parser.add_argument(
+        "--waveform-label",
+        type=str,
+        default=None,
+        help=(
+            "HDF5 group name in memory results files "
+            "(falls back to --param-key, then first available group)"
+        ),
     )
     args = parser.parse_args()
 
@@ -304,6 +324,19 @@ def main():
         f.write(" ".join(sys.argv) + "\n")
     print(f"Saved command to: {command_file_path}")
 
+    # Load memory data if provided
+    memory_data = None
+    if args.memory_dir:
+        waveform_label = args.waveform_label or args.param_key
+        memory_data = load_memory_data(event_files, args.memory_dir, waveform_label)
+        print(f"Loaded memory data for {len(memory_data)} events from {args.memory_dir}")
+
+        # Save memory_dir path to output directory
+        memory_dir_path = os.path.join(outdir, "memory_dir.txt")
+        with open(memory_dir_path, "w") as f:
+            f.write(f"{args.memory_dir}\n")
+        print(f"Saved memory_dir path to: {memory_dir_path}")
+
     # Loading in the event posteriors
     event_posteriors = []
     for filename in event_files:
@@ -353,6 +386,7 @@ def main():
         use_tilts=args.use_tilts,
         prng=seed,
         scale_tgr=args.scale_tgr,
+        memory_data=memory_data,
     )
 
     # store dphi_scale in output directory
@@ -365,7 +399,8 @@ def main():
         event_data_tgr, bws_tgr, _, dphi_scale = generate_tgr_only_data(
             event_posteriors, args.parameter,
             N_samples=args.n_samples_per_event, prng=seed,
-            scale_tgr=args.scale_tgr
+            scale_tgr=args.scale_tgr,
+            memory_data=memory_data,
         )
     else:
         event_data_tgr, bws_tgr, _, dphi_scale = None, None, None, 1
