@@ -48,11 +48,11 @@ def make_tgr_only_model(A_hats, A_sigmas, Nobs, mu_tgr_scale=None,
         Upper bound of the uniform prior on sigma_tgr. If None, auto-scaled
         from the data.
     """
-    dphi_scale = jnp.maximum(1e-6, jnp.max(jnp.abs(A_hats)))
+    A_scale = jnp.maximum(1e-6, jnp.max(jnp.abs(A_hats)))
     if mu_tgr_scale is None:
-        mu_tgr_scale = 1.5 * dphi_scale
+        mu_tgr_scale = 1.5 * A_scale
     if sigma_tgr_scale is None:
-        sigma_tgr_scale = 1.5 * dphi_scale
+        sigma_tgr_scale = 1.5 * A_scale
 
     mu_tgr = numpyro.sample("mu_tgr", dist.Uniform(-mu_tgr_scale, mu_tgr_scale))
     sigma_tgr = numpyro.sample("sigma_tgr", dist.Uniform(0, sigma_tgr_scale))
@@ -253,11 +253,11 @@ def make_joint_model(
 
     # TGR: analytic Gaussian convolution over the memory amplitude
     if use_tgr:
-        dphi_scale = jnp.maximum(1e-6, jnp.max(jnp.abs(A_hats)))
+        A_scale = jnp.maximum(1e-6, jnp.max(jnp.abs(A_hats)))
         if mu_tgr_scale is None:
-            mu_tgr_scale = 1.5 * dphi_scale
+            mu_tgr_scale = 1.5 * A_scale
         if sigma_tgr_scale is None:
-            sigma_tgr_scale = 1.5 * dphi_scale
+            sigma_tgr_scale = 1.5 * A_scale
 
         mu_tgr = numpyro.sample("mu_tgr", dist.Uniform(-mu_tgr_scale, mu_tgr_scale))
         sigma_tgr = numpyro.sample("sigma_tgr", dist.Uniform(0, sigma_tgr_scale))

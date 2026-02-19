@@ -289,7 +289,7 @@ def generate_data(
     -------
     tuple
         (event_data_array, injection_data_array, BW_matrices,
-        BW_matrices_sel, Nobs, Ndraw, dphi_scale)
+        BW_matrices_sel, Nobs, Ndraw, A_scale)
     """
     if use_tgr and memory_data is None:
         raise ValueError(
@@ -325,9 +325,9 @@ def generate_data(
         pooled_phi = np.concatenate([
             md["A_hat"].ravel() for md in memory_data
         ])
-        dphi_scale = max(np.nanstd(pooled_phi), 1e-12)
+        A_scale = max(np.nanstd(pooled_phi), 1e-12)
     else:
-        dphi_scale = 1
+        A_scale = 1
 
     for i_event, event_posterior in enumerate(tqdm(event_posteriors)):
         # instead of picking the first N_samples, pick N_samples randomly
@@ -369,8 +369,8 @@ def generate_data(
         a2s.append(event_posterior["a_2"][idxs])
 
         if use_tgr:
-            A_hats.append(memory_data[i_event]["A_hat"][idxs] / dphi_scale)
-            A_sigmas.append(memory_data[i_event]["A_sigma"][idxs] / dphi_scale)
+            A_hats.append(memory_data[i_event]["A_hat"][idxs] / A_scale)
+            A_sigmas.append(memory_data[i_event]["A_sigma"][idxs] / A_scale)
         else:
             A_hats.append(np.zeros(N_samples))
             A_sigmas.append(np.zeros(N_samples))
@@ -473,7 +473,7 @@ def generate_data(
         BW_matrices_sel,
         Nobs,
         Ndraw,
-        dphi_scale,
+        A_scale,
     )
 
 
@@ -503,7 +503,7 @@ def generate_tgr_only_data(event_posteriors, memory_data,
     Returns
     -------
     tuple
-        (A_hats, A_sigmas, Nobs, dphi_scale) where A_hats and A_sigmas
+        (A_hats, A_sigmas, Nobs, A_scale) where A_hats and A_sigmas
         have shape (Nobs, N_samples).
     """
     Nobs = len(event_posteriors)
@@ -519,9 +519,9 @@ def generate_tgr_only_data(event_posteriors, memory_data,
         pooled_phi = np.concatenate([
             md["A_hat"].ravel() for md in memory_data
         ])
-        dphi_scale = max(np.nanstd(pooled_phi), 1e-12)
+        A_scale = max(np.nanstd(pooled_phi), 1e-12)
     else:
-        dphi_scale = 1
+        A_scale = 1
 
     # Construct the event posterior arrays
     A_hats = []
@@ -531,10 +531,10 @@ def generate_tgr_only_data(event_posteriors, memory_data,
         w /= w.sum()
         idxs = prng.choice(len(md["A_hat"]), size=N_samples,
                            replace=True, p=w)
-        A_hats.append(md["A_hat"][idxs] / dphi_scale)
-        A_sigmas.append(md["A_sigma"][idxs] / dphi_scale)
+        A_hats.append(md["A_hat"][idxs] / A_scale)
+        A_sigmas.append(md["A_sigma"][idxs] / A_scale)
 
     A_hats = np.array(A_hats)
     A_sigmas = np.array(A_sigmas)
 
-    return A_hats, A_sigmas, Nobs, dphi_scale
+    return A_hats, A_sigmas, Nobs, A_scale

@@ -371,7 +371,7 @@ def main():
         BW_matrices_sel,
         Nobs,
         Ndraw,
-        dphi_scale_joint,
+        A_scale_joint,
     ) = generate_data(
         event_posteriors,
         injection_file,
@@ -387,13 +387,13 @@ def main():
     )
 
     if args.model in ("tgr", "both"):
-        A_hats_tgr, A_sigmas_tgr, _, dphi_scale_tgr = generate_tgr_only_data(
+        A_hats_tgr, A_sigmas_tgr, _, A_scale_tgr = generate_tgr_only_data(
             event_posteriors, memory_data,
             N_samples=args.n_samples_per_event, prng=seed,
             scale_tgr=args.scale_tgr,
         )
     else:
-        A_hats_tgr, A_sigmas_tgr, _, dphi_scale_tgr = None, None, None, 1
+        A_hats_tgr, A_sigmas_tgr, _, A_scale_tgr = None, None, None, 1
 
     # Run joint model
     prng0, prng1 = jax.random.split(prng, 2)
@@ -424,9 +424,9 @@ def main():
 
         fit_joint = az.from_numpyro(mcmc)
 
-        if dphi_scale_joint != 1:
-            fit_joint.posterior["mu_tgr"] = fit_joint.posterior["mu_tgr"] * dphi_scale_joint
-            fit_joint.posterior["sigma_tgr"] = fit_joint.posterior["sigma_tgr"] * dphi_scale_joint
+        if A_scale_joint != 1:
+            fit_joint.posterior["mu_tgr"] = fit_joint.posterior["mu_tgr"] * A_scale_joint
+            fit_joint.posterior["sigma_tgr"] = fit_joint.posterior["sigma_tgr"] * A_scale_joint
 
         fname = f"{outdir}/result_joint.nc"
         fit_joint.to_netcdf(fname)
@@ -454,9 +454,9 @@ def main():
 
         fit_tgr = az.from_numpyro(mcmc)
 
-        if dphi_scale_tgr != 1:
-            fit_tgr.posterior["mu_tgr"] = fit_tgr.posterior["mu_tgr"] * dphi_scale_tgr
-            fit_tgr.posterior["sigma_tgr"] = fit_tgr.posterior["sigma_tgr"] * dphi_scale_tgr
+        if A_scale_tgr != 1:
+            fit_tgr.posterior["mu_tgr"] = fit_tgr.posterior["mu_tgr"] * A_scale_tgr
+            fit_tgr.posterior["sigma_tgr"] = fit_tgr.posterior["sigma_tgr"] * A_scale_tgr
 
         fname = f"{outdir}/result_tgr.nc"
         fit_tgr.to_netcdf(fname)
