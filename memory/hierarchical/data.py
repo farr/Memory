@@ -33,8 +33,9 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
     Returns
     -------
     list of dict
-        One dict per event with keys ``'A_sample'`` (1-D float array),
-        ``'log_weight'`` (1-D float array), and ``'event_name'`` (str).
+        One dict per event with keys ``'A_sample'``, ``'A_hat'``,
+        ``'A_sigma'``, ``'log_weight'`` (1-D float arrays), and
+        ``'event_name'`` (str).
 
     Raises
     ------
@@ -74,10 +75,14 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
                 grp = f[keys[0]]
 
             a_sample = grp["A_sample"][()]
+            a_hat = grp["A_hat"][()]
+            a_sigma = grp["A_sigma"][()]
             log_weight = grp["log_weight"][()]
 
         memory_data.append({
             "A_sample": np.asarray(a_sample),
+            "A_hat": np.asarray(a_hat),
+            "A_sigma": np.asarray(a_sigma),
             "log_weight": np.asarray(log_weight),
             "event_name": event_name,
         })
@@ -249,10 +254,9 @@ def generate_data(
     """Build per-event data arrays for the joint population model.
 
     Resamples posterior samples with importance weights, assembles arrays of
-    (m1, q, spins, redshift, TGR parameter) per event, and computes KDE
-    bandwidth matrices via the conditional covariance of the spin/TGR
-    dimensions. Also loads and processes the injection data for selection
-    effects.
+    (m1, q, spins, redshift, A_hat, A_sigma) per event, and computes KDE
+    bandwidth matrices via the conditional covariance of the spin dimensions.
+    Also loads and processes the injection data for selection effects.
 
     Parameters
     ----------
@@ -305,7 +309,8 @@ def generate_data(
     a2s = []
     zs = []
     log_pdraw = []
-    dphis = []
+    A_hats = []
+    A_sigmas = []
     kde_weights = []
 
     BW_matrices = []
@@ -318,7 +323,7 @@ def generate_data(
 
     if use_tgr and scale_tgr:
         pooled_phi = np.concatenate([
-            md["A_sample"].ravel() for md in memory_data
+            md["A_hat"].ravel() for md in memory_data
         ])
         dphi_scale = max(np.nanstd(pooled_phi), 1e-12)
     else:
@@ -336,9 +341,9 @@ def generate_data(
 
         if use_tgr:
             md = memory_data[i_event]
-            if len(md["A_sample"]) != len(event_posterior):
+            if len(md["A_hat"]) != len(event_posterior):
                 raise ValueError(
-                    f"Memory data length ({len(md['A_sample'])}) does not "
+                    f"Memory data length ({len(md['A_hat'])}) does not "
                     f"match posterior length ({len(event_posterior)}) for "
                     f"event {md['event_name']}"
                 )
@@ -364,9 +369,11 @@ def generate_data(
         a2s.append(event_posterior["a_2"][idxs])
 
         if use_tgr:
-            dphis.append(memory_data[i_event]["A_sample"][idxs] / dphi_scale)
+            A_hats.append(memory_data[i_event]["A_hat"][idxs] / dphi_scale)
+            A_sigmas.append(memory_data[i_event]["A_sigma"][idxs] / dphi_scale)
         else:
-            dphis.append(np.zeros(N_samples))
+            A_hats.append(np.zeros(N_samples))
+            A_sigmas.append(np.zeros(N_samples))
 
         cost1s.append(event_posterior["cos_tilt_1"][idxs])
         cost2s.append(event_posterior["cos_tilt_2"][idxs])
@@ -381,43 +388,25 @@ def generate_data(
                 "for reweighting."
             )
 
-        if use_tgr:
-            d = 3
-            if use_tilts:
-                data_array = np.array(
-                    [
-                        a1s[-1],
-                        a2s[-1],
-                        dphis[-1],
-                        m1s[-1],
-                        qs[-1],
-                        zs[-1],
-                        cost1s[-1],
-                        cost2s[-1],
-                    ]
-                )
-            else:
-                data_array = np.array(
-                    [a1s[-1], a2s[-1], dphis[-1], m1s[-1], qs[-1], zs[-1]]
-                )
+        # BW_matrices are always 2x2 (spins only); the TGR dimension
+        # is handled analytically in the model.
+        d = 2
+        if use_tilts:
+            data_array = np.array(
+                [
+                    a1s[-1],
+                    a2s[-1],
+                    m1s[-1],
+                    qs[-1],
+                    zs[-1],
+                    cost1s[-1],
+                    cost2s[-1],
+                ]
+            )
         else:
-            d = 2
-            if use_tilts:
-                data_array = np.array(
-                    [
-                        a1s[-1],
-                        a2s[-1],
-                        m1s[-1],
-                        qs[-1],
-                        zs[-1],
-                        cost1s[-1],
-                        cost2s[-1],
-                    ]
-                )
-            else:
-                data_array = np.array(
-                    [a1s[-1], a2s[-1], m1s[-1], qs[-1], zs[-1]]
-                )
+            data_array = np.array(
+                [a1s[-1], a2s[-1], m1s[-1], qs[-1], zs[-1]]
+            )
 
         # could have applied the weights here instead
         weights_i = np.ones(N_samples)
@@ -437,7 +426,7 @@ def generate_data(
     BW_matrices_sel = np.array(BW_matrices_sel)
 
     event_data_array = np.array(
-        [m1s, qs, cost1s, cost2s, a1s, a2s, dphis, zs, log_pdraw, kde_weights]
+        [m1s, qs, cost1s, cost2s, a1s, a2s, A_hats, A_sigmas, zs, log_pdraw, kde_weights]
     )
 
     injection_data = read_injection_file(
@@ -492,17 +481,17 @@ def generate_tgr_only_data(event_posteriors, memory_data,
                            N_samples=2000, prng=None, scale_tgr=False):
     """Build simplified data arrays for the TGR-only model.
 
-    Resamples the memory amplitude from each event's memory results and
-    computes per-event 1D KDE bandwidths using Silverman's rule.
+    Resamples posterior indices using memory importance weights and extracts
+    per-sample ``A_hat`` and ``A_sigma`` for analytic Gaussian convolution.
 
     Parameters
     ----------
     event_posteriors : list of structured ndarray
         Per-event posterior sample arrays with named fields.
     memory_data : list of dict
-        Per-event memory data from `load_memory_data`.  The TGR parameter
-        values (``A_sample``) and importance weights (``log_weight``) are
-        taken from these dicts.
+        Per-event memory data from `load_memory_data`.  The ``A_hat``,
+        ``A_sigma``, and importance weights (``log_weight``) are taken
+        from these dicts.
     N_samples : int
         Number of posterior samples to draw per event.
     prng : None, int, or numpy.random.Generator
@@ -514,8 +503,8 @@ def generate_tgr_only_data(event_posteriors, memory_data,
     Returns
     -------
     tuple
-        (dphis, bws_tgr, Nobs, dphi_scale) where dphis is shape
-        (Nobs, N_samples), bws_tgr is shape (Nobs,).
+        (A_hats, A_sigmas, Nobs, dphi_scale) where A_hats and A_sigmas
+        have shape (Nobs, N_samples).
     """
     Nobs = len(event_posteriors)
 
@@ -528,27 +517,24 @@ def generate_tgr_only_data(event_posteriors, memory_data,
 
     if scale_tgr:
         pooled_phi = np.concatenate([
-            md["A_sample"].ravel() for md in memory_data
+            md["A_hat"].ravel() for md in memory_data
         ])
         dphi_scale = max(np.nanstd(pooled_phi), 1e-12)
     else:
         dphi_scale = 1
 
     # Construct the event posterior arrays
-    dphis = []
-    bws_tgr = []
+    A_hats = []
+    A_sigmas = []
     for md in memory_data:
         w = np.exp(md["log_weight"] - md["log_weight"].max())
         w /= w.sum()
-        idxs = prng.choice(len(md["A_sample"]), size=N_samples,
+        idxs = prng.choice(len(md["A_hat"]), size=N_samples,
                            replace=True, p=w)
-        dphis.append(md["A_sample"][idxs] / dphi_scale)
+        A_hats.append(md["A_hat"][idxs] / dphi_scale)
+        A_sigmas.append(md["A_sigma"][idxs] / dphi_scale)
 
-        bws_tgr.append(
-            np.std(dphis[-1]) * N_samples ** (-1.0 / 5)
-        )
+    A_hats = np.array(A_hats)
+    A_sigmas = np.array(A_sigmas)
 
-    bws_tgr = np.array(bws_tgr)
-    dphis = np.array(dphis)
-
-    return dphis, bws_tgr, Nobs, dphi_scale
+    return A_hats, A_sigmas, Nobs, dphi_scale

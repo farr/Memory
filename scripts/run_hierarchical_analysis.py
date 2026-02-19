@@ -393,13 +393,13 @@ def main():
     print(f"Saved dphi_scale to: {path}")
 
     if args.model in ("tgr", "both"):
-        event_data_tgr, bws_tgr, _, dphi_scale = generate_tgr_only_data(
+        A_hats_tgr, A_sigmas_tgr, _, dphi_scale = generate_tgr_only_data(
             event_posteriors, memory_data,
             N_samples=args.n_samples_per_event, prng=seed,
             scale_tgr=args.scale_tgr,
         )
     else:
-        event_data_tgr, bws_tgr, _, dphi_scale = None, None, None, 1
+        A_hats_tgr, A_sigmas_tgr, _, dphi_scale = None, None, None, 1
 
     # store dphi_scale in output directory
     path = os.path.join(outdir, "dphi_scale_tgr.txt")
@@ -453,8 +453,8 @@ def main():
         )
         mcmc.run(
             prng1,
-            event_data_tgr,
-            bws_tgr,
+            A_hats_tgr,
+            A_sigmas_tgr,
             Nobs,
             args.mu_tgr_scale,
             args.sigma_tgr_scale,

@@ -23,21 +23,22 @@ dVdzdt_interp = (
 )
 
 
-def make_tgr_only_model(dphis, bws_tgr, Nobs, mu_tgr_scale=None,
+def make_tgr_only_model(A_hats, A_sigmas, Nobs, mu_tgr_scale=None,
                         sigma_tgr_scale=None):
     """Numpyro model for TGR-only hierarchical inference.
 
     Defines a two-hyperparameter model (mu_tgr, sigma_tgr) describing a
     Gaussian population distribution for the TGR deviation parameter.
-    The per-event likelihood is a KDE-smoothed sum over posterior samples,
-    where the KDE bandwidth is added in quadrature with sigma_tgr.
+    The per-event likelihood uses an analytic Gaussian convolution:
+    the per-sample measurement uncertainty A_sigma is added in quadrature
+    with sigma_tgr.
 
     Parameters
     ----------
-    dphis : jnp.ndarray
-        TGR parameter samples, shape (Nobs, N_samples).
-    bws_tgr : jnp.ndarray
-        Per-event KDE bandwidths, shape (Nobs,).
+    A_hats : jnp.ndarray
+        Per-sample ML amplitude estimates, shape (Nobs, N_samples).
+    A_sigmas : jnp.ndarray
+        Per-sample amplitude uncertainties, shape (Nobs, N_samples).
     Nobs : int
         Number of observed events.
     mu_tgr_scale : float or None
@@ -47,7 +48,7 @@ def make_tgr_only_model(dphis, bws_tgr, Nobs, mu_tgr_scale=None,
         Upper bound of the uniform prior on sigma_tgr. If None, auto-scaled
         from the data.
     """
-    dphi_scale = jnp.maximum(1e-6, jnp.max(jnp.abs(dphis)))
+    dphi_scale = jnp.maximum(1e-6, jnp.max(jnp.abs(A_hats)))
     if mu_tgr_scale is None:
         mu_tgr_scale = 1
     mu_tgr_scale *= dphi_scale
@@ -58,8 +59,8 @@ def make_tgr_only_model(dphis, bws_tgr, Nobs, mu_tgr_scale=None,
     mu_tgr = numpyro.sample("mu_tgr", dist.Uniform(-mu_tgr_scale, mu_tgr_scale))
     sigma_tgr = numpyro.sample("sigma_tgr", dist.Uniform(0, sigma_tgr_scale))
 
-    sigma_tgr_i = jnp.sqrt(jnp.square(sigma_tgr) + bws_tgr**2)
-    log_wts = dist.Normal(mu_tgr, sigma_tgr_i).log_prob(dphis.T).T
+    sigma_eff = jnp.sqrt(jnp.square(A_sigmas) + jnp.square(sigma_tgr))
+    log_wts = dist.Normal(mu_tgr, sigma_eff).log_prob(A_hats.T).T
 
     log_like = logsumexp(log_wts, axis=1)
     log_like = jnp.nan_to_num(log_like, neginf=-1e20, posinf=1e20)
@@ -84,23 +85,24 @@ def make_joint_model(
     mass ratio, power-law-in-(1+z) redshift distribution, Beta-like spin
     magnitude distribution (via multivariate normal in KDE space), and
     optional spin tilt mixture model, with Gaussian TGR hyperparameters
-    (mu_tgr, sigma_tgr). Includes selection-effect correction via
-    importance-weighted injection sums and effective-sample-size
-    regularization terms.
+    (mu_tgr, sigma_tgr). The TGR dimension uses analytic Gaussian
+    convolution rather than KDE smoothing. Includes selection-effect
+    correction via importance-weighted injection sums and
+    effective-sample-size regularization terms.
 
     Parameters
     ----------
     event_data_array : ndarray
-        Shape (10, Nobs, N_samples): rows are m1, q, cos_tilt_1,
-        cos_tilt_2, a_1, a_2, dphi, z, log_pdraw, kde_weights.
+        Shape (11, Nobs, N_samples): rows are m1, q, cos_tilt_1,
+        cos_tilt_2, a_1, a_2, A_hat, A_sigma, z, log_pdraw, kde_weights.
     injection_data_array : ndarray
         Shape (8, N_inj): rows are m1, q, cos_tilt_1, cos_tilt_2,
         a_1/spin1z, a_2/spin2z, z, log_prior.
     BW_matrices : ndarray
-        Per-event KDE bandwidth matrices for spin+TGR dimensions,
-        shape (Nobs, d, d) where d=3 if use_tgr else d=2.
+        Per-event KDE bandwidth matrices for spin dimensions,
+        shape (Nobs, 2, 2).
     BW_matrices_sel : ndarray
-        Per-event KDE bandwidth matrices for spin dimensions only,
+        Per-event KDE bandwidth matrices for spin dimensions (selection),
         shape (Nobs, 2, 2).
     Nobs : int
         Number of observed events.
@@ -120,9 +122,10 @@ def make_joint_model(
     cost1s = event_data_array[2]
     cost2s = event_data_array[3]
     a1_a2s = event_data_array[4:6]
-    a1_a2_dphis = event_data_array[4:7]
-    zs = event_data_array[7]
-    log_pdraw = event_data_array[8]
+    A_hats = event_data_array[6]
+    A_sigmas = event_data_array[7]
+    zs = event_data_array[8]
+    log_pdraw = event_data_array[9]
 
     m1s_sel = injection_data_array[0]
     qs_sel = injection_data_array[1]
@@ -220,9 +223,39 @@ def make_joint_model(
         log_wts += log_tilt_density(cost1s, cost2s)
         log_sel_wts += log_tilt_density(cost1s_sel, cost2s_sel)
 
-    # Handling the KDE with and without the TGR parameters
+    # Spin KDE — always 2×2 (a1, a2); the TGR dimension is handled
+    # analytically below.
+    sigma_evts = BW_matrices + jnp.diag(
+        jnp.array([jnp.square(sigma_spin), jnp.square(sigma_spin)])
+    )
+    sigma_evts = sigma_evts + jnp.eye(2) * 1e-15
+    sigma_sel = jnp.diag(
+        jnp.array([jnp.square(sigma_spin), jnp.square(sigma_spin)])
+    )
+    sigma_sel = sigma_sel + jnp.eye(2) * 1e-15
+    mu_evts = jnp.array([mu_spin, mu_spin])
+
+    logp_normal_sel = dist.MultivariateNormal(
+        jnp.array([mu_spin, mu_spin]), sigma_sel
+    ).log_prob(a1_a2_sel.T)
+    log_sel_wts += logp_normal_sel
+
+    logp_normal = (
+        dist.MultivariateNormal(mu_evts, sigma_evts)
+        .log_prob(
+            jnp.array(
+                [
+                    a1_a2s.T,
+                ]
+            )
+        )
+        .T[:, :, 0]
+    )
+    log_wts += logp_normal
+
+    # TGR: analytic Gaussian convolution over the memory amplitude
     if use_tgr:
-        dphi_scale = jnp.maximum(1e-6, jnp.max(jnp.abs(a1_a2_dphis[2])))
+        dphi_scale = jnp.maximum(1e-6, jnp.max(jnp.abs(A_hats)))
         if mu_tgr_scale is None:
             mu_tgr_scale = 1
         mu_tgr_scale *= dphi_scale
@@ -233,68 +266,8 @@ def make_joint_model(
         mu_tgr = numpyro.sample("mu_tgr", dist.Uniform(-mu_tgr_scale, mu_tgr_scale))
         sigma_tgr = numpyro.sample("sigma_tgr", dist.Uniform(0, sigma_tgr_scale))
 
-        sigma_evts = BW_matrices + jnp.diag(
-            jnp.array(
-                [
-                    jnp.square(sigma_spin),
-                    jnp.square(sigma_spin),
-                    jnp.square(sigma_tgr),
-                ]
-            )
-        )
-        # Add tiny jitter for numerical stability
-        sigma_evts = sigma_evts + jnp.eye(3) * 1e-15
-        sigma_sel = jnp.diag(
-            jnp.array([jnp.square(sigma_spin), jnp.square(sigma_spin)])
-        )
-        sigma_sel = sigma_sel + jnp.eye(2) * 1e-15
-        mu_evts = jnp.array([mu_spin, mu_spin, mu_tgr])
-
-        logp_normal_sel = dist.MultivariateNormal(
-            jnp.array([mu_spin, mu_spin]), sigma_sel
-        ).log_prob(a1_a2_sel.T)
-        log_sel_wts += logp_normal_sel
-
-        logp_normal = (
-            dist.MultivariateNormal(mu_evts, sigma_evts)
-            .log_prob(
-                jnp.array(
-                    [
-                        a1_a2_dphis.T,
-                    ]
-                )
-            )
-            .T[:, :, 0]
-        )
-        log_wts += logp_normal
-    else:
-        sigma_evts = BW_matrices + jnp.diag(
-            jnp.array([jnp.square(sigma_spin), jnp.square(sigma_spin)])
-        )
-        sigma_evts = sigma_evts + jnp.eye(2) * 1e-15
-        sigma_sel = jnp.diag(
-            jnp.array([jnp.square(sigma_spin), jnp.square(sigma_spin)])
-        )
-        sigma_sel = sigma_sel + jnp.eye(2) * 1e-15
-        mu_evts = jnp.array([mu_spin, mu_spin])
-
-        logp_normal_sel = dist.MultivariateNormal(
-            jnp.array([mu_spin, mu_spin]), sigma_sel
-        ).log_prob(a1_a2_sel.T)
-        log_sel_wts += logp_normal_sel
-
-        logp_normal = (
-            dist.MultivariateNormal(mu_evts, sigma_evts)
-            .log_prob(
-                jnp.array(
-                    [
-                        a1_a2s.T,
-                    ]
-                )
-            )
-            .T[:, :, 0]
-        )
-        log_wts += logp_normal
+        sigma_eff = jnp.sqrt(jnp.square(A_sigmas) + jnp.square(sigma_tgr))
+        log_wts += dist.Normal(mu_tgr, sigma_eff).log_prob(A_hats)
 
     # Adding the per event likelihood term (stable log-sum-exp)
     log_like = logsumexp(log_wts, axis=1)
