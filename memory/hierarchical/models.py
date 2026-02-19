@@ -79,8 +79,8 @@ def make_joint_model(
 ):
     """Numpyro model jointly fitting astrophysical population and TGR parameters.
 
-    Combines a power-law + Gaussian bump primary mass function, power-law
-    mass ratio, power-law-in-(1+z) redshift distribution, Beta-like spin
+    Combines a broken power law + two Gaussian peaks primary mass function,
+    power-law mass ratio, power-law-in-(1+z) redshift distribution, Beta-like spin
     magnitude distribution (via multivariate normal in KDE space), and
     optional spin tilt mixture model, with Gaussian TGR hyperparameters
     (mu_tgr, sigma_tgr). The TGR dimension uses analytic Gaussian

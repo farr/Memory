@@ -76,7 +76,7 @@ Results go to `data/test_e2e/`. The test script auto-downloads data if missing a
 - **`memory/hierarchical/models.py`** — Numpyro model definitions and cosmology globals.
   - Module-level cosmology setup: `Planck15_LAL`, `zinterp`, `dVdzdt_interp`
   - `make_tgr_only_model()`: numpyro model with two hyperparameters (mu_tgr, sigma_tgr) describing a Gaussian population distribution for the TGR deviation parameter; likelihood is a KDE-smoothed sum over per-event posterior samples
-  - `make_joint_model()`: numpyro model jointly fitting astrophysical population (power-law + Gaussian bump mass function, power-law mass ratio, power-law redshift, spin magnitude/tilt distributions) and TGR hyperparameters; includes selection-effect correction and effective-sample-size regularization
+  - `make_joint_model()`: numpyro model jointly fitting astrophysical population (broken power law + two Gaussian peaks mass function, power-law mass ratio, power-law redshift, spin magnitude/tilt distributions) and TGR hyperparameters; includes selection-effect correction and effective-sample-size regularization
 
 - **`memory/hierarchical/plotting.py`** — Plotting and ArviZ post-processing.
   - `get_samples_df()`: converts an ArviZ InferenceData posterior into a flat pandas DataFrame (chains × draws)
