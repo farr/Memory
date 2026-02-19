@@ -4,6 +4,7 @@ Script to run gravitational wave population analysis with TGR parameters.
 Converted from analysis_notebook.ipynb
 """
 
+import logging
 import sys
 import os
 import argparse
@@ -38,7 +39,10 @@ if platform is None:
 numpyro.set_platform(platform)
 numpyro.enable_x64()
 
-print(f"Using {device_count} devices on {platform}")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
+
+logger.info("Using %d devices on %s", device_count, platform)
 
 # Import library functions (after JAX/numpyro platform config)
 from memory.hierarchical import (
@@ -187,7 +191,7 @@ def main():
 
     if args.seed == 0:
         seed = np.random.randint(1 << 32)
-        print(f"No PRNG key provided, using random seed! {seed}")
+        logger.warning("No PRNG key provided, using random seed: %d", seed)
     else:
         seed = args.seed
     prng = jax.random.PRNGKey(seed)
@@ -203,7 +207,7 @@ def main():
             raise ValueError(f"Unrecognized injection runs: {args.injection_runs}")
     else:
         injection_file = args.injection_file
-    print(f"Using injection file: {injection_file}")
+    logger.info("Using injection file: %s", injection_file)
 
     # Generate the output directory
     outdir = args.outdir or f'results_{args.parameter}'
@@ -257,23 +261,19 @@ def main():
     all_exist, existing_files, missing_files = check_output_files_exist()
 
     if all_exist and not args.force:
-        print(f"All output files already exist in {outdir}")
-        print("Existing files:")
+        logger.info("All output files already exist in %s", outdir)
         for f in existing_files:
-            print(f"  - {os.path.basename(f)}")
-        print("Use --force to re-run the analysis")
+            logger.info("  %s", os.path.basename(f))
+        logger.info("Use --force to re-run the analysis")
         sys.exit(0)
     elif all_exist and args.force:
-        print(
-            "Output files exist but --force flag provided. Re-running analysis..."
-        )
+        logger.info("Output files exist but --force flag provided. Re-running analysis...")
     elif not all_exist:
-        print(f"Missing output files: {len(missing_files)}")
+        logger.info("Missing %d output files:", len(missing_files))
         for f in missing_files:
-            print(f"  - {os.path.basename(f)}")
-        print("Proceeding with analysis...")
+            logger.info("  %s", os.path.basename(f))
 
-    print(f"Running in output directory: {outdir}")
+    logger.info("Running in output directory: %s", outdir)
 
     # Define file paths
 
@@ -289,9 +289,9 @@ def main():
             else:
                 event_files.append(path)
 
-    print(f"Discarded {len(discarded_files)} files")
+    logger.info("Discarded %d files", len(discarded_files))
     for f in discarded_files:
-        print(f"  - {os.path.basename(f)}")
+        logger.info("  %s", os.path.basename(f))
 
     if not event_files:
         raise FileNotFoundError(
@@ -303,37 +303,37 @@ def main():
             f"Injection file not found: {injection_file}"
         )
 
-    print(f"Found {len(event_files)} event files")
+    logger.info("Found %d event files", len(event_files))
 
     # Save injection file path to output directory
     injection_file_path = os.path.join(outdir, "injection_file.txt")
     with open(injection_file_path, "w") as f:
         f.write(f"{injection_file}\n")
-    print(f"Saved injection file path to: {injection_file_path}")
+    logger.info("Saved injection file path to: %s", injection_file_path)
 
     # Save list of event files to output directory
     event_files_list_path = os.path.join(outdir, "event_files.txt")
     with open(event_files_list_path, "w") as f:
         for event_file in event_files:
             f.write(f"{event_file}\n")
-    print(f"Saved event files list to: {event_files_list_path}")
+    logger.info("Saved event files list to: %s", event_files_list_path)
 
     # Save exact command line to output directory
     command_file_path = os.path.join(outdir, "command.txt")
     with open(command_file_path, "w") as f:
         f.write(" ".join(sys.argv) + "\n")
-    print(f"Saved command to: {command_file_path}")
+    logger.info("Saved command to: %s", command_file_path)
 
     # Load memory data
     waveform_label = args.waveform_label or args.param_key
     memory_data = load_memory_data(event_files, args.memory_dir, waveform_label)
-    print(f"Loaded memory data for {len(memory_data)} events from {args.memory_dir}")
+    logger.info("Loaded memory data for %d events from %s", len(memory_data), args.memory_dir)
 
     # Save memory_dir path to output directory
     memory_dir_path = os.path.join(outdir, "memory_dir.txt")
     with open(memory_dir_path, "w") as f:
         f.write(f"{args.memory_dir}\n")
-    print(f"Saved memory_dir path to: {memory_dir_path}")
+    logger.info("Saved memory_dir path to: %s", memory_dir_path)
 
     # Loading in the event posteriors
     event_posteriors = []
@@ -400,7 +400,7 @@ def main():
 
     fit_joint = None
     if args.model in ("joint", "both"):
-        print("Running joint model...")
+        logger.info("Running joint model...")
         kernel = NUTS(make_joint_model, init_strategy=init_to_feasible())
         mcmc = MCMC(
             kernel,
@@ -430,12 +430,12 @@ def main():
 
         fname = f"{outdir}/result_joint.nc"
         fit_joint.to_netcdf(fname)
-        print(f"Saved joint results: {fname}")
+        logger.info("Saved joint results: %s", fname)
 
     # Run TGR-only model
     fit_tgr = None
     if args.model in ("tgr", "both"):
-        print("Running TGR-only model...")
+        logger.info("Running TGR-only model...")
         kernel = NUTS(make_tgr_only_model, init_strategy=init_to_feasible())
         mcmc = MCMC(
             kernel,
@@ -460,11 +460,11 @@ def main():
 
         fname = f"{outdir}/result_tgr.nc"
         fit_tgr.to_netcdf(fname)
-        print(f"Saved TGR-only results: {fname}")
+        logger.info("Saved TGR-only results: %s", fname)
 
     # Create plots and save sample data
     if not args.no_plots:
-        print("Creating plots...")
+        logger.info("Creating plots...")
         create_plots(fit_joint, fit_tgr, args.parameter, outdir)
     else:
         # Save sample data for the models that were run
@@ -479,35 +479,33 @@ def main():
 
     # Print summary statistics
     if fit_joint is not None:
-        print("\nJoint model results:")
+        logger.info("Joint model results:")
         num_chains_joint = fit_joint.posterior.sizes.get("chain", 1)
         for var in fit_joint.posterior:
             if "neff" not in var:
                 mean_val = fit_joint.posterior[var].mean().values
                 std_val = fit_joint.posterior[var].std().values
-                print(f"{var}: {mean_val:.3f} +/- {std_val:.3f}")
+                logger.info("  %s: %.3f +/- %.3f", var, mean_val, std_val)
                 if num_chains_joint >= 2:
-                    print(f"Rhat: {gelman_rubin(fit_joint.posterior[var].values):.3f}")
-                    print(
-                        f"Effective sample size: {effective_sample_size(fit_joint.posterior[var].values):.1f}"
+                    logger.info("    Rhat: %.3f", gelman_rubin(fit_joint.posterior[var].values))
+                    logger.info(
+                        "    ESS: %.1f", effective_sample_size(fit_joint.posterior[var].values)
                     )
-                print()
 
     if fit_tgr is not None:
-        print("\nTGR-only model results:")
+        logger.info("TGR-only model results:")
         num_chains_tgr = fit_tgr.posterior.sizes.get("chain", 1)
         for var in fit_tgr.posterior:
             mean_val = fit_tgr.posterior[var].mean().values
             std_val = fit_tgr.posterior[var].std().values
-            print(f"{var}: {mean_val:.3f} +/- {std_val:.3f}")
+            logger.info("  %s: %.3f +/- %.3f", var, mean_val, std_val)
             if num_chains_tgr >= 2:
-                print(f"Rhat: {gelman_rubin(fit_tgr.posterior[var].values):.3f}")
-                print(
-                    f"Effective sample size: {effective_sample_size(fit_tgr.posterior[var].values):.1f}"
+                logger.info("    Rhat: %.3f", gelman_rubin(fit_tgr.posterior[var].values))
+                logger.info(
+                    "    ESS: %.1f", effective_sample_size(fit_tgr.posterior[var].values)
                 )
-            print()
 
-    print(f"Analysis complete! Results saved to {outdir}")
+    logger.info("Analysis complete! Results saved to %s", outdir)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 """Data loading and preparation for hierarchical TGR population analysis."""
 
+import logging
 import os
 import re
 
@@ -7,6 +8,8 @@ import numpy as np
 import h5py
 import bilby
 from tqdm import tqdm
+
+logger = logging.getLogger(__name__)
 
 align_spin_prior = bilby.gw.prior.AlignedSpin()
 
@@ -228,7 +231,7 @@ def read_injection_file(
             if key in f.attrs:
                 injections["analysis_time"] = f.attrs[key]
         if "analysis_time" not in injections:
-            print("analysis_time not found")
+            logger.warning("analysis_time not found in injection file")
         else:
             injections["analysis_time"] /= 60 * 60 * 24 * 365.25
 
@@ -298,7 +301,7 @@ def generate_data(
 
     Nobs = len(event_posteriors)
 
-    print(f"Using {Nobs} events!")
+    logger.info("Using %d events", Nobs)
 
     # Construct the event posterior arrays
     m1s = []
@@ -356,10 +359,9 @@ def generate_data(
 
         neff = np.sum(w) ** 2 / np.sum(w**2)
         if neff < N_samples:
-            print(
-                f"Warning: effective sample size {neff} is less than the number "
-                f"of samples drawn {N_samples} for event "
-                f"{event_posterior['event_name']}"
+            logger.warning(
+                "Effective sample size %.1f < %d requested samples for event %s",
+                neff, N_samples, event_posterior['event_name'],
             )
 
         m1s.append(event_posterior["mass_1_source"][idxs])
@@ -508,7 +510,7 @@ def generate_tgr_only_data(event_posteriors, memory_data,
     """
     Nobs = len(event_posteriors)
 
-    print(f"Using {Nobs} events!")
+    logger.info("Using %d events", Nobs)
 
     if prng is None:
         prng = np.random.default_rng(np.random.randint(1 << 32))
