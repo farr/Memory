@@ -134,13 +134,21 @@ def make_joint_model(
     log_pdraw_sel = injection_data_array[7]
 
     # Model parameters
-    alpha = numpyro.sample("alpha", dist.Uniform(-4, 12))
+    # Mass distribution: broken power law + two Gaussian peaks
+    alpha_1 = numpyro.sample("alpha_1", dist.Uniform(-4, 12))
+    alpha_2 = numpyro.sample("alpha_2", dist.Uniform(-4, 12))
     beta = numpyro.sample("beta", dist.Uniform(-4, 12))
     mmin = 5
+    mmax = 100
+    b = numpyro.sample("b", dist.Uniform(0, 1))
 
-    frac_bump = numpyro.sample("frac_bump", dist.Uniform(0, 1))
-    mu_bump = numpyro.sample("mu_bump", dist.Uniform(20, 50))
-    sigma_bump = numpyro.sample("sigma_bump", dist.Uniform(1, 20))
+    frac_peak_1 = numpyro.sample("frac_peak_1", dist.Uniform(0, 1))
+    mu_peak_1 = numpyro.sample("mu_peak_1", dist.Uniform(mmin, 20))
+    sigma_peak_1 = numpyro.sample("sigma_peak_1", dist.Uniform(1, 20))
+
+    frac_peak_2 = numpyro.sample("frac_peak_2", dist.Uniform(0, 1))
+    mu_peak_2 = numpyro.sample("mu_peak_2", dist.Uniform(20, 50))
+    sigma_peak_2 = numpyro.sample("sigma_peak_2", dist.Uniform(1, 20))
 
     # Spin magnitude distribution parameters
     mu_spin = numpyro.sample("mu_spin", dist.Uniform(0, 0.7))
@@ -150,23 +158,54 @@ def make_joint_model(
     lamb = numpyro.sample("lamb", dist.Uniform(-30, 30))
 
     # Defining the models
-    def log_m1_powerlaw_density(primary_masses):
+    def log_m1_density(primary_masses):
         huge_neg = -1.0e12
         indicator = jnp.where(jnp.greater_equal(primary_masses, mmin), 0.0, huge_neg)
-        log_powerlaw_comp = -alpha * jnp.log(primary_masses) + indicator
-        log_norm = jax.lax.select(
-            jnp.isclose(alpha, 1),
-            jnp.log(1 / jnp.log(100 / mmin)),
-            jnp.log((1 - alpha) / (100 ** (1 - alpha) - mmin ** (1 - alpha))),
-        )
 
-        normal_log_prob = dist.Normal(mu_bump, sigma_bump).log_prob(
+        m_break = mmin + b * (mmax - mmin)
+
+        # Log of normalized power law on [lo, hi]
+        def log_norm_pl(m, a, lo, hi):
+            log_unnorm = -a * jnp.log(m)
+            log_norm = jax.lax.select(
+                jnp.isclose(a, 1.0),
+                -jnp.log(jnp.log(hi / lo)),
+                jnp.log((1 - a) / (hi ** (1 - a) - lo ** (1 - a))),
+            )
+            return log_unnorm + log_norm
+
+        # Log-density of each PL segment
+        log_pl_low = log_norm_pl(primary_masses, alpha_1, mmin, m_break)
+        log_pl_high = log_norm_pl(primary_masses, alpha_2, m_break, mmax)
+
+        # Continuity correction: C = PL_high(m_break) / PL_low(m_break)
+        log_C = (log_norm_pl(m_break, alpha_2, m_break, mmax)
+                 - log_norm_pl(m_break, alpha_1, mmin, m_break))
+
+        # BPL: select segment, apply continuity weight, normalize
+        is_low = primary_masses < m_break
+        log_bpl = (jnp.where(is_low, log_pl_low + log_C, log_pl_high)
+                   - jnp.logaddexp(0.0, log_C))
+
+        # Two Gaussian peaks
+        log_gauss_1 = dist.Normal(mu_peak_1, sigma_peak_1).log_prob(
+            primary_masses.T
+        ).T
+        log_gauss_2 = dist.Normal(mu_peak_2, sigma_peak_2).log_prob(
             primary_masses.T
         ).T
 
-        comp_a = jnp.log1p(-frac_bump) + log_powerlaw_comp + log_norm
-        comp_b = jnp.log(frac_bump) + normal_log_prob
-        return logsumexp(jnp.stack([comp_a, comp_b], axis=0), axis=0)
+        # Enforce frac_peak_1 + frac_peak_2 < 1
+        frac_bpl = 1.0 - frac_peak_1 - frac_peak_2
+        frac_penalty = jnp.where(frac_bpl > 0.0, 0.0, huge_neg)
+
+        # Three-component mixture
+        comp_bpl = jnp.log(jnp.maximum(frac_bpl, 1e-30)) + log_bpl
+        comp_1 = jnp.log(jnp.maximum(frac_peak_1, 1e-30)) + log_gauss_1
+        comp_2 = jnp.log(jnp.maximum(frac_peak_2, 1e-30)) + log_gauss_2
+
+        return (logsumexp(jnp.stack([comp_bpl, comp_1, comp_2], axis=0), axis=0)
+                + indicator + frac_penalty)
 
     def log_q_powerlaw_density(mass_ratios, primary_masses):
         low = mmin / primary_masses
@@ -190,7 +229,7 @@ def make_joint_model(
         return lamb * jnp.log1p(redshifts) + jnp.log(interp_val)
 
     log_wts = (
-        log_m1_powerlaw_density(m1s)
+        log_m1_density(m1s)
         + log_q_powerlaw_density(qs, m1s)
         + log_redshift_powerlaw(zs)
         - log_pdraw
@@ -198,7 +237,7 @@ def make_joint_model(
 
     # Evaluate the selection term
     log_sel_wts = (
-        log_m1_powerlaw_density(m1s_sel)
+        log_m1_density(m1s_sel)
         + log_q_powerlaw_density(qs_sel, m1s_sel)
         + log_redshift_powerlaw(zs_sel)
         - log_pdraw_sel
