@@ -50,11 +50,9 @@ def make_tgr_only_model(A_hats, A_sigmas, Nobs, mu_tgr_scale=None,
     """
     dphi_scale = jnp.maximum(1e-6, jnp.max(jnp.abs(A_hats)))
     if mu_tgr_scale is None:
-        mu_tgr_scale = 1
-    mu_tgr_scale *= dphi_scale
+        mu_tgr_scale = dphi_scale
     if sigma_tgr_scale is None:
-        sigma_tgr_scale = 1
-    sigma_tgr_scale *= dphi_scale
+        sigma_tgr_scale = dphi_scale
 
     mu_tgr = numpyro.sample("mu_tgr", dist.Uniform(-mu_tgr_scale, mu_tgr_scale))
     sigma_tgr = numpyro.sample("sigma_tgr", dist.Uniform(0, sigma_tgr_scale))
@@ -257,11 +255,9 @@ def make_joint_model(
     if use_tgr:
         dphi_scale = jnp.maximum(1e-6, jnp.max(jnp.abs(A_hats)))
         if mu_tgr_scale is None:
-            mu_tgr_scale = 1
-        mu_tgr_scale *= dphi_scale
+            mu_tgr_scale = dphi_scale
         if sigma_tgr_scale is None:
-            sigma_tgr_scale = 1
-        sigma_tgr_scale *= dphi_scale
+            sigma_tgr_scale = dphi_scale
 
         mu_tgr = numpyro.sample("mu_tgr", dist.Uniform(-mu_tgr_scale, mu_tgr_scale))
         sigma_tgr = numpyro.sample("sigma_tgr", dist.Uniform(0, sigma_tgr_scale))
