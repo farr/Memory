@@ -186,8 +186,8 @@ def read_injection_file(
         #      prior p_aligned(chi_z) = -log|chi_z|/2, since the model
         #      describes chi_z = a*cos(tilt) directly.
         log_jacobian = (
-            2 * np.log(np.clip(injections["a_1"], 1e-30, None))
-            + 2 * np.log(np.clip(injections["a_2"], 1e-30, None))
+            2 * np.log(np.clip(injections["a_1"], 1e-30, None)) +
+            2 * np.log(np.clip(injections["a_2"], 1e-30, None))
         )
 
         if use_tilts:
@@ -236,7 +236,7 @@ def read_injection_file(
 def generate_data(
     event_posteriors,
     injection_file,
-    memory_data,
+    memory_data=None,
     use_tgr=True,
     use_tilts=False,
     ifar_threshold=1000,
@@ -260,10 +260,9 @@ def generate_data(
         Per-event posterior sample arrays with named fields.
     injection_file : str
         Path to the HDF5 injection/selection file.
-    memory_data : list of dict
-        Per-event memory data from `load_memory_data`.  The TGR parameter
-        values (``A_sample``) and importance weights (``log_weight``) are
-        taken from these dicts.
+    memory_data : list of dict or None
+        Per-event memory data from `load_memory_data`.  Required when
+        ``use_tgr=True``; ignored when ``use_tgr=False``.
     use_tgr : bool
         Whether to include the TGR parameter in the KDE.
     use_tilts : bool
@@ -288,6 +287,11 @@ def generate_data(
         (event_data_array, injection_data_array, BW_matrices,
         BW_matrices_sel, Nobs, Ndraw, dphi_scale)
     """
+    if use_tgr and memory_data is None:
+        raise ValueError(
+            "memory_data is required when use_tgr=True"
+        )
+
     Nobs = len(event_posteriors)
 
     print(f"Using {Nobs} events!")
@@ -312,7 +316,7 @@ def generate_data(
     elif isinstance(prng, int):
         prng = np.random.default_rng(prng)
 
-    if scale_tgr:
+    if use_tgr and scale_tgr:
         pooled_phi = np.concatenate([
             md["A_sample"].ravel() for md in memory_data
         ])
@@ -321,8 +325,6 @@ def generate_data(
         dphi_scale = 1
 
     for i_event, event_posterior in enumerate(tqdm(event_posteriors)):
-        md = memory_data[i_event]
-
         # instead of picking the first N_samples, pick N_samples randomly
         # use this already to apply the weights (should be more efficient
         # than applying the weights after the fact, after trimming the
@@ -332,24 +334,23 @@ def generate_data(
         else:
             w = np.ones(len(event_posterior))
 
-        if len(md["A_sample"]) != len(event_posterior):
-            raise ValueError(
-                f"Memory data length ({len(md['A_sample'])}) does not "
-                f"match posterior length ({len(event_posterior)}) for "
-                f"event {md['event_name']}"
-            )
-        log_w = np.log(np.clip(w, 1e-300, None)) + md["log_weight"]
-        log_w -= log_w.max()
-        w = np.exp(log_w)
+        if use_tgr:
+            md = memory_data[i_event]
+            if len(md["A_sample"]) != len(event_posterior):
+                raise ValueError(
+                    f"Memory data length ({len(md['A_sample'])}) does not "
+                    f"match posterior length ({len(event_posterior)}) for "
+                    f"event {md['event_name']}"
+                )
+            log_w = np.log(np.clip(w, 1e-300, None)) + md["log_weight"]
+            log_w -= log_w.max()
+            w = np.exp(log_w)
 
         idxs = prng.choice(len(event_posterior), size=N_samples,
                            replace=True, p=w/w.sum())
 
-        # TODO: check sampling efficiency by computing the effective sample size
-        # and comparing it to the number of samples drawn
         neff = np.sum(w) ** 2 / np.sum(w**2)
         if neff < N_samples:
-            # warn too few samples
             print(
                 f"Warning: effective sample size {neff} is less than the number "
                 f"of samples drawn {N_samples} for event "
@@ -362,7 +363,10 @@ def generate_data(
         a1s.append(event_posterior["a_1"][idxs])
         a2s.append(event_posterior["a_2"][idxs])
 
-        dphis.append(md["A_sample"][idxs] / dphi_scale)
+        if use_tgr:
+            dphis.append(memory_data[i_event]["A_sample"][idxs] / dphi_scale)
+        else:
+            dphis.append(np.zeros(N_samples))
 
         cost1s.append(event_posterior["cos_tilt_1"][idxs])
         cost2s.append(event_posterior["cos_tilt_2"][idxs])
