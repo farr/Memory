@@ -1,5 +1,7 @@
 """Plotting and ArviZ post-processing for hierarchical TGR population analysis."""
 
+import logging
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -7,6 +9,8 @@ import seaborn as sns
 from corner import corner
 
 from memory.kde_contour import kdeplot
+
+logger = logging.getLogger(__name__)
 
 
 def get_samples_df(fit):
@@ -56,7 +60,7 @@ def create_plots(fit_joint, fit_tgr, parameter, outdir):
     fits = [("joint", fit_joint), ("tgr", fit_tgr)]
     fits = [(name, fit) for name, fit in fits if fit is not None]
     if len(fits) == 0:
-        print("No fits provided; skipping plots.")
+        logger.warning("No fits provided; skipping plots.")
         return
 
     # Get sample dataframes and save sample data
@@ -157,4 +161,4 @@ def create_plots(fit_joint, fit_tgr, parameter, outdir):
         )
         plt.close()
 
-    print(f"Plots saved to {outdir}")
+    logger.info("Plots saved to %s", outdir)
