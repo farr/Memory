@@ -574,6 +574,7 @@ def compute_one_sample_fd(
     ifos: InterferometerList,
     waveform_generator: WaveformGenerator,
     sample: Dict[str, Any],
+    is_SEOB: bool,
 ) -> Dict[str, Dict[str, np.ndarray]]:
     """
     Compute frequency-domain model and residual for a single posterior sample.
@@ -599,9 +600,12 @@ def compute_one_sample_fd(
     pols = waveform_generator.frequency_domain_strain(sample)
 
     # Normalize calibration parameter names to bilby conventions
-    n_points = int(ifos[0].calibration_model.n_points)
-    sample_normalized = _ensure_bilby_calibration_keys(sample, tuple(ifo.name for ifo in ifos), n_points)
-
+    if not is_SEOB:
+        n_points = int(ifos[0].calibration_model.n_points)
+        sample_normalized = _ensure_bilby_calibration_keys(sample, tuple(ifo.name for ifo in ifos), n_points)
+    else:
+        sample_normalized = sample
+        
     out: Dict[str, Dict[str, np.ndarray]] = {}
     for ifo in ifos:
         model_fd = np.asarray(ifo.get_detector_response(pols, sample_normalized))
@@ -699,15 +703,16 @@ def compute_bbh_residuals_with_spline_calibration(
     wfgen = _build_waveform_generator_bbh(cfg)
 
     # Attach spline calibration
-    cfg_dict = data.config[cfg.label]
-    calibration_info = _attach_spline_calibration_from_config(
-        ifos,
-        cfg_dict,
-        cfg.detectors,
-        base_prefix=calibration_prefix,
-        default_n_points=default_spline_n_points,
-    )
-    LOGGER.info("Calibration spline settings: %s", calibration_info)
+    if not "SEOBNRv4PHM" in label:
+        cfg_dict = data.config[cfg.label]
+        calibration_info = _attach_spline_calibration_from_config(
+            ifos,
+            cfg_dict,
+            cfg.detectors,
+            base_prefix=calibration_prefix,
+            default_n_points=default_spline_n_points,
+        )
+        LOGGER.info("Calibration spline settings: %s", calibration_info)
 
     samples: List[Dict[str, Any]] = list(_iter_samples_as_dicts(data, use_label, max_samples, thin))
     if len(samples) == 0:
@@ -723,10 +728,11 @@ def compute_bbh_residuals_with_spline_calibration(
                 calibration_prefix,
             )
 
-    _check_expected_spline_keys(samples[0], ifos)
+    if not "SEOBNRv4PHM" in label: 
+        _check_expected_spline_keys(samples[0], ifos)
 
     # Pre-allocate output arrays
-    first = compute_one_sample_fd(ifos, wfgen, samples[0])
+    first = compute_one_sample_fd(ifos, wfgen, samples[0], "SEOBNRv4PHM" in label)
 
     fd_out: Dict[str, Dict[str, np.ndarray]] = {}
     td_out: Dict[str, Dict[str, np.ndarray]] = {}
@@ -743,7 +749,7 @@ def compute_bbh_residuals_with_spline_calibration(
 
     # Main computation loop
     for i, s in enumerate(samples):
-        r = compute_one_sample_fd(ifos, wfgen, s)
+        r = compute_one_sample_fd(ifos, wfgen, s, "SEOBNRv4PHM" in label)
         for ifo_name, d in r.items():
             fd_out[ifo_name]["model"][i, :] = d["model_fd"]
             fd_out[ifo_name]["residual"][i, :] = d["residual_fd"]
@@ -754,7 +760,7 @@ def compute_bbh_residuals_with_spline_calibration(
         "config": cfg,
         "ifos": ifos,
         "waveform_generator": wfgen,
-        "calibration_info": calibration_info,
+        "calibration_info": None if "SEOBNRv4PHM" in label else calibration_info,
         "samples": samples,
         "fd": fd_out,
     }

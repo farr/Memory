@@ -73,7 +73,7 @@ def evaluate_surrogate_with_LAL(sample, res, approximant=lalsim.NRSur7dq4, ell_m
     fs = res["config"].sampling_frequency
     deltaT = 1 / fs
 
-    f_low = res["config"].minimum_frequency[res["ifos"][0].name]
+    f_low = 0.8 * res["config"].minimum_frequency[res["ifos"][0].name]
     f_ref = res["config"].reference_frequency
 
     if approximant == lalsim.NRSur7dq4:
@@ -718,7 +718,7 @@ def polarizations_to_FD(hp_memory, hc_memory, delta_t, config, roll_on=0.2):
     return hp_memory_FD, hc_memory_FD
 
 
-def project_to_detectors(hp, hc, sample, ifos):
+def project_to_detectors(hp, hc, sample, ifos, is_SEOB):
     """Project polarizations onto detector responses.
 
     This function computes the detector response for each interferometer
@@ -740,6 +740,9 @@ def project_to_detectors(hp, hc, sample, ifos):
         - name : str
         - calibration_model : object
         - get_detector_response(...) method
+    is_SEOB: bool
+        Whether or not the sample comes from SEOB. If True, ignore parts
+        of the code responsible for calibration information.
 
     Returns
     -------
@@ -753,11 +756,14 @@ def project_to_detectors(hp, hc, sample, ifos):
         "cross": hc,
     }
 
-    n_points = int(ifos[0].calibration_model.n_points)
-    sample_normalized = _ensure_bilby_calibration_keys(
-        sample, tuple(ifo.name for ifo in ifos), n_points
-    )
-
+    if not is_SEOB:
+        n_points = int(ifos[0].calibration_model.n_points)
+        sample_normalized = _ensure_bilby_calibration_keys(
+            sample, tuple(ifo.name for ifo in ifos), n_points
+        )
+    else:
+        sample_normalized = sample
+        
     out: Dict[str, np.ndarray] = {}
     for ifo in ifos:
         model_fd = ifo.get_detector_response(pols, sample_normalized)
@@ -822,7 +828,8 @@ def make_memories(res, angular_factors=None, approximant=lalsim.NRSur7dq4, ell_m
 
         hp_FD, hc_FD = polarizations_to_FD(hp_inserted, hc_inserted, delta_t, config)
 
-        h_memory_in_det = project_to_detectors(hp_FD, hc_FD, sample, ifos)
+        is_SEOB = approximant == lalsim.SEOBNRv4PHM
+        h_memory_in_det = project_to_detectors(hp_FD, hc_FD, sample, ifos, is_SEOB)
 
         h_memories_in_det.append(h_memory_in_det)
 

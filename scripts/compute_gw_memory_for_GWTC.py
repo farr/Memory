@@ -148,7 +148,7 @@ def approximant_has_td_generator(approximant_name):
             30 * MSUN_SI,
             0, 0, 0,
             0, 0, 0,
-            20,
+            16,
             50,
             400 * PC_SI * 1e6,
             None,
