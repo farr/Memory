@@ -142,6 +142,21 @@ def _collect_event_files(data_paths, exclude):
     return kept, discarded
 
 
+def _filter_to_memory_events(event_files, memory_dir):
+    """Keep only events that have a memory_results.h5 in *memory_dir*."""
+    import re
+    kept, skipped = [], []
+    for ef in event_files:
+        m = re.search(r"(GW\d{6}_\d{6})", os.path.basename(ef))
+        if m and os.path.exists(
+            os.path.join(memory_dir, m.group(1), "memory_results.h5")
+        ):
+            kept.append(ef)
+        else:
+            skipped.append(ef)
+    return kept, skipped
+
+
 def _save_provenance(outdir, injection_file, event_files, memory_dir):
     """Write small text files recording inputs for reproducibility."""
     with open(os.path.join(outdir, "injection_file.txt"), "w") as f:
@@ -231,11 +246,6 @@ def _build_parser():
     )
 
     # -- Positional ---------------------------------------------------------
-    parser.add_argument(
-        "parameter",
-        type=str,
-        help="TGR parameter label used for plot axes (e.g. 'dchi_2')",
-    )
     parser.add_argument(
         "data_paths",
         type=str,
@@ -360,7 +370,7 @@ def _build_parser():
     parser.add_argument(
         "-o", "--outdir",
         type=str,
-        help="Output directory (default: results_{parameter})",
+        help="Output directory (default: results_memory)",
     )
     parser.add_argument(
         "--no-plots", action="store_true", help="Skip diagnostic plots"
@@ -394,7 +404,7 @@ def main():
     injection_file = _resolve_injection_file(args)
     logger.info("Using injection file: %s", injection_file)
 
-    outdir = args.outdir or f"results_{args.parameter}"
+    outdir = args.outdir or "results_memory"
     os.makedirs(outdir, exist_ok=True)
 
     # Early exit if results already present
@@ -429,7 +439,17 @@ def main():
     if not os.path.exists(injection_file):
         raise FileNotFoundError(f"Injection file not found: {injection_file}")
 
-    logger.info("Found %d event files", len(event_files))
+    event_files, skipped_files = _filter_to_memory_events(event_files, args.memory_dir)
+    logger.info("Skipped %d events with no memory results", len(skipped_files))
+    for f in skipped_files:
+        logger.info("  %s", os.path.basename(f))
+
+    if not event_files:
+        raise FileNotFoundError(
+            f"No events with memory results found in {args.memory_dir}"
+        )
+
+    logger.info("Found %d event files with memory results", len(event_files))
 
     # --- Provenance -------------------------------------------------------
     _save_provenance(outdir, injection_file, event_files, args.memory_dir)
@@ -538,7 +558,7 @@ def main():
     # --- Plots & sample CSVs ---------------------------------------------
     if not args.no_plots:
         logger.info("Creating plots...")
-        create_plots(fit_joint, fit_tgr, args.parameter, outdir)
+        create_plots(fit_joint, fit_tgr, outdir)
     else:
         if fit_joint is not None:
             get_samples_df(fit_joint).to_csv(
