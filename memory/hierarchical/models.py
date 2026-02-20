@@ -58,7 +58,7 @@ def make_tgr_only_model(A_hats, A_sigmas, Nobs, mu_tgr_scale=None,
     sigma_tgr = numpyro.sample("sigma_tgr", dist.Uniform(0, sigma_tgr_scale))
 
     sigma_eff = jnp.sqrt(jnp.square(A_sigmas) + jnp.square(sigma_tgr))
-    log_wts = dist.Normal(mu_tgr, sigma_eff).log_prob(A_hats.T).T
+    log_wts = dist.Normal(mu_tgr, sigma_eff).log_prob(A_hats)
 
     log_like = logsumexp(log_wts, axis=1)
     log_like = jnp.nan_to_num(log_like, neginf=-1e20, posinf=1e20)

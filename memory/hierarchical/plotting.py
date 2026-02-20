@@ -37,7 +37,7 @@ def get_samples_df(fit):
     return samples_df
 
 
-def create_plots(fit_joint, fit_tgr, parameter, outdir):
+def create_plots(fit_joint, fit_tgr, outdir):
     """Create and save diagnostic plots comparing joint and TGR-only models.
 
     Generates: population KDE distribution, hyperparameter pairplot,
@@ -51,8 +51,6 @@ def create_plots(fit_joint, fit_tgr, parameter, outdir):
         Joint model inference result.
     fit_tgr : arviz.InferenceData or None
         TGR-only model inference result.
-    parameter : str
-        TGR parameter name (used for axis labels).
     outdir : str
         Directory to save plots and sample CSV files.
     """
@@ -78,8 +76,8 @@ def create_plots(fit_joint, fit_tgr, parameter, outdir):
     plt.figure(figsize=(10, 6))
     x = {k: df["draw_tgr"] for k, df in df_dict.items()}
     sns.kdeplot(x, common_norm=False)
-    plt.xlabel(parameter)
-    plt.title(f"Population Distribution for {parameter}")
+    plt.xlabel("A")
+    plt.title("Population Distribution for A")
     plt.savefig(
         f"{outdir}/population_distribution.png", dpi=300, bbox_inches="tight"
     )

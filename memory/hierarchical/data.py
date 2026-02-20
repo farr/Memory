@@ -77,10 +77,10 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
                     raise KeyError(f"No groups found in {mem_path}")
                 grp = f[keys[0]]
 
-            a_sample = grp["A_sample"][()]
-            a_hat = grp["A_hat"][()]
-            a_sigma = grp["A_sigma"][()]
-            log_weight = grp["log_weight"][()]
+            a_sample = grp["A_sample"][()].real
+            a_hat = grp["A_hat"][()].real
+            a_sigma = grp["A_sigma"][()].real
+            log_weight = grp["log_weight"][()].real
 
         memory_data.append({
             "A_sample": np.asarray(a_sample),
@@ -354,15 +354,27 @@ def generate_data(
             log_w -= log_w.max()
             w = np.exp(log_w)
 
-        idxs = prng.choice(len(event_posterior), size=N_samples,
-                           replace=True, p=w/w.sum())
-
         neff = np.sum(w) ** 2 / np.sum(w**2)
+        event_label = (
+            memory_data[i_event]["event_name"] if use_tgr
+            else f"event {i_event}"
+        )
+        d_full = 7 if use_tilts else 5
+        if neff < d_full + 1:
+            logger.warning(
+                "Skipping event %s: effective sample size %.1f is too low "
+                "to compute a non-singular covariance matrix (need > %d)",
+                event_label, neff, d_full,
+            )
+            continue
         if neff < N_samples:
             logger.warning(
                 "Effective sample size %.1f < %d requested samples for event %s",
-                neff, N_samples, event_posterior['event_name'],
+                neff, N_samples, event_label,
             )
+
+        idxs = prng.choice(len(event_posterior), size=N_samples,
+                           replace=True, p=w/w.sum())
 
         m1s.append(event_posterior["mass_1_source"][idxs])
         qs.append(event_posterior["mass_ratio"][idxs])
@@ -418,14 +430,34 @@ def generate_data(
         N_eff = np.sum(weights_i) ** 2 / np.sum(weights_i**2)
 
         full_cov_i = np.cov(data_array, aweights=weights_i)
-        prec_i = np.linalg.inv(full_cov_i)[:d, :d]
-        cov_i = np.linalg.inv(prec_i)
+        try:
+            prec_i = np.linalg.inv(full_cov_i)[:d, :d]
+            cov_i = np.linalg.inv(prec_i)
+        except np.linalg.LinAlgError:
+            logger.warning(
+                "Skipping event %s: singular covariance matrix despite ESS=%.1f",
+                event_label, neff,
+            )
+            m1s.pop()
+            qs.pop()
+            a1s.pop()
+            a2s.pop()
+            A_hats.pop()
+            A_sigmas.pop()
+            cost1s.pop()
+            cost2s.pop()
+            zs.pop()
+            log_pdraw.pop()
+            kde_weights.pop()
+            continue
 
         BW_matrices.append(cov_i * N_eff ** (-2.0 / (4 + d)))
         BW_matrices_sel.append(cov_i[:2, :2] * N_eff ** (-2.0 / (6)))
 
     BW_matrices = np.array(BW_matrices)
     BW_matrices_sel = np.array(BW_matrices_sel)
+
+    Nobs = len(m1s)
 
     event_data_array = np.array(
         [m1s, qs, cost1s, cost2s, a1s, a2s, A_hats, A_sigmas, zs, log_pdraw, kde_weights]
