@@ -9,7 +9,32 @@ from jax.scipy.special import logsumexp
 from astropy import cosmology as cosmo
 import astropy.units as u
 
-# Setting up the redshift interpolant dV_c/dz /(1+z)
+# ---------------------------------------------------------------------------
+# Model constants — importable by post-processing scripts (e.g. plot_ppd.py)
+# ---------------------------------------------------------------------------
+
+MMIN = 3    # lower primary mass cutoff [M_sun]
+MMAX = 100  # upper primary mass cutoff [M_sun]
+
+# Uniform prior ranges (lo, hi) for each sampled hyperparameter.
+PRIOR = {
+    "alpha_1":      (-4,    12),
+    "alpha_2":      (-4,    12),
+    "beta":         (-4,    12),
+    "b":            (0,      1),
+    "mu_peak_1":    (MMIN,  15),   # lower bound tied to MMIN
+    "sigma_peak_1": (0.5,    8),
+    "mu_peak_2":    (15,    75),
+    "sigma_peak_2": (0.5,    8),
+    "mu_spin":      (0,    0.7),
+    "sigma_spin":   (0.01, 0.5),
+    "lamb":         (-30,   30),
+}
+
+# ---------------------------------------------------------------------------
+# Cosmology / redshift interpolant — importable by post-processing scripts
+# ---------------------------------------------------------------------------
+
 Planck15_LAL = cosmo.FlatLambdaCDM(H0=67.90, Om0=0.3065, name="Planck15_LAL")
 zmax = 2.5
 zinterp = np.expm1(np.linspace(np.log1p(0), np.log1p(zmax), 1024))
@@ -135,12 +160,12 @@ def make_joint_model(
 
     # Model parameters
     # Mass distribution: broken power law + two Gaussian peaks
-    alpha_1 = numpyro.sample("alpha_1", dist.Uniform(-4, 12))
-    alpha_2 = numpyro.sample("alpha_2", dist.Uniform(-4, 12))
-    beta = numpyro.sample("beta", dist.Uniform(-4, 12))
-    mmin = 3
-    mmax = 100
-    b = numpyro.sample("b", dist.Uniform(0, 1))
+    alpha_1 = numpyro.sample("alpha_1", dist.Uniform(*PRIOR["alpha_1"]))
+    alpha_2 = numpyro.sample("alpha_2", dist.Uniform(*PRIOR["alpha_2"]))
+    beta = numpyro.sample("beta", dist.Uniform(*PRIOR["beta"]))
+    mmin = MMIN
+    mmax = MMAX
+    b = numpyro.sample("b", dist.Uniform(*PRIOR["b"]))
 
     # Dirichlet prior ensures frac_bpl + frac_peak_1 + frac_peak_2 = 1
     # with all fractions strictly positive — avoids the hard constraint /
@@ -151,25 +176,25 @@ def make_joint_model(
     frac_peak_1 = numpyro.deterministic("frac_peak_1", fracs[1])
     frac_peak_2 = numpyro.deterministic("frac_peak_2", fracs[2])
 
-    mu_peak_1 = numpyro.sample("mu_peak_1", dist.Uniform(mmin, 15))
+    mu_peak_1 = numpyro.sample("mu_peak_1", dist.Uniform(*PRIOR["mu_peak_1"]))
     # Peak widths bounded to [0.5, 8]: prevents the Gaussian components from
     # becoming degenerate broad components that absorb the BPL, which creates
     # multi-modal posteriors and poor NUTS conditioning.
-    sigma_peak_1 = numpyro.sample("sigma_peak_1", dist.Uniform(0.5, 8))
+    sigma_peak_1 = numpyro.sample("sigma_peak_1", dist.Uniform(*PRIOR["sigma_peak_1"]))
 
-    mu_peak_2 = numpyro.sample("mu_peak_2", dist.Uniform(15, 75))
-    sigma_peak_2 = numpyro.sample("sigma_peak_2", dist.Uniform(0.5, 8))
+    mu_peak_2 = numpyro.sample("mu_peak_2", dist.Uniform(*PRIOR["mu_peak_2"]))
+    sigma_peak_2 = numpyro.sample("sigma_peak_2", dist.Uniform(*PRIOR["sigma_peak_2"]))
 
     # Spin magnitude distribution parameters.
     # sigma_spin prior is restricted to [0.01, 0.5]: the posterior sits at
     # ~0.13, which was only 0.9% through the old [0.05, 10] range, mapping
     # to logit ≈ -4.65 in the unconstrained NUTS space and collapsing the
     # step size.  With [0.01, 0.5] the same posterior is at ~27% (logit ≈ -1).
-    mu_spin = numpyro.sample("mu_spin", dist.Uniform(0, 0.7))
-    sigma_spin = numpyro.sample("sigma_spin", dist.Uniform(0.01, 0.5))
+    mu_spin = numpyro.sample("mu_spin", dist.Uniform(*PRIOR["mu_spin"]))
+    sigma_spin = numpyro.sample("sigma_spin", dist.Uniform(*PRIOR["sigma_spin"]))
 
     # Redshift parameters
-    lamb = numpyro.sample("lamb", dist.Uniform(-30, 30))
+    lamb = numpyro.sample("lamb", dist.Uniform(*PRIOR["lamb"]))
 
     # Defining the models
     def log_m1_density(primary_masses):

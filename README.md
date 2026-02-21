@@ -145,7 +145,7 @@ BPL(m) = [ C * PL(m; a1, mmin, m_break) * I(m < m_break)
 Two Gaussian components capture features not well described by a power law.
 Their mean priors are non-overlapping to reduce degeneracies:
 
-- **Peak 1** (low-mass): `mu_peak_1 ~ U(5, 20)`
+- **Peak 1** (low-mass): `mu_peak_1 ~ U(3, 15)`
 - **Peak 2** (high-mass): `mu_peak_2 ~ U(20, 50)`
 
 Full mixture:
@@ -248,22 +248,25 @@ convolution as the joint model's TGR component.
 
 ### All hyperparameters and priors
 
-| Parameter       | Prior           | Component       | Description                       |
-|-----------------|-----------------|-----------------|-----------------------------------|
-| `alpha_1`       | U(-4, 12)       | Primary mass    | PL slope below break              |
-| `alpha_2`       | U(-4, 12)       | Primary mass    | PL slope above break              |
-| `b`             | U(0, 1)         | Primary mass    | Break fraction                    |
-| `frac_peak_1`   | U(0, 1)         | Primary mass    | Fraction in low-mass Gaussian     |
-| `mu_peak_1`     | U(5, 20)        | Primary mass    | Mean of low-mass Gaussian         |
-| `sigma_peak_1`  | U(1, 20)        | Primary mass    | Std of low-mass Gaussian          |
-| `frac_peak_2`   | U(0, 1)         | Primary mass    | Fraction in high-mass Gaussian    |
-| `mu_peak_2`     | U(20, 50)       | Primary mass    | Mean of high-mass Gaussian        |
-| `sigma_peak_2`  | U(1, 20)        | Primary mass    | Std of high-mass Gaussian         |
-| `beta`          | U(-4, 12)       | Mass ratio      | Power-law slope for q             |
-| `lamb`          | U(-30, 30)      | Redshift        | Power-law index on (1+z)          |
-| `mu_spin`       | U(0, 0.7)       | Spin magnitudes | Shared mean of (a1, a2)           |
-| `sigma_spin`    | U(0.05, 10)     | Spin magnitudes | Shared std of (a1, a2)            |
-| `f_iso`         | U(0, 1)         | Spin tilts      | Isotropic fraction (if enabled)   |
-| `sigma_tilt`    | U(0.05, 10)     | Spin tilts      | Tilt peak width (if enabled)      |
-| `mu_tgr`        | U(-s, s)        | TGR             | Population mean of A (auto-scaled)|
-| `sigma_tgr`     | U(0, s)         | TGR             | Population std of A (auto-scaled) |
+All prior bounds and the `MMIN`/`MMAX` constants are defined in
+`memory/hierarchical/models.py` (`PRIOR` dict) and importable from there.
+
+| Parameter       | Prior            | Component       | Description                       |
+|-----------------|------------------|-----------------|-----------------------------------|
+| `alpha_1`       | U(-4, 12)        | Primary mass    | PL slope below break              |
+| `alpha_2`       | U(-4, 12)        | Primary mass    | PL slope above break              |
+| `b`             | U(0, 1)          | Primary mass    | Break fraction                    |
+| `frac_peak_1`   | Dirichlet(1,1,1) | Primary mass    | Fraction in low-mass Gaussian     |
+| `mu_peak_1`     | U(3, 15)         | Primary mass    | Mean of low-mass Gaussian         |
+| `sigma_peak_1`  | U(0.5, 8)        | Primary mass    | Std of low-mass Gaussian          |
+| `frac_peak_2`   | Dirichlet(1,1,1) | Primary mass    | Fraction in high-mass Gaussian    |
+| `mu_peak_2`     | U(15, 75)        | Primary mass    | Mean of high-mass Gaussian        |
+| `sigma_peak_2`  | U(0.5, 8)        | Primary mass    | Std of high-mass Gaussian         |
+| `beta`          | U(-4, 12)        | Mass ratio      | Power-law slope for q             |
+| `lamb`          | U(-30, 30)       | Redshift        | Power-law index on (1+z)          |
+| `mu_spin`       | U(0, 0.7)        | Spin magnitudes | Shared mean of (a1, a2)           |
+| `sigma_spin`    | U(0.01, 0.5)     | Spin magnitudes | Shared std of (a1, a2)            |
+| `f_iso`         | U(0, 1)          | Spin tilts      | Isotropic fraction (if enabled)   |
+| `sigma_tilt`    | U(0.05, 10)      | Spin tilts      | Tilt peak width (if enabled)      |
+| `mu_tgr`        | U(-s, s)         | TGR             | Population mean of A (auto-scaled)|
+| `sigma_tgr`     | U(0, s)          | TGR             | Population std of A (auto-scaled) |

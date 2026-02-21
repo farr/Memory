@@ -73,20 +73,8 @@ import matplotlib.pyplot as plt
 from scipy.special import logsumexp
 from scipy.stats import norm as scipy_norm
 import arviz as az
-from astropy import cosmology as cosmo
-import astropy.units as u
 
-MMIN = 3.0
-MMAX = 100.0
-
-# Cosmology and redshift integral (matches models.py exactly)
-_Planck15_LAL = cosmo.FlatLambdaCDM(H0=67.90, Om0=0.3065)
-_zinterp = np.expm1(np.linspace(np.log1p(0), np.log1p(2.5), 1024))
-_dVdzdt = (
-    4.0 * np.pi
-    * _Planck15_LAL.differential_comoving_volume(_zinterp).to(u.Gpc**3 / u.sr).value
-    / (1.0 + _zinterp)
-)
+from memory.hierarchical.models import MMIN, MMAX, zinterp, dVdzdt_interp
 
 
 # ---------------------------------------------------------------------------
@@ -292,7 +280,7 @@ def compute_R_samples(params, inj_data, N_obs, chunk=50):
     Ndraw  = inj_data["Ndraw"]
     T_obs  = inj_data["T_obs_yr"]
 
-    dVdzdt_inj = np.interp(z_inj, _zinterp, _dVdzdt)  # (1, N_inj)
+    dVdzdt_inj = np.interp(z_inj, zinterp, dVdzdt_interp)  # (1, N_inj)
 
     alpha_1    = params["alpha_1"]
     alpha_2    = params["alpha_2"]
