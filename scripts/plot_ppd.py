@@ -76,7 +76,7 @@ import arviz as az
 from astropy import cosmology as cosmo
 import astropy.units as u
 
-MMIN = 5.0
+MMIN = 3.0
 MMAX = 100.0
 
 # Cosmology and redshift integral (matches models.py exactly)
@@ -565,7 +565,7 @@ def main():
     # m1_grid excludes MMIN exactly: at m1=MMIN the q-distribution is a Dirac delta
     # at q=1 and its normalisation diverges, causing float64 overflow in the integral.
     # Dropping that single measure-zero point has no effect on the integral value.
-    m1_grid = np.linspace(MMIN, MMAX, 201)[1:]   # 200 pts, first at ~5.48 M☉
+    m1_grid = np.linspace(MMIN, MMAX, 201)[1:]   # 200 pts, first at ~3.49 M☉
     q_grid  = np.linspace(0.01, 1.0, 150)
     a_grid  = np.linspace(0.0,  1.0, 200)
 

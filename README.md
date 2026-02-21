@@ -126,7 +126,7 @@ The power law has two slopes separated at a break mass:
 m_break = mmin + b * (mmax - mmin)
 ```
 
-where `mmin = 5`, `mmax = 100`, and `b` is the break fraction. Each segment
+where `mmin = 3`, `mmax = 100`, and `b` is the break fraction. Each segment
 is a normalised power law `PL(m; a, lo, hi)`:
 
 ```

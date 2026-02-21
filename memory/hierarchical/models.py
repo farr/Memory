@@ -138,7 +138,7 @@ def make_joint_model(
     alpha_1 = numpyro.sample("alpha_1", dist.Uniform(-4, 12))
     alpha_2 = numpyro.sample("alpha_2", dist.Uniform(-4, 12))
     beta = numpyro.sample("beta", dist.Uniform(-4, 12))
-    mmin = 5
+    mmin = 3
     mmax = 100
     b = numpyro.sample("b", dist.Uniform(0, 1))
 
