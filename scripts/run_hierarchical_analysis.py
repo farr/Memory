@@ -50,7 +50,7 @@ import h5py
 import jax
 import numpyro
 from numpyro.diagnostics import gelman_rubin, effective_sample_size
-from numpyro.infer import MCMC, NUTS, init_to_feasible
+from numpyro.infer import MCMC, NUTS, init_to_value
 import arviz as az
 
 # --- JAX / numpyro platform configuration (must precede library imports) ---
@@ -103,27 +103,25 @@ def _resolve_injection_file(args):
     raise ValueError(f"Unrecognized injection runs: {args.injection_runs}")
 
 
-def _check_output_files_exist(outdir, model, no_plots):
+def _check_output_files_exist(outdir, analyze, no_plots):
     """Return (all_exist, existing, missing) for expected output files."""
     required = []
-    if model in ("joint", "both"):
+    for name in analyze:
         required += [
-            os.path.join(outdir, "result_joint.nc"),
-            os.path.join(outdir, "fit_joint_samples.dat"),
-        ]
-    if model in ("tgr", "both"):
-        required += [
-            os.path.join(outdir, "result_tgr.nc"),
-            os.path.join(outdir, "fit_tgr_samples.dat"),
+            os.path.join(outdir, f"result_{name}.nc"),
+            os.path.join(outdir, f"fit_{name}_samples.dat"),
         ]
     if not no_plots:
-        required += [
-            os.path.join(outdir, "population_distribution.png"),
-            os.path.join(outdir, "hyperparameters.png"),
-            os.path.join(outdir, "tgr_comparison_corner.png"),
-        ]
-        if model in ("joint", "both"):
+        if analyze & {"memory", "joint"}:
+            required += [
+                os.path.join(outdir, "population_distribution.png"),
+                os.path.join(outdir, "hyperparameters.png"),
+                os.path.join(outdir, "tgr_comparison_corner.png"),
+            ]
+        if "joint" in analyze:
             required.append(os.path.join(outdir, "joint_model_corner.png"))
+        if analyze & {"astro", "joint"}:
+            required.append(os.path.join(outdir, "astro_corner.png"))
 
     existing = [f for f in required if os.path.exists(f)]
     missing = [f for f in required if not os.path.exists(f)]
@@ -176,8 +174,15 @@ def _load_event_posteriors(event_files, param_key):
     Each file is expected to contain exactly one HDF5 group with a
     ``posterior_samples`` dataset.  If *param_key* is given, only groups
     whose name contains that key are considered.
+
+    Returns
+    -------
+    posteriors : list of ndarray
+    kept_files : list of str
+        Subset of *event_files* for which posteriors were successfully loaded.
     """
     posteriors = []
+    kept_files = []
     for filename in event_files:
         with h5py.File(filename, "r") as f:
             if param_key:
@@ -194,13 +199,20 @@ def _load_event_posteriors(event_files, param_key):
                     k for k in f.keys()
                     if isinstance(f[k], h5py.Group) and "posterior_samples" in f[k]
                 ]
-            if len(keys) != 1:
+            if len(keys) == 0:
+                logger.warning(
+                    "Skipping %s: no group with 'posterior_samples' matching"
+                    " param_key=%r", os.path.basename(filename), param_key,
+                )
+                continue
+            if len(keys) > 1:
                 raise KeyError(
-                    f"Expected 1 key with 'posterior_samples' in {filename}, "
-                    f"found {len(keys)}: {keys}"
+                    f"Ambiguous: {len(keys)} groups with 'posterior_samples' in "
+                    f"{filename}: {keys}"
                 )
             posteriors.append(f[keys[0]]["posterior_samples"][()])
-    return posteriors
+            kept_files.append(filename)
+    return posteriors, kept_files
 
 
 def _rescale_tgr_posterior(fit, A_scale):
@@ -221,18 +233,13 @@ def _log_summary(fit, label):
     for var in fit.posterior:
         if "neff" in var:
             continue
-        mean_val = fit.posterior[var].mean().values
-        std_val = fit.posterior[var].std().values
-        logger.info("  %s: %.3f +/- %.3f", var, mean_val, std_val)
+        v = fit.posterior[var].values
+        if v.ndim != 2:  # skip non-scalar variables (e.g. fracs)
+            continue
+        logger.info("  %s: %.3f +/- %.3f", var, float(v.mean()), float(v.std()))
         if num_chains >= 2:
-            logger.info(
-                "    Rhat: %.3f",
-                gelman_rubin(fit.posterior[var].values),
-            )
-            logger.info(
-                "    ESS: %.1f",
-                effective_sample_size(fit.posterior[var].values),
-            )
+            logger.info("    Rhat: %.3f", float(gelman_rubin(v)))
+            logger.info("    ESS: %.1f", float(effective_sample_size(v)))
 
 
 # ---------------------------------------------------------------------------
@@ -262,10 +269,11 @@ def _build_parser():
     parser.add_argument(
         "--memory-dir",
         type=str,
-        required=True,
+        default=None,
         help=(
             "Directory with per-event memory results "
-            "({dir}/{event_name}/memory_results.h5)"
+            "({dir}/{event_name}/memory_results.h5). "
+            "Required unless --no-tgr is set."
         ),
     )
     parser.add_argument(
@@ -318,10 +326,18 @@ def _build_parser():
 
     # -- Model selection ----------------------------------------------------
     parser.add_argument(
-        "--model",
-        choices=["joint", "tgr", "both"],
-        default="both",
-        help="Which model(s) to run (default: both)",
+        "--analyze",
+        nargs="+",
+        choices=["memory", "astro", "joint"],
+        default=["memory", "astro", "joint"],
+        metavar="ANALYSIS",
+        help=(
+            "Which analyses to run (default: memory astro joint). "
+            "'memory' = TGR-only model; 'astro' = astrophysical-only joint model "
+            "(all events, no memory reweighting); 'joint' = astrophysical + TGR "
+            "joint model (memory events only). "
+            "'memory' and 'joint' require --memory-dir."
+        ),
     )
     parser.add_argument(
         "--use-tilts",
@@ -407,9 +423,21 @@ def main():
     outdir = args.outdir or "results_memory"
     os.makedirs(outdir, exist_ok=True)
 
+    # --- Which analyses to run --------------------------------------------
+    analyze = set(args.analyze)
+    run_memory = "memory" in analyze
+    run_astro  = "astro"  in analyze
+    run_joint  = "joint"  in analyze
+    need_memory_data = run_memory or run_joint
+
+    if need_memory_data and args.memory_dir is None:
+        raise ValueError(
+            "--memory-dir is required for 'memory' and 'joint' analyses"
+        )
+
     # Early exit if results already present
     all_exist, existing, missing = _check_output_files_exist(
-        outdir, args.model, args.no_plots,
+        outdir, analyze, args.no_plots,
     )
     if all_exist and not args.force:
         logger.info("All output files already exist in %s", outdir)
@@ -426,7 +454,7 @@ def main():
 
     logger.info("Running in output directory: %s", outdir)
 
-    # --- Discover and filter event files ----------------------------------
+    # --- Discover event files and load all posteriors ---------------------
     exclude = args.exclude + ["GW15", "GW17"]
     event_files, discarded_files = _collect_event_files(args.data_paths, exclude)
 
@@ -439,143 +467,187 @@ def main():
     if not os.path.exists(injection_file):
         raise FileNotFoundError(f"Injection file not found: {injection_file}")
 
-    event_files, skipped_files = _filter_to_memory_events(event_files, args.memory_dir)
-    logger.info("Skipped %d events with no memory results", len(skipped_files))
-    for f in skipped_files:
-        logger.info("  %s", os.path.basename(f))
+    all_posteriors, all_event_files = _load_event_posteriors(event_files, args.param_key)
+    logger.info("Loaded posteriors for %d events", len(all_posteriors))
 
-    if not event_files:
-        raise FileNotFoundError(
-            f"No events with memory results found in {args.memory_dir}"
+    # --- Filter to memory events and load memory data (if needed) ---------
+    if need_memory_data:
+        waveform_label = args.waveform_label or args.param_key
+        mem_files, skipped_files = _filter_to_memory_events(
+            all_event_files, args.memory_dir
         )
-
-    logger.info("Found %d event files with memory results", len(event_files))
+        logger.info(
+            "Found %d events with memory results (%d skipped)",
+            len(mem_files), len(skipped_files),
+        )
+        if not mem_files:
+            raise FileNotFoundError(
+                f"No events with memory results found in {args.memory_dir}"
+            )
+        # Build memory posteriors list aligned with mem_files
+        mem_file_set = set(mem_files)
+        mem_posteriors = [
+            p for p, f in zip(all_posteriors, all_event_files)
+            if f in mem_file_set
+        ]
+        memory_data = load_memory_data(mem_files, args.memory_dir, waveform_label)
+        # Re-align to posteriors that were actually loaded (param_key filter)
+        import re as _re
+        kept_names = {
+            _re.search(r"(GW\d{6}_\d{6})", os.path.basename(f)).group(1)
+            for f in mem_files
+        }
+        memory_data = [md for md in memory_data if md["event_name"] in kept_names]
+        logger.info("Loaded memory data for %d events", len(memory_data))
+    else:
+        mem_files, mem_posteriors, memory_data = [], [], None
 
     # --- Provenance -------------------------------------------------------
-    _save_provenance(outdir, injection_file, event_files, args.memory_dir)
-
-    # --- Load data --------------------------------------------------------
-    waveform_label = args.waveform_label or args.param_key
-    memory_data = load_memory_data(event_files, args.memory_dir, waveform_label)
-    logger.info(
-        "Loaded memory data for %d events from %s",
-        len(memory_data), args.memory_dir,
+    _save_provenance(
+        outdir, injection_file,
+        mem_files if need_memory_data else all_event_files,
+        args.memory_dir,
     )
 
-    event_posteriors = _load_event_posteriors(event_files, args.param_key)
-
-    # --- Build data arrays for the joint model ----------------------------
-    (
-        event_data_array,
-        injection_data_array,
-        BW_matrices,
-        BW_matrices_sel,
-        Nobs,
-        Ndraw,
-        A_scale_joint,
-    ) = generate_data(
-        event_posteriors,
-        injection_file,
-        memory_data,
+    # --- Build data arrays ------------------------------------------------
+    _gen_kwargs = dict(
+        injection_file=injection_file,
         ifar_threshold=args.ifar_threshold,
-        use_tgr=True,
         snr_inspiral_cut=args.snr_inspiral_cut,
         N_samples=args.n_samples_per_event,
         snr_cut=args.snr_cut,
         use_tilts=args.use_tilts,
         prng=seed,
-        scale_tgr=args.scale_tgr,
     )
 
-    # --- Build data arrays for the TGR-only model -------------------------
-    if args.model in ("tgr", "both"):
-        A_hats_tgr, A_sigmas_tgr, _, A_scale_tgr = generate_tgr_only_data(
-            event_posteriors, memory_data,
+    # astro: all events, uniform weights (no memory reweighting)
+    if run_astro:
+        (event_data_astro, inj_data_astro, BW_astro, BW_sel_astro,
+         Nobs_astro, Ndraw_astro, _) = generate_data(
+            all_posteriors, memory_data=None, use_tgr=False,
+            scale_tgr=False, **_gen_kwargs,
+        )
+
+    # joint: memory-filtered events, memory-reweighted samples
+    if run_joint:
+        (event_data_joint, inj_data_joint, BW_joint, BW_sel_joint,
+         Nobs_joint, Ndraw_joint, A_scale_joint) = generate_data(
+            mem_posteriors, memory_data=memory_data, use_tgr=True,
+            scale_tgr=args.scale_tgr, **_gen_kwargs,
+        )
+
+    # memory: TGR-only model data
+    if run_memory:
+        A_hats_mem, A_sigmas_mem, Nobs_mem, A_scale_mem = generate_tgr_only_data(
+            mem_posteriors, memory_data,
             N_samples=args.n_samples_per_event, prng=seed,
             scale_tgr=args.scale_tgr,
         )
-    else:
-        A_hats_tgr, A_sigmas_tgr, _, A_scale_tgr = None, None, None, 1
 
     # --- MCMC -------------------------------------------------------------
-    prng0, prng1 = jax.random.split(prng, 2)
+    prng_astro, prng_joint, prng_mem = jax.random.split(prng, 3)
+
+    def _run_joint_mcmc(prng_key, event_data, inj_data, BW, BW_sel,
+                        Nobs, Ndraw, use_tgr, A_scale):
+        # Physically motivated initialization avoids gradient explosion:
+        # alpha_1 near the true BBH slope (~3.5) keeps neff_sel above threshold,
+        # preventing the 4th-power neff penalty from collapsing the step size.
+        # Init values based on results from a partially converged run on GWTC-4
+        # events.  Starting near the posterior avoids the neff_sel gradient
+        # explosion that collapses the NUTS step size.
+        _init = {
+            "alpha_1":     6.6,
+            "alpha_2":    -0.7,
+            "b":           0.23,
+            "beta":        5.1,
+            "fracs":       np.array([0.33, 0.40, 0.27]),
+            "mu_peak_1":   16.0,
+            "sigma_peak_1": 3.0,
+            "mu_peak_2":   55.0,
+            "sigma_peak_2": 3.0,
+            "mu_spin":     0.20,
+            "sigma_spin":  0.15,
+            "lamb":        9.6,
+        }
+        if use_tgr:
+            _init["mu_tgr"]    = 1.0
+            _init["sigma_tgr"] = 0.5
+        if args.use_tilts:
+            _init["f_iso"]     = 0.5
+            _init["sigma_tilt"] = 1.0
+        kernel = NUTS(make_joint_model,
+                      init_strategy=init_to_value(values=_init))
+        mcmc = MCMC(kernel, num_warmup=args.n_warmup,
+                    num_samples=args.n_sample, num_chains=args.n_chains)
+        mcmc.run(prng_key, event_data, inj_data, BW, BW_sel,
+                 Nobs, Ndraw, args.use_tilts, use_tgr,
+                 args.mu_tgr_scale, args.sigma_tgr_scale)
+        fit = az.from_numpyro(mcmc)
+        _rescale_tgr_posterior(fit, A_scale)
+        return fit
+
+    fit_astro = None
+    if run_astro:
+        logger.info("Running astro model (%d events)...", Nobs_astro)
+        fit_astro = _run_joint_mcmc(
+            prng_astro, event_data_astro, inj_data_astro,
+            BW_astro, BW_sel_astro, Nobs_astro, Ndraw_astro,
+            use_tgr=False, A_scale=1,
+        )
+        fname = os.path.join(outdir, "result_astro.nc")
+        fit_astro.to_netcdf(fname)
+        logger.info("Saved astro results: %s", fname)
 
     fit_joint = None
-    if args.model in ("joint", "both"):
-        logger.info("Running joint model...")
-        kernel = NUTS(make_joint_model, init_strategy=init_to_feasible())
-        mcmc = MCMC(
-            kernel,
-            num_warmup=args.n_warmup,
-            num_samples=args.n_sample,
-            num_chains=args.n_chains,
+    if run_joint:
+        logger.info("Running joint model (%d events)...", Nobs_joint)
+        fit_joint = _run_joint_mcmc(
+            prng_joint, event_data_joint, inj_data_joint,
+            BW_joint, BW_sel_joint, Nobs_joint, Ndraw_joint,
+            use_tgr=True, A_scale=A_scale_joint,
         )
-        mcmc.run(
-            prng0,
-            event_data_array,
-            injection_data_array,
-            BW_matrices,
-            BW_matrices_sel,
-            Nobs,
-            Ndraw,
-            args.use_tilts,
-            True,
-            args.mu_tgr_scale,
-            args.sigma_tgr_scale,
-        )
-        fit_joint = az.from_numpyro(mcmc)
-        _rescale_tgr_posterior(fit_joint, A_scale_joint)
-
         fname = os.path.join(outdir, "result_joint.nc")
         fit_joint.to_netcdf(fname)
         logger.info("Saved joint results: %s", fname)
 
-    fit_tgr = None
-    if args.model in ("tgr", "both"):
-        logger.info("Running TGR-only model...")
+    fit_memory = None
+    if run_memory:
+        logger.info("Running memory model (%d events)...", Nobs_mem)
         kernel = NUTS(make_tgr_only_model, init_strategy=init_to_feasible())
-        mcmc = MCMC(
-            kernel,
-            num_warmup=args.n_warmup,
-            num_samples=args.n_sample,
-            num_chains=args.n_chains,
-        )
-        mcmc.run(
-            prng1,
-            A_hats_tgr,
-            A_sigmas_tgr,
-            Nobs,
-            args.mu_tgr_scale,
-            args.sigma_tgr_scale,
-        )
-        fit_tgr = az.from_numpyro(mcmc)
-        _rescale_tgr_posterior(fit_tgr, A_scale_tgr)
-
-        fname = os.path.join(outdir, "result_tgr.nc")
-        fit_tgr.to_netcdf(fname)
-        logger.info("Saved TGR-only results: %s", fname)
+        mcmc = MCMC(kernel, num_warmup=args.n_warmup,
+                    num_samples=args.n_sample, num_chains=args.n_chains)
+        mcmc.run(prng_mem, A_hats_mem, A_sigmas_mem, Nobs_mem,
+                 args.mu_tgr_scale, args.sigma_tgr_scale)
+        fit_memory = az.from_numpyro(mcmc)
+        _rescale_tgr_posterior(fit_memory, A_scale_mem)
+        fname = os.path.join(outdir, "result_memory.nc")
+        fit_memory.to_netcdf(fname)
+        logger.info("Saved memory results: %s", fname)
 
     # --- Plots & sample CSVs ---------------------------------------------
     if not args.no_plots:
         logger.info("Creating plots...")
-        create_plots(fit_joint, fit_tgr, outdir)
+        create_plots(fit_astro, fit_joint, fit_memory, outdir)
     else:
-        if fit_joint is not None:
-            get_samples_df(fit_joint).to_csv(
-                os.path.join(outdir, "fit_joint_samples.dat"),
-                index=False, sep=" ",
-            )
-        if fit_tgr is not None:
-            get_samples_df(fit_tgr).to_csv(
-                os.path.join(outdir, "fit_tgr_samples.dat"),
-                index=False, sep=" ",
-            )
+        for fit, name in [
+            (fit_astro,  "astro"),
+            (fit_joint,  "joint"),
+            (fit_memory, "memory"),
+        ]:
+            if fit is not None:
+                get_samples_df(fit).to_csv(
+                    os.path.join(outdir, f"fit_{name}_samples.dat"),
+                    index=False, sep=" ",
+                )
 
     # --- Summary statistics -----------------------------------------------
-    if fit_joint is not None:
-        _log_summary(fit_joint, "Joint model")
-    if fit_tgr is not None:
-        _log_summary(fit_tgr, "TGR-only model")
+    for fit, label in [
+        (fit_astro,  "Astro model"),
+        (fit_joint,  "Joint model"),
+        (fit_memory, "Memory model"),
+    ]:
+        if fit is not None:
+            _log_summary(fit, label)
 
     logger.info("Analysis complete! Results saved to %s", outdir)
 

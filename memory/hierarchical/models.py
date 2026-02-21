@@ -142,17 +142,31 @@ def make_joint_model(
     mmax = 100
     b = numpyro.sample("b", dist.Uniform(0, 1))
 
-    frac_peak_1 = numpyro.sample("frac_peak_1", dist.Uniform(0, 1))
-    mu_peak_1 = numpyro.sample("mu_peak_1", dist.Uniform(mmin, 20))
-    sigma_peak_1 = numpyro.sample("sigma_peak_1", dist.Uniform(1, 20))
+    # Dirichlet prior ensures frac_bpl + frac_peak_1 + frac_peak_2 = 1
+    # with all fractions strictly positive — avoids the hard constraint /
+    # gradient-killing penalty that arises from two independent Uniform(0,1)
+    # draws that can sum to > 1.
+    fracs = numpyro.sample("fracs", dist.Dirichlet(jnp.ones(3)))
+    frac_bpl    = numpyro.deterministic("frac_bpl",    fracs[0])
+    frac_peak_1 = numpyro.deterministic("frac_peak_1", fracs[1])
+    frac_peak_2 = numpyro.deterministic("frac_peak_2", fracs[2])
 
-    frac_peak_2 = numpyro.sample("frac_peak_2", dist.Uniform(0, 1))
-    mu_peak_2 = numpyro.sample("mu_peak_2", dist.Uniform(20, 50))
-    sigma_peak_2 = numpyro.sample("sigma_peak_2", dist.Uniform(1, 20))
+    mu_peak_1 = numpyro.sample("mu_peak_1", dist.Uniform(mmin, 30))
+    # Peak widths bounded to [0.5, 8]: prevents the Gaussian components from
+    # becoming degenerate broad components that absorb the BPL, which creates
+    # multi-modal posteriors and poor NUTS conditioning.
+    sigma_peak_1 = numpyro.sample("sigma_peak_1", dist.Uniform(0.5, 8))
 
-    # Spin magnitude distribution parameters
+    mu_peak_2 = numpyro.sample("mu_peak_2", dist.Uniform(20, 100))
+    sigma_peak_2 = numpyro.sample("sigma_peak_2", dist.Uniform(0.5, 8))
+
+    # Spin magnitude distribution parameters.
+    # sigma_spin prior is restricted to [0.01, 0.5]: the posterior sits at
+    # ~0.13, which was only 0.9% through the old [0.05, 10] range, mapping
+    # to logit ≈ -4.65 in the unconstrained NUTS space and collapsing the
+    # step size.  With [0.01, 0.5] the same posterior is at ~27% (logit ≈ -1).
     mu_spin = numpyro.sample("mu_spin", dist.Uniform(0, 0.7))
-    sigma_spin = numpyro.sample("sigma_spin", dist.Uniform(0.05, 10))
+    sigma_spin = numpyro.sample("sigma_spin", dist.Uniform(0.01, 0.5))
 
     # Redshift parameters
     lamb = numpyro.sample("lamb", dist.Uniform(-30, 30))
@@ -195,17 +209,13 @@ def make_joint_model(
             primary_masses.T
         ).T
 
-        # Enforce frac_peak_1 + frac_peak_2 < 1
-        frac_bpl = 1.0 - frac_peak_1 - frac_peak_2
-        frac_penalty = jnp.where(frac_bpl > 0.0, 0.0, huge_neg)
-
-        # Three-component mixture
+        # Three-component mixture (fracs sum to 1 by Dirichlet construction)
         comp_bpl = jnp.log(jnp.maximum(frac_bpl, 1e-30)) + log_bpl
         comp_1 = jnp.log(jnp.maximum(frac_peak_1, 1e-30)) + log_gauss_1
         comp_2 = jnp.log(jnp.maximum(frac_peak_2, 1e-30)) + log_gauss_2
 
         return (logsumexp(jnp.stack([comp_bpl, comp_1, comp_2], axis=0), axis=0)
-                + indicator + frac_penalty)
+                + indicator)
 
     def log_q_powerlaw_density(mass_ratios, primary_masses):
         low = mmin / primary_masses
@@ -317,9 +327,10 @@ def make_joint_model(
     # N eff cuts
     def log_smooth_neff_boundary(values, criteria):
         scaled_x = (values - criteria) / (0.05 * criteria)
-        return jax.lax.select(
-            jnp.greater_equal(scaled_x, 0.0), 0.0, -jnp.power(scaled_x, 10)
-        )
+        # Linear ramp below threshold: gradient is bounded to 1 everywhere,
+        # preventing the step-size collapse that power-4 (gradient ~32000 at
+        # scaled_x=-20) and power-10 (gradient ~5e12) caused.
+        return jnp.minimum(0.0, scaled_x)
 
     neff = jnp.exp(2 * logsumexp(log_wts, axis=1) - logsumexp(2 * log_wts, axis=1))
     min_neff = jnp.min(neff)

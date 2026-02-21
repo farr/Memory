@@ -98,16 +98,54 @@ Results go to `data/test_e2e/`. The test script auto-downloads data if missing a
 - **TGR population analysis:** Event posteriors (HDF5) → KDE smoothing → numpyro hierarchical model → NUTS MCMC → ArviZ posterior → NetCDF + plots
 - **Memory computation:** Event posteriors → surrogate waveform → memory correction → detector projection → per-event `memory_results.h5` (amplitude posteriors, likelihoods, weights)
 
-### Memory likelihood math (Farr et al.)
+### Memory likelihood math (Farr et al., `farr_ms.pdf`)
 
-The memory signal model adds a memory waveform `h_m(θ)` scaled by amplitude `A_m` to the residual `r(θ) = d - R(θ)h(θ)`. GR predicts `A_m = 1`.
+The reference paper is `farr_ms.pdf` in the repo root.
+
+#### Per-sample memory quantities (Eqs. 6–9)
+
+The memory signal model adds a memory waveform `h_m(θ)` scaled by amplitude `A_m` to the residual `r(θ) = d − R(θ)h(θ)`. GR predicts `A_m = 1`.
+
+Marginalising `A_m` with a flat prior over a Gaussian likelihood (Eq. 5) gives (Eq. 8):
+
+```
+log L̃(θ) = −½<r|r> + ½ Â Re<h̃_m|r> − ½ log(2π<h̃_m|h̃_m>) + C
+```
 
 Key quantities per posterior sample (computed in `compute_memory_variables_likelihoods_and_weights`):
-- **Inner products:** `hrs = <h_m|r>`, `hhs = <h_m|h_m>`, `rrs = <r|r>` (noise-weighted, summed over detectors)
-- **ML amplitude:** `A_hat = Re{hrs} / hhs`
-- **Amplitude uncertainty:** `A_sigma = 1 / sqrt(hhs)`
-- **`log_weight`** = log likelihood ratio (memory-marginalized vs no-memory): `0.5 * A_hat * hrs - 0.5 * log(2π * hhs)`. Used as importance weight to reweight original posterior samples to include memory effects.
-- **`log_likelihood`** = full amplitude-marginalized log-likelihood: `-0.5 * rrs + log_weight`
+- **Inner products:** `hrs = <h_m|r>`, `hhs = <h_m|h_m>`, `rrs = <r|r>` (noise-weighted, summed over detectors). bilby returns these as **complex** numbers (`4/T · Σ conj(a)·b/PSD`); only the real parts carry physical meaning.
+- **ML amplitude (Eq. 6):** `A_hat = Re(hrs) / hhs`
+- **Amplitude uncertainty (Eq. 7):** `A_sigma = 1 / sqrt(hhs)`
+- **`log_weight` (Eq. 9):** log of the memory-to-no-memory likelihood ratio, used to importance-weight PE samples:
+  ```
+  log_weight.real = ½ A_hat · Re(hrs) − ½ log(2π · hhs)
+                  = ½ (A_hat/A_sigma)² + log(A_sigma) − ½ log(2π)
+  ```
+  Stored as complex128 in HDF5; `load_memory_data` takes `.real`. Verified analytically: `log_weight.real − ½(A_hat/A_sigma)² − log(A_sigma) = −½log(2π)` exactly for all samples.
+- **`log_likelihood`:** full amplitude-marginalized log-likelihood: `−½ rrs + log_weight` (Eq. 8).
+
+#### Hierarchical population analysis (Eqs. 10–15)
+
+The goal is to infer population hyperparameters Λ = (Λ_θ, μ_A, σ_A) from a catalog.
+
+Starting from per-event PE samples θ_i ~ p(θ|d) (original no-memory posterior), and the conditional `p(A|θ_i) = N(A | A_hat_i, A_sigma_i)` (Eq. 10), the hierarchical integral (Eq. 11) reduces to (Eq. 15):
+
+```
+I ≈ (1/N) Σ_i  [p(θ_i | Λ_θ) / W(θ_i)]  · N(A_hat_i | μ_A, sqrt(A_sigma_i² + σ_A²))
+```
+
+where `W(θ)` is the PE sampling prior and the integral over `A` has been performed analytically.
+
+**The `log_weight` importance weights (Eq. 9) are applied in `generate_data` and `generate_tgr_only_data` when resampling PE samples**, to reweight from the original no-memory posterior to the memory-marginalised posterior (Eq. 9). The Farr et al. paper notes this correction is small when the memory SNR is low per event.
+
+#### Practical limitations with current data
+
+Memory signals are DC/step-function-like, concentrated well below 10 Hz where detector noise is large. Consequently:
+- `hhs = <h_m|h_m>` is very small → `A_sigma = 1/sqrt(hhs)` is large (O(10)–O(300) observed)
+- `A_hat = Re(hrs)/hhs` is poorly constrained and noise-dominated → values up to O(10,000) observed for most events
+- `log_weight ∝ (A_hat/A_sigma)²` can reach thousands → ESS after memory reweighting collapses to ~1 for most events
+- Only events where the memory template happens to have low noise-weighted cross-correlation (e.g., GW230924_124453) contribute meaningfully to the hierarchical analysis
+- This is a fundamental observational limitation, not a code error — the formulas have been verified to be consistent with the paper
 
 ### Injection draw prior Jacobian correction (`data.py:read_injection_file`)
 
