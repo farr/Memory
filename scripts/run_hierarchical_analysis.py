@@ -57,7 +57,7 @@ import h5py
 import jax
 import numpyro
 from numpyro.diagnostics import gelman_rubin, effective_sample_size
-from numpyro.infer import MCMC, NUTS, init_to_value
+from numpyro.infer import MCMC, NUTS, init_to_value, init_to_feasible
 import arviz as az
 
 # --- JAX / numpyro platform configuration (must precede library imports) ---
