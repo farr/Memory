@@ -1,10 +1,61 @@
 #!/usr/bin/env python3
 """Plot 1D Population Predictive Distributions (PPDs) from hierarchical analysis.
 
-For each input NetCDF file, computes and overlays the PPD (median + 90% CI) for:
-  - Primary mass  p(m1)  on semi-log-y axes  [or dR/dm1 if --injection-file given]
-  - Mass ratio    p(q)   marginalised over m1
-  - Spin magnitude p(a)
+For each input NetCDF file, draws the PPD (median + 90% CI shaded band) for:
+  - Primary mass  m1          on semi-log-y axes
+  - Mass ratio    q = m2/m1   marginalised over m1
+  - Spin magnitude a           (Gaussian model, truncated to [0, 1])
+
+Multiple NetCDF files can be overlaid on the same axes for comparison.
+
+Rate mode (--injection-file)
+----------------------------
+Without an injection file the m1 panel shows the normalised population PDF
+p(m1).  Supplying --injection-file switches the m1 panel to the differential
+merger rate dR/dm1 [Gpc^-3 yr^-1 M_sun^-1]:
+
+    dR/dm1(m1 | Lambda) = R(Lambda) * p(m1 | Lambda)
+
+The total volumetric merger rate is estimated from the MCMC posterior via
+
+    R(Lambda) = N_obs / (T_obs * beta(Lambda))                          (1)
+
+where:
+  - N_obs   is the number of observed events used in the analysis
+  - T_obs   is the live observing time in years (from injection file metadata)
+  - beta(Lambda) is the effective surveyed comoving volume [Gpc^3]:
+
+        beta(Lambda) = (1/N_draw) * sum_{found} p_pop(theta | Lambda) / p_draw(theta)  (2)
+
+  - N_draw  is the total number of injections attempted (found + missed)
+  - theta   denotes the parameters (m1, q, z, a1, a2) of each found injection
+  - p_pop   is the population model evaluated at theta (same parameterisation as
+            the MCMC model; normalised so that the z integral gives Gpc^3)
+  - p_draw  is the injection draw density in (m1, q, z, a1, a2) space
+
+Equation (2) is evaluated once per posterior sample, producing R_samples.
+The PPD is then dR/dm1 = R_samples[:, newaxis] * p(m1 | Lambda_samples).
+
+Draw prior Jacobian
+~~~~~~~~~~~~~~~~~~~
+The injection HDF5 file stores the draw prior as a log-density in Cartesian
+spin coordinates: lnpdraw(m1, m2, z, sx, sy, sz).  The population model uses
+(m1, q, z, a1, a2), so a coordinate change is needed:
+
+  * m2 -> q = m2/m1    with |dm2/dq| = m1         => factor m1
+  * (sx, sy, sz) -> a  marginalised over direction => factor 4*pi*a^2  (per spin)
+
+Combined:
+
+    log p_draw(m1, q, z, a1, a2) = lnpdraw
+        + log(m1)
+        + log(4*pi*a1^2)
+        + log(4*pi*a2^2)
+        + log(weights)   # per-injection sensitivity weight
+
+The `weights` field accounts for the varying network sensitivity over the run
+(e.g. detector uptime fractions).  Including it in p_draw is equivalent to
+downweighting injections from less-sensitive periods when computing beta.
 
 Usage:
     python scripts/plot_ppd.py result_astro.nc
@@ -62,8 +113,43 @@ def _load_params(nc_file, n_ppd, seed):
 def _load_injection_data(inj_file, ifar_threshold=1000, snr_inspiral_cut=6):
     """Load found injections from an HDF5 sensitivity-estimate file.
 
-    Returns a dict with keys:
-        m1, q, z, a1, a2, lnpdraw, weights, Ndraw, T_obs_yr
+    Applies the same IFAR + inspiral-SNR selection as data.py, then converts
+    the raw Cartesian draw prior to the (m1, q, z, a1, a2) parameterisation
+    used by the population model.
+
+    The injection HDF5 file stores lnpdraw in Cartesian spin coordinates
+    (m1, m2, z, sx, sy, sz).  Two Jacobian factors convert this to the
+    model's (m1, q, z, a1, a2) coordinates:
+
+      (i)  m2 -> q = m2/m1, so |dm2/dq| = m1
+      (ii) (sx, sy, sz) -> a, marginalising over isotropic direction:
+               p(a) da = p_cart * 4*pi*a^2 da  =>  factor 4*pi*a^2 per spin
+
+    An additional `weights` factor in the file records the network sensitivity
+    at the time of each injection (e.g. duty-cycle fractions per detector).
+    Folding it into p_draw ensures that injections from less-sensitive periods
+    are downweighted in the importance sum (see compute_R_samples).
+
+    The full conversion is:
+        log p_draw(m1, q, z, a1, a2)
+            = lnpdraw + log(m1) + log(4*pi*a1^2) + log(4*pi*a2^2) + log(weights)
+
+    Parameters
+    ----------
+    inj_file : str
+        Path to the HDF5 sensitivity-estimate file.
+    ifar_threshold : float
+        Minimum IFAR [yr] for an injection to be considered "found".
+    snr_inspiral_cut : float
+        Alternative "found" criterion: inspiral-SNR proxy above this value.
+
+    Returns
+    -------
+    dict with keys:
+        m1, q, z, a1, a2  : parameter arrays for found injections
+        log_p_draw         : log draw prior in (m1, q, z, a1, a2) space
+        Ndraw              : total injections attempted (found + missed)
+        T_obs_yr           : live observing time in years
     """
     with h5py.File(inj_file, "r") as f:
         ev = f["events"]
@@ -158,13 +244,28 @@ def _log_norm_pl(m, alpha, lo, hi):
 def compute_R_samples(params, inj_data, N_obs, chunk=50):
     """Compute the merger rate R(Λ) for each posterior sample.
 
-    Uses importance sampling over the found injections:
-        β(Λ) = (1/Ndraw) Σ_found  p_model(θ|Λ) / p_draw(θ)
-        R(Λ) = N_obs / (T_obs × β(Λ))
+    The expected number of detections given population hyperparameters Λ is
 
-    where p_model = p_m1 × p_q × p_z × p_spin (all normalized except p_z which
-    carries the physical dVc/dz / (1+z) units giving β in Gpc³) and p_draw is
-    derived from the raw Cartesian injection draw density plus Jacobians.
+        mu(Λ) = R(Λ) * T_obs * beta(Λ)
+
+    Setting mu = N_obs (Poisson point estimate) gives
+
+        R(Λ) = N_obs / (T_obs * beta(Λ))                               (1)
+
+    The effective surveyed volume beta(Λ) [Gpc^3] is estimated by importance
+    sampling over the found injections:
+
+        beta(Λ) = (1/N_draw) * sum_{found}  p_pop(theta | Λ) / p_draw(theta)   (2)
+
+    where:
+      - p_pop(theta | Λ) = p_m1 * p_q * p_z * p_spin  (unnormalised in z:
+            p_z = (1+z)^lamb * dVc/dz/(1+z) carries units of Gpc^3, so beta
+            has units Gpc^3 and R from (1) has units Gpc^-3 yr^-1)
+      - p_draw is the injection draw density from _load_injection_data,
+            expressed in the same (m1, q, z, a1, a2) parameterisation
+
+    The spin component of p_pop uses Normal(a1; mu_spin, sigma_spin^2) for
+    each spin magnitude, matching the event-level likelihood in models.py.
 
     Parameters
     ----------
@@ -180,7 +281,7 @@ def compute_R_samples(params, inj_data, N_obs, chunk=50):
     Returns
     -------
     R_samples : ndarray, shape (N,)
-        Merger rate in Gpc⁻³ yr⁻¹ for each posterior sample.
+        Merger rate in Gpc^-3 yr^-1 for each posterior sample.
     """
     m1_inj = inj_data["m1"][np.newaxis, :]   # (1, N_inj)
     q_inj  = inj_data["q"][np.newaxis, :]

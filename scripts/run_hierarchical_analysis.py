@@ -1,37 +1,44 @@
 #!/usr/bin/env python3
 """Run hierarchical Bayesian population analysis with GW memory TGR parameters.
 
-This script performs a hierarchical inference on gravitational-wave posterior
-samples to constrain the population distribution of a memory-amplitude
-deviation parameter *A*.  Two models are available:
+This script performs hierarchical inference on gravitational-wave posterior
+samples.  Three analysis modes are available, selected via ``--analyze``:
 
-* **joint** — simultaneously fits astrophysical population parameters
-  (mass function, spin distribution, redshift evolution) and TGR
-  hyperparameters (mu_tgr, sigma_tgr) using selection-effect corrections.
-* **tgr** — fits only the TGR hyperparameters, marginalising over
-  astrophysical parameters via importance-weighted posterior samples.
+* **astro** — fits astrophysical population parameters only (mass function,
+  mass ratio, redshift, spin magnitudes) without any TGR component.  Uses all
+  loaded events; does not require ``--memory-dir``.
+* **memory** — fits only the TGR hyperparameters (mu_tgr, sigma_tgr) using a
+  simple Gaussian population model directly on per-event (A_hat, A_sigma)
+  measurements.  Requires ``--memory-dir``.
+* **joint** — simultaneously fits astrophysical population parameters and TGR
+  hyperparameters (mu_tgr, sigma_tgr) with selection-effect corrections.
+  Uses only events that have memory results.  Requires ``--memory-dir``.
 
-Both models treat the per-sample memory measurement as a Gaussian
-likelihood N(A | A_hat, A_sigma) and analytically convolve it with the
-population prior N(A | mu_tgr, sigma_tgr).
+All models treat the per-sample memory measurement as a Gaussian likelihood
+N(A | A_hat, A_sigma) convolved analytically with the population prior
+N(A | mu_tgr, sigma_tgr).
 
 Outputs (written to ``--outdir``):
-    result_joint.nc / result_tgr.nc
+    result_astro.nc / result_joint.nc / result_memory.nc
         ArviZ InferenceData with full MCMC posterior (NetCDF).
-    fit_joint_samples.dat / fit_tgr_samples.dat
+    fit_astro_samples.dat / fit_joint_samples.dat / fit_memory_samples.dat
         Flat CSV of posterior samples (space-delimited).
-    population_distribution.png, hyperparameters.png,
-    tgr_comparison_corner.png, joint_model_corner.png
-        Diagnostic plots (skipped with ``--no-plots``).
+    astro_corner.png
+        Corner plot of astrophysical parameters (astro and/or joint runs).
+    population_distribution.png, hyperparameters.png, tgr_comparison_corner.png
+        TGR diagnostic plots (joint and/or memory runs).
+    joint_model_corner.png
+        Full corner plot including TGR parameters (joint run only).
+    All plots are skipped with ``--no-plots``.
     injection_file.txt, event_files.txt, memory_dir.txt, command.txt
         Provenance files recording the exact inputs and command line.
 
 Environment variables:
-    TGRPOP_PLATFORM   Force JAX platform ('cpu' or 'gpu'); auto-detected
-                      if unset.
+    TGRPOP_PLATFORM      Force JAX platform ('cpu' or 'gpu'); auto-detected
+                         if unset.
     TGRPOP_DEVICE_COUNT  Number of JAX devices for chain parallelisation
                          (default 1).
-    OMP_NUM_THREADS   Set to 1 at import time to avoid thread contention.
+    OMP_NUM_THREADS      Set to 1 at import time to avoid thread contention.
 """
 
 import logging

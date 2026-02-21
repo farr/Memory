@@ -1,5 +1,96 @@
 Playing around with fitting the memory effect.
 
+## Post-processing: PPD and rate plots
+
+`scripts/plot_ppd.py` visualises the results of a hierarchical run by drawing
+1D Population Predictive Distributions (PPDs) — the marginal population
+density averaged over the posterior — for primary mass `m1`, mass ratio `q`,
+and spin magnitude `a`.
+
+### Basic usage
+
+```bash
+# Single run
+uv run python scripts/plot_ppd.py results/run/result_astro.nc
+
+# Overlay two runs
+uv run python scripts/plot_ppd.py result_astro.nc result_joint.nc \
+    --labels "astro only" joint
+
+# Limit to 500 posterior draws (faster)
+uv run python scripts/plot_ppd.py result_astro.nc --n-ppd 500
+```
+
+Output is `ppd.png` in the same directory as the first input file (override
+with `--outdir`).
+
+### Rate mode: dR/dm1 instead of p(m1)
+
+Passing `--injection-file` converts the `m1` panel from the normalised PDF
+`p(m1)` to the differential merger rate `dR/dm1 [Gpc^-3 yr^-1 M_sun^-1]`.
+`--n-obs` must also be provided (the number of events used in the analysis).
+
+```bash
+uv run python scripts/plot_ppd.py result_astro.nc \
+    --injection-file /path/to/sensitivity-estimate.hdf \
+    --n-obs 43
+```
+
+### Rate calculation
+
+The total volumetric merger rate is estimated as
+
+```
+R(Λ) = N_obs / (T_obs * β(Λ))
+```
+
+where `T_obs` is the live observing time (read from the injection file) and
+`β(Λ)` is the **effective surveyed comoving volume** [Gpc^3]:
+
+```
+β(Λ) = (1/N_draw) * Σ_{found}  p_pop(θ | Λ) / p_draw(θ)
+```
+
+`N_draw` is the total number of injections attempted (found + missed), and the
+sum runs over found injections only.  The population model density is
+
+```
+p_pop(θ | Λ) = p(m1) * p(q|m1) * p(z) * p(a1) * p(a2)
+```
+
+where `p(z) ∝ (1+z)^λ * dVc/dz/(1+z)` is left **unnormalised**: the integral
+over redshift gives a volume in Gpc^3, so `β` has units Gpc^3 and `R` has
+units Gpc^-3 yr^-1.
+
+The differential rate is then
+
+```
+dR/dm1 = R(Λ) * p(m1 | Λ)
+```
+
+evaluated on a grid over the posterior to produce the shaded PPD band.
+
+#### Draw prior Jacobian
+
+The injection file records the draw prior as a log-density in Cartesian spin
+coordinates, `lnpdraw(m1, m2, z, sx, sy, sz)`.  Converting to `(m1, q, z, a1,
+a2)` requires two Jacobian factors:
+
+| Change of variables | Jacobian factor |
+|---|---|
+| `m2 → q = m2/m1` | `m1` |
+| `(sx, sy, sz) → a` (isotropic direction integrated out) | `4π a²` per spin |
+
+Including the per-injection sensitivity weight `w` (network duty cycle):
+
+```
+log p_draw(m1, q, z, a1, a2) = lnpdraw
+    + log(m1)
+    + log(4π a1²)
+    + log(4π a2²)
+    + log(w)
+```
+
 ## Hierarchical population model
 
 The pipeline provides two numpyro models (selected via `--model {joint,tgr,both}`):

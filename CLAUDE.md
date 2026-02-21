@@ -24,19 +24,27 @@ This fetches `NRSur7dq4_v1.0.h5` (surrogate model) and `posterior_samples_NRSur7
 ### Run the main analysis
 ```bash
 uv run python scripts/run_hierarchical_analysis.py \
-    dchi_2 "path/to/posteriors/*.h5" \
+    "path/to/posteriors/*.h5" \
     --injection-file path/to/injections.hdf \
-    --model both --n-warmup 1000 --n-sample 1000 --n-chains 4 \
+    --analyze astro memory joint \
+    --n-warmup 1000 --n-sample 1000 --n-chains 4 \
     --outdir results/
 ```
-Key args: `--model {joint,tgr,both}`, `--scale-tgr`, `--use-tilts`, `--no-plots`, `--force`.
+Key args: `--analyze {astro,memory,joint}` (default: all three), `--memory-dir`, `--scale-tgr`, `--use-tilts`, `--no-plots`, `--force`.
+
+- `astro` — astrophysical population only; no `--memory-dir` required
+- `memory` — TGR hyperparameters only; requires `--memory-dir`
+- `joint` — astrophysical + TGR jointly; requires `--memory-dir`
 
 ### End-to-end smoke test
 ```bash
 ./tests/get_test_data.sh --num-events 2          # download small dataset from LIGO servers
-./tests/test_run_analysis_e2e.sh --num-events 2 --model both  # run analysis
+./tests/test_run_analysis_e2e.sh --num-events 2  # run astro-only smoke test (default)
+# With memory results available:
+./tests/test_run_analysis_e2e.sh --analyze "memory joint" --memory-dir /path/to/memory
 ```
-Results go to `data/test_e2e/`. The test script auto-downloads data if missing and falls back to available TGR parameters if the requested one isn't present.
+Results go to `data/test_e2e/results_astro/`. The test script auto-downloads data if missing.
+`--analyze` accepts one or more of `astro`, `memory`, `joint`; `memory` and `joint` require `--memory-dir`.
 
 ### Environment variables
 - `TGRPOP_PLATFORM`: `cpu` or `gpu` (auto-detected; test scripts default to `cpu`)
@@ -84,9 +92,14 @@ Results go to `data/test_e2e/`. The test script auto-downloads data if missing a
 
 ### Scripts
 
-**`scripts/run_hierarchical_analysis.py`** — Thin CLI wrapper for the hierarchical population analysis. Imports functions from `memory.hierarchical`, handles argument parsing, file I/O, and MCMC orchestration.
-- `main()`: CLI entry point — parses arguments, loads event posteriors from HDF5, runs joint and/or TGR-only MCMC via NUTS, saves results as NetCDF/CSV, optionally creates plots, and prints summary statistics with R-hat and ESS
-- Outputs: NetCDF (`.nc`), CSV (`.dat`), corner plots (PNG)
+**`scripts/run_hierarchical_analysis.py`** — CLI for the hierarchical population analysis. Imports functions from `memory.hierarchical`, handles argument parsing, file I/O, and MCMC orchestration.
+- `main()`: parses arguments, loads event posteriors from HDF5, runs one or more of the three analysis modes (`astro`, `memory`, `joint`) via NUTS, saves results as NetCDF/CSV, optionally creates plots, and prints summary statistics with R-hat and ESS
+- Outputs: `result_{astro,joint,memory}.nc`, `fit_{astro,joint,memory}_samples.dat`, corner plots (PNG), provenance text files
+
+**`scripts/plot_ppd.py`** — Post-processing script that plots 1D Population Predictive Distributions from one or more NetCDF result files.
+- Panels: primary mass `m1`, mass ratio `q`, spin magnitude `a`
+- With `--injection-file` and `--n-obs`: converts `m1` panel to differential merger rate `dR/dm1 [Gpc⁻³ yr⁻¹ M☉⁻¹]` via importance sampling over found injections
+- Output: `ppd.png`
 
 **`scripts/compute_gw_memory_for_GWTC.py`** — Catalog-level GW memory computation for GWTC events.
 - Computes memory waveforms, detector projections, and likelihoods across a catalog
