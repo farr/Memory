@@ -561,7 +561,7 @@ def main():
             "b":           0.23,
             "beta":        5.1,
             "fracs":       np.array([0.33, 0.40, 0.27]),
-            "mu_peak_1":   16.0,
+            "mu_peak_1":   10.0,
             "sigma_peak_1": 3.0,
             "mu_peak_2":   55.0,
             "sigma_peak_2": 3.0,

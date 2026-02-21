@@ -151,13 +151,13 @@ def make_joint_model(
     frac_peak_1 = numpyro.deterministic("frac_peak_1", fracs[1])
     frac_peak_2 = numpyro.deterministic("frac_peak_2", fracs[2])
 
-    mu_peak_1 = numpyro.sample("mu_peak_1", dist.Uniform(mmin, 30))
+    mu_peak_1 = numpyro.sample("mu_peak_1", dist.Uniform(mmin, 15))
     # Peak widths bounded to [0.5, 8]: prevents the Gaussian components from
     # becoming degenerate broad components that absorb the BPL, which creates
     # multi-modal posteriors and poor NUTS conditioning.
     sigma_peak_1 = numpyro.sample("sigma_peak_1", dist.Uniform(0.5, 8))
 
-    mu_peak_2 = numpyro.sample("mu_peak_2", dist.Uniform(20, 100))
+    mu_peak_2 = numpyro.sample("mu_peak_2", dist.Uniform(15, 75))
     sigma_peak_2 = numpyro.sample("sigma_peak_2", dist.Uniform(0.5, 8))
 
     # Spin magnitude distribution parameters.
