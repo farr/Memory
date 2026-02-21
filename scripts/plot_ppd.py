@@ -2,7 +2,7 @@
 """Plot 1D Population Predictive Distributions (PPDs) from hierarchical analysis.
 
 For each input NetCDF file, computes and overlays the PPD (median + 90% CI) for:
-  - Primary mass  p(m1)  on semi-log-y axes
+  - Primary mass  p(m1)  on semi-log-y axes  [or dR/dm1 if --injection-file given]
   - Mass ratio    p(q)   marginalised over m1
   - Spin magnitude p(a)
 
@@ -10,18 +10,32 @@ Usage:
     python scripts/plot_ppd.py result_astro.nc
     python scripts/plot_ppd.py result_astro.nc result_joint.nc --labels astro joint
     python scripts/plot_ppd.py result_astro.nc --outdir /path/to/dir --n-ppd 1000
+    python scripts/plot_ppd.py result_astro.nc --injection-file sel.hdf --n-obs 43
 """
 
 import argparse
 import os
 
+import h5py
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.special import logsumexp
 from scipy.stats import norm as scipy_norm
 import arviz as az
+from astropy import cosmology as cosmo
+import astropy.units as u
 
 MMIN = 5.0
 MMAX = 100.0
+
+# Cosmology and redshift integral (matches models.py exactly)
+_Planck15_LAL = cosmo.FlatLambdaCDM(H0=67.90, Om0=0.3065)
+_zinterp = np.expm1(np.linspace(np.log1p(0), np.log1p(2.5), 1024))
+_dVdzdt = (
+    4.0 * np.pi
+    * _Planck15_LAL.differential_comoving_volume(_zinterp).to(u.Gpc**3 / u.sr).value
+    / (1.0 + _zinterp)
+)
 
 
 # ---------------------------------------------------------------------------
@@ -43,6 +57,72 @@ def _load_params(nc_file, n_ppd, seed):
         idx = rng.choice(N, size=n_ppd, replace=False)
         params = {k: v[idx] for k, v in params.items()}
     return params
+
+
+def _load_injection_data(inj_file, ifar_threshold=1000, snr_inspiral_cut=6):
+    """Load found injections from an HDF5 sensitivity-estimate file.
+
+    Returns a dict with keys:
+        m1, q, z, a1, a2, lnpdraw, weights, Ndraw, T_obs_yr
+    """
+    with h5py.File(inj_file, "r") as f:
+        ev = f["events"]
+        m1_all  = ev["mass1_source"][:]
+        m2_all  = ev["mass2_source"][:]
+        z_all   = ev["redshift"][:]
+        lnp_all = ev[
+            "lnpdraw_mass1_source_mass2_source_redshift_"
+            "spin1x_spin1y_spin1z_spin2x_spin2y_spin2z"
+        ][:]
+        s1x = ev["spin1x"][:]; s1y = ev["spin1y"][:]; s1z = ev["spin1z"][:]
+        s2x = ev["spin2x"][:]; s2y = ev["spin2y"][:]; s2z = ev["spin2z"][:]
+        wgt_all = ev["weights"][:]
+        snr_all = ev["estimated_optimal_snr_net"][:]
+
+        # IFAR cut
+        far_keys = [k for k in ev.dtype.names if "far" in k]
+        min_far  = np.min([ev[k][:] for k in far_keys], axis=0)
+        found    = min_far < 1.0 / ifar_threshold
+
+        # Inspiral-SNR cut (matches data.py)
+        if snr_inspiral_cut > 0:
+            snr_insp = (
+                1.1 - 0.9 * (m1_all + m2_all) * (1.0 + z_all) / 100.0
+            ) * snr_all
+            found = found | (snr_insp > snr_inspiral_cut)
+
+        Ndraw = int(f.attrs["total_generated"])
+        T_obs = float(f.attrs["total_analysis_time"]) / (3600.0 * 24.0 * 365.25)
+
+    a1_all = np.sqrt(s1x**2 + s1y**2 + s1z**2)
+    a2_all = np.sqrt(s2x**2 + s2y**2 + s2z**2)
+
+    # Compute log p_draw(m1, q, z, a1, a2) from raw Cartesian density.
+    #
+    # For isotropic spin direction (injection convention):
+    #   p_draw(m1, q, z, a1, a2)
+    #     = p_draw_cart(m1, m2, z, sx, sy, sz) × |J|
+    # where the Jacobian |J| converts (m2 → q) and (sx,sy,sz → a, marginalised
+    # over solid angle) for each spin:
+    #   |J| = m1 × (4π × a1²) × (4π × a2²)
+    log_p_draw = (
+        lnp_all
+        + np.log(np.maximum(m1_all, 1e-300))
+        + 2.0 * np.log(np.maximum(a1_all, 1e-300)) + np.log(4.0 * np.pi)
+        + 2.0 * np.log(np.maximum(a2_all, 1e-300)) + np.log(4.0 * np.pi)
+        + np.log(np.maximum(wgt_all, 1e-300))  # sensitivity weight
+    )
+
+    return {
+        "m1":       m1_all[found],
+        "q":        m2_all[found] / m1_all[found],
+        "z":        z_all[found],
+        "a1":       a1_all[found],
+        "a2":       a2_all[found],
+        "log_p_draw": log_p_draw[found],
+        "Ndraw":    Ndraw,
+        "T_obs_yr": T_obs,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +149,128 @@ def _log_norm_pl(m, alpha, lo, hi):
         )
         log_norm_1 = -np.log(np.log(hi / lo)) * np.ones_like(alpha)
     return log_unnorm + np.where(not_one, log_norm_not1, log_norm_1)
+
+
+# ---------------------------------------------------------------------------
+# Rate computation
+# ---------------------------------------------------------------------------
+
+def compute_R_samples(params, inj_data, N_obs, chunk=50):
+    """Compute the merger rate R(Λ) for each posterior sample.
+
+    Uses importance sampling over the found injections:
+        β(Λ) = (1/Ndraw) Σ_found  p_model(θ|Λ) / p_draw(θ)
+        R(Λ) = N_obs / (T_obs × β(Λ))
+
+    where p_model = p_m1 × p_q × p_z × p_spin (all normalized except p_z which
+    carries the physical dVc/dz / (1+z) units giving β in Gpc³) and p_draw is
+    derived from the raw Cartesian injection draw density plus Jacobians.
+
+    Parameters
+    ----------
+    params : dict
+        Posterior sample arrays (1-D, each of length N).
+    inj_data : dict
+        Output of _load_injection_data.
+    N_obs : int
+        Number of observed events used in the analysis.
+    chunk : int
+        Number of posterior samples processed at once (memory control).
+
+    Returns
+    -------
+    R_samples : ndarray, shape (N,)
+        Merger rate in Gpc⁻³ yr⁻¹ for each posterior sample.
+    """
+    m1_inj = inj_data["m1"][np.newaxis, :]   # (1, N_inj)
+    q_inj  = inj_data["q"][np.newaxis, :]
+    z_inj  = inj_data["z"][np.newaxis, :]
+    a1_inj = inj_data["a1"][np.newaxis, :]
+    a2_inj = inj_data["a2"][np.newaxis, :]
+    lp_inj = inj_data["log_p_draw"][np.newaxis, :]
+    Ndraw  = inj_data["Ndraw"]
+    T_obs  = inj_data["T_obs_yr"]
+
+    dVdzdt_inj = np.interp(z_inj, _zinterp, _dVdzdt)  # (1, N_inj)
+
+    alpha_1    = params["alpha_1"]
+    alpha_2    = params["alpha_2"]
+    b          = params["b"]
+    frac_bpl   = params["frac_bpl"]
+    frac_peak_1 = params["frac_peak_1"]
+    frac_peak_2 = params["frac_peak_2"]
+    mu_peak_1  = params["mu_peak_1"]
+    sigma_peak_1 = params["sigma_peak_1"]
+    mu_peak_2  = params["mu_peak_2"]
+    sigma_peak_2 = params["sigma_peak_2"]
+    beta_q     = params["beta"]
+    lamb       = params["lamb"]
+    mu_spin    = params["mu_spin"]
+    sigma_spin = params["sigma_spin"]
+    N = len(alpha_1)
+
+    log_sel_all = np.empty(N)
+
+    for i0 in range(0, N, chunk):
+        i1 = min(i0 + chunk, N)
+
+        # Broadcast params to (nc, 1)
+        a1_c  = alpha_1[i0:i1, np.newaxis]
+        a2_c  = alpha_2[i0:i1, np.newaxis]
+        b_c   = b[i0:i1, np.newaxis]
+        fb_c  = frac_bpl[i0:i1, np.newaxis]
+        f1_c  = frac_peak_1[i0:i1, np.newaxis]
+        f2_c  = frac_peak_2[i0:i1, np.newaxis]
+        m1pk  = mu_peak_1[i0:i1, np.newaxis]
+        s1pk  = sigma_peak_1[i0:i1, np.newaxis]
+        m2pk  = mu_peak_2[i0:i1, np.newaxis]
+        s2pk  = sigma_peak_2[i0:i1, np.newaxis]
+        bq_c  = beta_q[i0:i1, np.newaxis]
+        l_c   = lamb[i0:i1, np.newaxis]
+        mu_s  = mu_spin[i0:i1, np.newaxis]
+        sig_s = sigma_spin[i0:i1, np.newaxis]
+
+        # --- Primary mass density (BPL + 2 Gaussians) ---
+        m_break   = MMIN + b_c * (MMAX - MMIN)
+        log_pl_lo = _log_norm_pl(m1_inj, a1_c, MMIN, m_break)
+        log_pl_hi = _log_norm_pl(m1_inj, a2_c, m_break, MMAX)
+        log_C     = (_log_norm_pl(m_break, a2_c, m_break, MMAX)
+                     - _log_norm_pl(m_break, a1_c, MMIN, m_break))
+        log_bpl   = (np.where(m1_inj < m_break, log_pl_lo + log_C, log_pl_hi)
+                     - np.logaddexp(0.0, log_C))
+        log_g1    = (scipy_norm.logpdf(m1_inj, m1pk, s1pk))
+        log_g2    = (scipy_norm.logpdf(m1_inj, m2pk, s2pk))
+        log_m1d   = np.logaddexp(
+            np.logaddexp(
+                np.log(np.maximum(fb_c, 1e-30)) + log_bpl,
+                np.log(np.maximum(f1_c, 1e-30)) + log_g1,
+            ),
+            np.log(np.maximum(f2_c, 1e-30)) + log_g2,
+        )
+        log_m1d = np.where((m1_inj >= MMIN) & (m1_inj <= MMAX), log_m1d, -1e12)
+
+        # --- Mass-ratio density ---
+        low  = MMIN / m1_inj
+        nn1  = ~np.isclose(bq_c, -1.0)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            log_n_ne1 = (np.log(np.abs(1.0 + bq_c))
+                         - np.log(np.maximum(1e-300, np.abs(1.0 - low ** (1.0 + bq_c)))))
+            log_n_e1  = -np.log(np.log(m1_inj / MMIN))
+        log_qd = bq_c * np.log(np.maximum(q_inj, 1e-300)) + np.where(nn1, log_n_ne1, log_n_e1)
+        log_qd = np.where(q_inj >= low, log_qd, -1e12)
+
+        # --- Redshift density (includes dVc/dz/(1+z) in Gpc³ units) ---
+        log_zd = l_c * np.log1p(z_inj) + np.log(np.maximum(dVdzdt_inj, 1e-300))
+
+        # --- Spin density: Normal on (a1, a2) spin magnitudes ---
+        log_sd = (scipy_norm.logpdf(a1_inj, mu_s, sig_s)
+                  + scipy_norm.logpdf(a2_inj, mu_s, sig_s))
+
+        log_wts = log_m1d + log_qd + log_zd + log_sd - lp_inj  # (nc, N_inj)
+        log_sel_all[i0:i1] = logsumexp(log_wts, axis=1) - np.log(Ndraw)
+
+    beta = np.exp(log_sel_all)  # Gpc³
+    return N_obs / (T_obs * beta)
 
 
 # ---------------------------------------------------------------------------
@@ -219,16 +421,44 @@ def main():
         help="Max posterior samples to use (default: all); reduces memory",
     )
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--injection-file", default=None,
+        help=(
+            "HDF5 sensitivity-estimate file.  When provided, the m1 panel "
+            "shows dR/dm1 [Gpc⁻³ yr⁻¹ M☉⁻¹] instead of p(m1)."
+        ),
+    )
+    parser.add_argument(
+        "--n-obs", type=int, default=None,
+        help=(
+            "Number of observed events used in the analysis "
+            "(required when --injection-file is given)."
+        ),
+    )
     args = parser.parse_args()
 
     if args.labels is not None and len(args.labels) != len(args.nc_files):
         parser.error("--labels must match the number of nc_files")
+
+    if args.injection_file is not None and args.n_obs is None:
+        parser.error("--n-obs is required when --injection-file is given")
 
     labels = args.labels or [
         os.path.splitext(os.path.basename(f))[0] for f in args.nc_files
     ]
     outdir = args.outdir or os.path.dirname(os.path.abspath(args.nc_files[0]))
     os.makedirs(outdir, exist_ok=True)
+
+    # Load injection data once (shared across all NC files)
+    inj_data = None
+    if args.injection_file is not None:
+        print(f"Loading injection file: {args.injection_file} ...")
+        inj_data = _load_injection_data(args.injection_file)
+        print(
+            f"  {len(inj_data['m1'])} found injections, "
+            f"Ndraw={inj_data['Ndraw']}, "
+            f"T_obs={inj_data['T_obs_yr']:.4f} yr"
+        )
 
     # Evaluation grids.
     # m1_grid excludes MMIN exactly: at m1=MMIN the q-distribution is a Dirac delta
@@ -255,7 +485,21 @@ def main():
             (pm1[:, :-1] + pm1[:, 1:]) * dm1, axis=1, keepdims=True
         )
         pm1_normed = pm1 / np.maximum(norm_m1, 1e-300)
-        _plot_band(ax_m1, m1_grid, pm1_normed, color, label)
+
+        if inj_data is not None:
+            print(f"[{label}] Computing merger rate R(Λ) ...")
+            R_samples = compute_R_samples(params, inj_data, args.n_obs)
+            R_med = np.median(R_samples)
+            R_lo, R_hi = np.percentile(R_samples, [5, 95])
+            print(
+                f"[{label}] R = {R_med:.2f} [{R_lo:.2f}, {R_hi:.2f}] "
+                f"Gpc⁻³ yr⁻¹  (median, 90% CI)"
+            )
+            # dR/dm1 = R × p(m1), shape (N, M)
+            dRdm1 = R_samples[:, np.newaxis] * pm1_normed
+            _plot_band(ax_m1, m1_grid, dRdm1, color, label)
+        else:
+            _plot_band(ax_m1, m1_grid, pm1_normed, color, label)
 
         # Mass ratio (marginalised over m1)
         pq = compute_ppd_q(q_grid, m1_grid, pm1_normed, params)  # (N, Q)
@@ -268,8 +512,12 @@ def main():
     # Formatting
     ax_m1.set_yscale("log")
     ax_m1.set_xlabel(r"$m_1\ [M_\odot]$")
-    ax_m1.set_ylabel(r"$p(m_1)\ [M_\odot^{-1}]$")
-    ax_m1.set_title("Primary mass")
+    if inj_data is not None:
+        ax_m1.set_ylabel(r"$\mathrm{d}R/\mathrm{d}m_1\ [\mathrm{Gpc}^{-3}\,\mathrm{yr}^{-1}\,M_\odot^{-1}]$")
+        ax_m1.set_title("Primary mass merger rate")
+    else:
+        ax_m1.set_ylabel(r"$p(m_1)\ [M_\odot^{-1}]$")
+        ax_m1.set_title("Primary mass")
     ax_m1.set_xlim(MMIN, MMAX)  # show full range even though grid starts at 5.48
 
     ax_q.set_xlabel(r"$q = m_2/m_1$")
