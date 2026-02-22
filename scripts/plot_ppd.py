@@ -34,7 +34,16 @@ where:
   - p_draw  is the injection draw density in (m1, q, z, a1, a2) space
 
 Equation (2) is evaluated once per posterior sample, producing R_samples.
-The PPD is then dR/dm1 = R_samples[:, newaxis] * p(m1 | Lambda_samples).
+The PPD is evaluated at z = 0.2 (the LVK populations paper convention):
+
+    R(z=0.2) = R0 * (1+0.2)^lambda
+
+where lambda is the redshift power-law index from the posterior.  No
+dz/dVc Jacobian is needed: beta already has units of Gpc^3 (comoving
+volume), so R0 is already per unit comoving volume.  The (1+z)^lambda
+factor simply evaluates the merger rate at z=0.2 instead of z=0.
+
+The PPD is then dR/dm1(z=0.2) = R(z=0.2)[:, newaxis] * p(m1 | Lambda_samples).
 
 Draw prior Jacobian
 ~~~~~~~~~~~~~~~~~~~
@@ -581,11 +590,24 @@ def main():
             R_med = np.median(R_samples)
             R_lo, R_hi = np.percentile(R_samples, [5, 95])
             print(
-                f"[{label}] R = {R_med:.2f} [{R_lo:.2f}, {R_hi:.2f}] "
+                f"[{label}] R(z=0) = {R_med:.2f} [{R_lo:.2f}, {R_hi:.2f}] "
                 f"Gpc⁻³ yr⁻¹  (median, 90% CI)"
             )
-            # dR/dm1 = R × p(m1), shape (N, M)
-            dRdm1 = R_samples[:, np.newaxis] * pm1_normed
+            # Evaluate rate at z = 0.2 (matches LVK populations paper convention).
+            # R is the local (z=0) rate; the model parameterises the redshift
+            # evolution as (1+z)^lambda, so R(z=0.2) = R0 * (1+0.2)^lambda.
+            # No dz/dVc Jacobian is needed: beta already carries units of Gpc^3
+            # (comoving volume), so R is already per unit comoving volume.
+            z_eval = 0.2
+            R_at_z = R_samples * (1.0 + z_eval) ** params["lamb"]
+            R_z_med = np.median(R_at_z)
+            R_z_lo, R_z_hi = np.percentile(R_at_z, [5, 95])
+            print(
+                f"[{label}] R(z={z_eval}) = {R_z_med:.2f} [{R_z_lo:.2f}, {R_z_hi:.2f}] "
+                f"Gpc⁻³ yr⁻¹  (median, 90% CI)"
+            )
+            # dR/dm1(z=0.2) = R(z=0.2) × p(m1), shape (N, M)
+            dRdm1 = R_at_z[:, np.newaxis] * pm1_normed
             _plot_band(ax_m1, m1_grid, dRdm1, color, label)
         else:
             _plot_band(ax_m1, m1_grid, pm1_normed, color, label)
@@ -602,7 +624,10 @@ def main():
     ax_m1.set_yscale("log")
     ax_m1.set_xlabel(r"$m_1\ [M_\odot]$")
     if inj_data is not None:
-        ax_m1.set_ylabel(r"$\mathrm{d}R/\mathrm{d}m_1\ [\mathrm{Gpc}^{-3}\,\mathrm{yr}^{-1}\,M_\odot^{-1}]$")
+        ax_m1.set_ylabel(
+            r"$\mathrm{d}R/\mathrm{d}m_1\ (z{=}0.2)$"
+            r"$\ [\mathrm{Gpc}^{-3}\,\mathrm{yr}^{-1}\,M_\odot^{-1}]$"
+        )
         ax_m1.set_title("Primary mass merger rate")
     else:
         ax_m1.set_ylabel(r"$p(m_1)\ [M_\odot^{-1}]$")

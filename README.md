@@ -62,13 +62,20 @@ where `p(z) ∝ (1+z)^λ * dVc/dz/(1+z)` is left **unnormalised**: the integral
 over redshift gives a volume in Gpc^3, so `β` has units Gpc^3 and `R` has
 units Gpc^-3 yr^-1.
 
-The differential rate is then
+The differential rate is evaluated at z = 0.2 (following the LVK populations
+paper convention):
 
 ```
-dR/dm1 = R(Λ) * p(m1 | Λ)
+R(z=0.2 | Λ) = R(Λ) * (1 + 0.2)^lambda
+dR/dm1(z=0.2) = R(z=0.2 | Λ) * p(m1 | Λ)
 ```
 
-evaluated on a grid over the posterior to produce the shaded PPD band.
+No `dz/dVc` Jacobian is needed: `β` already has units of Gpc³ (comoving
+volume), so `R` is already per unit comoving volume at z=0.  The
+`(1+z)^lambda` factor shifts the evaluation to z=0.2.
+
+Both `R(z=0)` and `R(z=0.2)` are printed to stdout; the plot y-axis shows
+the rate at z=0.2.
 
 #### Draw prior Jacobian
 
