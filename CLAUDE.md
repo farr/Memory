@@ -8,6 +8,14 @@ Bayesian hierarchical analysis pipeline for testing general relativity (TGR) usi
 
 **Python 3.11 only** (pinned in `.python-version`). Package manager is **uv**.
 
+## Key Reference Papers
+
+- **GWTC-4 populations paper**: arXiv:2508.18083 — "GWTC-4.0: Population Properties
+  of Merging Compact Binaries" (LVK, 2025).  The Broken Power Law + 2 Peaks BBH
+  mass model used here follows Appendix B.3 of this paper.  The `PRIOR` dict in
+  `memory/hierarchical/models.py` is calibrated against Table 6 of this paper.
+  `mmin = 3 M_sun` comes from the triangular prior lower bound (eq. B23).
+
 ## Setup and Commands
 
 ### Install dependencies
@@ -45,6 +53,28 @@ Key args: `--analyze {astro,memory,joint}` (default: all three), `--memory-dir`,
 ```
 Results go to `data/test_e2e/results_astro/`. The test script auto-downloads data if missing.
 `--analyze` accepts one or more of `astro`, `memory`, `joint`; `memory` and `joint` require `--memory-dir`.
+
+### Production runs (cluster / SLURM + disBatch)
+
+Production analyses run on the cluster using 4 GPUs via SLURM and disBatch.
+disBatch is a task-parallel scheduler that reads a file of shell commands and
+dispatches them across SLURM-allocated resources.
+
+```bash
+module load disBatch          # must be loaded before submitting
+bash submit.sh taskfiles/TaskFileMemory_astro
+```
+
+`submit.sh` calls:
+```bash
+sbatch -p gpu -n 1 --cpus-per-task=16 --gpus-per-task=4 --gpu-bind=closest -t 0-6 disBatch <taskfile>
+```
+
+Task files live in `taskfiles/`.  Each file contains one shell command per
+line; the astro-only run uses `taskfiles/TaskFileMemory_astro`.  Always set
+`TGRPOP_DEVICE_COUNT=4` inside the task command to use all 4 allocated GPUs.
+
+**Never run production analyses locally** — always submit via `submit.sh`.
 
 ### Environment variables
 - `TGRPOP_PLATFORM`: `cpu` or `gpu` (auto-detected; test scripts default to `cpu`)
