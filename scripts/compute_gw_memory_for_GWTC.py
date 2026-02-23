@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 
 import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 os.environ["LAL_DATA_PATH"] = f"{PROJECT_ROOT}/data"
@@ -48,6 +53,20 @@ def parse_args():
         help="Directory where output will be written.",
     )
 
+    parser.add_argument(
+        "--multiprocess_events",
+        type=bool,
+        help="Whether or not to parallelize over events.",
+        default=False
+    )
+
+    parser.add_argument(
+        "--multiprocess_samples",
+        type=bool,
+        help="Whether or not to parallelize over samples.",
+        default=False
+    )
+    
     parser.add_argument("--max-samples", type=int, default=None)
     parser.add_argument("--ell-max", type=int, default=4)
     parser.add_argument("--thin", type=int, default=1)
@@ -213,7 +232,7 @@ def save_histogram(event_dir, label, arr):
 # Main processing
 # ================================================================
 
-def process_event(filepath, event, args):
+def process_event(filepath, event, args, multiprocess):
     labels = get_waveform_labels_from_hdf5(filepath)
 
     results = {}
@@ -238,6 +257,7 @@ def process_event(filepath, event, args):
             res,
             approximant=approximant,
             ell_max=args.ell_max,
+            multiprocess=multiprocess,
         )
 
         memory_vars = compute_memory_variables_likelihoods_and_weights(
@@ -250,7 +270,7 @@ def process_event(filepath, event, args):
     return results
 
 
-def process_event_wrapper(task):
+def process_event_wrapper(task, multiprocess=False):
     filepath, event, args_dict = task
     
     # Rebuild args namespace (safer for multiprocessing)
@@ -261,7 +281,7 @@ def process_event_wrapper(task):
         return
 
     try:
-        results = process_event(filepath, event, args)
+        results = process_event(filepath, event, args, multiprocess)
     except Exception as e:
         print(f"Error processing event {event}: {e}")
         return None
@@ -301,9 +321,12 @@ def main():
 
     nproc = min(mp.cpu_count() - 1, len(tasks))
 
-    with mp.get_context("spawn").Pool(nproc) as pool:
-        pool.map(process_event_wrapper, tasks)
-
+    if args.multiprocess_events:
+        with mp.get_context("spawn").Pool(nproc) as pool:
+            pool.map(process_event_wrapper, tasks)
+    else:
+        for task in tasks:
+            process_event_wrapper(task, args.multiprocess_samples)
 
 if __name__ == "__main__":
     main()

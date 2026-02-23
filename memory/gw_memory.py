@@ -1,8 +1,10 @@
+import os
 import copy
 import scipy
 import numpy as np
 import gwsurrogate
 import spherical_functions
+import multiprocessing as mp
 from scipy.integrate import cumulative_trapezoid as cumtrapz
 
 import lal
@@ -698,7 +700,7 @@ def polarizations_to_FD(hp_memory, hc_memory, delta_t, config, roll_on=0.2):
     # window
     alpha = 2 * roll_on / config.duration
     window = scipy.signal.windows.tukey(hp_memory.size, alpha)
-
+    
     # fft
     fs = config.sampling_frequency
     deltaT = 1 / fs
@@ -772,7 +774,50 @@ def project_to_detectors(hp, hc, sample, ifos, is_SEOB):
     return out
 
 
-def make_memories(res, angular_factors=None, approximant=lalsim.NRSur7dq4, ell_max=4):
+def process_sample(args):
+    """Trivial wrapper for multiprocessing in function below.
+    """
+    i, sample, res, angular_factors, approximant, ell_max = args
+
+    ifos = res["ifos"]
+    config = res["config"]
+
+    hp, hc, t = compute_memory_and_map_to_polarizations(
+        sample,
+        res,
+        angular_factors=angular_factors,
+        approximant=approximant,
+        ell_max=ell_max,
+    )
+
+    hp_inserted, hc_inserted, delta_t = insert_memory_into_time_array(
+        hp,
+        hc,
+        t,
+        sample,
+        config,
+        res["fd"][ifos[0].name]["model"][i],
+    )
+
+    hp_FD, hc_FD = polarizations_to_FD(
+        hp_inserted,
+        hc_inserted,
+        delta_t,
+        config,
+    )
+
+    is_SEOB = approximant == lalsim.SEOBNRv4PHM
+
+    return project_to_detectors(
+        hp_FD,
+        hc_FD,
+        sample,
+        ifos,
+        is_SEOB,
+    )
+
+
+def make_memories(res, angular_factors=None, approximant=lalsim.NRSur7dq4, ell_max=4, multiprocess=False):
     """Compute memory waveforms for a set of posterior samples.
 
     This function computes the gravitational-wave memory
@@ -801,6 +846,9 @@ def make_memories(res, angular_factors=None, approximant=lalsim.NRSur7dq4, ell_m
     ell_max : int, optional
         Maximum ℓ mode included in the memory calculation.
         Default is 4.
+    multiprocess : bool, optional
+        Whether or not to multiprocess over sample calculations.
+        Default is False.
 
     Returns
     -------
@@ -809,30 +857,22 @@ def make_memories(res, angular_factors=None, approximant=lalsim.NRSur7dq4, ell_m
         Each entry is a dictionary:
         {ifo_name: h_memory_fd}.
     """
-    ifos = res["ifos"]
-    config = res["config"]
     samples = res["samples"]
 
     if angular_factors is None:
         angular_factors = compute_angular_factors(ell_max)
 
-    h_memories_in_det = []
-    for i, sample in enumerate(samples):
-        hp, hc, t = compute_memory_and_map_to_polarizations(
-            sample, res, angular_factors=angular_factors, approximant=approximant, ell_max=ell_max
-        )
+    args_iterable = [
+        (i, sample, res, angular_factors, approximant, ell_max)
+        for i, sample in enumerate(samples)
+    ]
 
-        hp_inserted, hc_inserted, delta_t = insert_memory_into_time_array(
-            hp, hc, t, sample, config, res["fd"][ifos[0].name]["model"][i]
-        )
-
-        hp_FD, hc_FD = polarizations_to_FD(hp_inserted, hc_inserted, delta_t, config)
-
-        is_SEOB = approximant == lalsim.SEOBNRv4PHM
-        h_memory_in_det = project_to_detectors(hp_FD, hc_FD, sample, ifos, is_SEOB)
-
-        h_memories_in_det.append(h_memory_in_det)
-
+    if multiprocess:
+        with mp.Pool(processes=int(os.environ.get("SLURM_CPUS_PER_TASK"))) as pool:
+            h_memories_in_det = pool.map(process_sample, args_iterable)
+    else:
+        h_memories_in_det = [process_sample(arg_iterable) for arg_iterable in args_iterable]
+            
     return h_memories_in_det
 
 
@@ -898,7 +938,7 @@ def compute_memory_variables_likelihoods_and_weights(res, h_memories_in_dets):
         A_hat = np.real(hrs / hhs)
         A_sigma = 1 / np.sqrt(np.real(hhs))
         A_sample = np.random.normal(loc=A_hat, scale=A_sigma)
-        log_weight = 0.5 * A_hat * np.conjugate(hrs) - 0.5 * np.log(2 * np.pi * hhs)
+        log_weight = 0.5 * A_hat * np.real(np.conjugate(hrs)) - 0.5 * np.log(2 * np.pi * hhs)
         log_likelihood = -0.5 * rrs + log_weight
 
         memory_variables_likelihoods_and_weights.append(
