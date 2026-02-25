@@ -12,6 +12,7 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 IFAR_THRESHOLD = 1
+N_SAMPLES_PER_EVENT = 10000
 
 align_spin_prior = bilby.gw.prior.AlignedSpin()
 
@@ -287,7 +288,7 @@ def generate_data(
     use_tgr=True,
     use_tilts=False,
     ifar_threshold=IFAR_THRESHOLD,
-    N_samples=2000,
+    N_samples=N_SAMPLES_PER_EVENT,
     snr_cut=0,
     snr_inspiral_cut=0,
     prng=None,
@@ -542,7 +543,7 @@ def generate_data(
 
 
 def generate_tgr_only_data(event_posteriors, memory_data,
-                           N_samples=2000, prng=None, scale_tgr=False):
+                           N_samples=N_SAMPLES_PER_EVENT, prng=None, scale_tgr=False):
     """Build simplified data arrays for the TGR-only model.
 
     Resamples posterior indices using memory importance weights and extracts
