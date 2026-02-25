@@ -293,6 +293,7 @@ def generate_data(
     snr_inspiral_cut=0,
     prng=None,
     scale_tgr=False,
+    ignore_memory_weights=False,
 ):
     """Build per-event data arrays for the joint population model.
 
@@ -327,6 +328,10 @@ def generate_data(
     scale_tgr : bool
         If True, divide TGR parameter values by their pooled standard
         deviation across all events.
+    ignore_memory_weights : bool
+        If True, set all log_weights to zero (i.e. do not use the
+        memory likelihood ratios as importance weights in the model).
+        Useful for diagnosing the effect of the memory weights.
 
     Returns
     -------
@@ -431,6 +436,8 @@ def generate_data(
             a_hat_i, a_sig_i, lw_i = _sample_memory_event(
                 memory_data[i_event], idxs, A_scale
             )
+            if ignore_memory_weights:
+                lw_i = np.zeros(N_samples)
         else:
             a_hat_i = a_sig_i = lw_i = np.zeros(N_samples)
         A_hats.append(a_hat_i)
@@ -553,7 +560,8 @@ def generate_data(
 
 
 def generate_tgr_only_data(event_posteriors, memory_data,
-                           N_samples=N_SAMPLES_PER_EVENT, prng=None, scale_tgr=False):
+                           N_samples=N_SAMPLES_PER_EVENT, prng=None, scale_tgr=False,
+                           ignore_memory_weights=False):
     """Build simplified data arrays for the TGR-only model.
 
     Resamples posterior indices using memory importance weights and extracts
@@ -603,6 +611,8 @@ def generate_tgr_only_data(event_posteriors, memory_data,
     for md in memory_data:
         idxs = prng.choice(len(md["A_hat"]), size=N_samples, replace=True)
         a_hat_i, a_sig_i, lw_i = _sample_memory_event(md, idxs, A_scale)
+        if ignore_memory_weights:
+            lw_i = np.zeros(N_samples)
         A_hats.append(a_hat_i)
         A_sigmas.append(a_sig_i)
         log_weights.append(lw_i)

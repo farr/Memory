@@ -352,6 +352,14 @@ def _build_parser():
         help="Include spin-tilt mixture model in the joint fit",
     )
     parser.add_argument(
+        "--ignore-memory-weights",
+        action="store_true",
+        help=(
+            "Zero out memory log-likelihood-ratio weights (log_weight) before "
+            "passing to the model. Useful for diagnosing their effect."
+        ),
+    )
+    parser.add_argument(
         "--scale-tgr",
         action="store_true",
         help=(
@@ -525,6 +533,7 @@ def main():
         snr_cut=args.snr_cut,
         use_tilts=args.use_tilts,
         prng=seed,
+        ignore_memory_weights=args.ignore_memory_weights,
     )
 
     # astro: all events, uniform weights (no memory reweighting)
@@ -549,6 +558,7 @@ def main():
             mem_posteriors, memory_data,
             N_samples=args.n_samples_per_event, prng=seed,
             scale_tgr=args.scale_tgr,
+            ignore_memory_weights=args.ignore_memory_weights,
         )
 
     # --- MCMC -------------------------------------------------------------
