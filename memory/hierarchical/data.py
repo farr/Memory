@@ -11,6 +11,8 @@ from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
+IFAR_THRESHOLD = 1
+
 align_spin_prior = bilby.gw.prior.AlignedSpin()
 
 
@@ -94,7 +96,7 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
 
 
 def read_injection_file(
-    vt_file, ifar_threshold=1, use_tilts=False, snr_inspiral_cut=0, snr_cut=0
+    vt_file, ifar_threshold=IFAR_THRESHOLD, use_tilts=False, snr_inspiral_cut=0, snr_cut=0
 ):
     """Read an HDF5 injection/selection file and extract relevant data.
 
@@ -247,7 +249,7 @@ def generate_data(
     memory_data=None,
     use_tgr=True,
     use_tilts=False,
-    ifar_threshold=1000,
+    ifar_threshold=IFAR_THRESHOLD,
     N_samples=2000,
     snr_cut=0,
     snr_inspiral_cut=0,
