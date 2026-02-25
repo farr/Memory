@@ -366,6 +366,16 @@ def generate_data(
 
     A_scale = _compute_A_scale(memory_data, scale_tgr and use_tgr)
 
+    min_available = min(len(ep) for ep in event_posteriors)
+    if N_samples > min_available:
+        logger.warning(
+            "N_samples=%d exceeds the number of available samples in the "
+            "smallest event (%d); reducing N_samples to %d to avoid "
+            "excessive duplication.",
+            N_samples, min_available, min_available,
+        )
+        N_samples = min_available
+
     for i_event, event_posterior in enumerate(tqdm(event_posteriors)):
         # instead of picking the first N_samples, pick N_samples randomly
         # use this already to apply the weights (should be more efficient
