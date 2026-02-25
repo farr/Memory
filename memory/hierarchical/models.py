@@ -48,15 +48,17 @@ dVdzdt_interp = (
 )
 
 
-def make_tgr_only_model(A_hats, A_sigmas, Nobs, mu_tgr_scale=None,
-                        sigma_tgr_scale=None):
+def make_tgr_only_model(A_hats, A_sigmas, log_weights, Nobs,
+                        mu_tgr_scale=None, sigma_tgr_scale=None):
     """Numpyro model for TGR-only hierarchical inference.
 
     Defines a two-hyperparameter model (mu_tgr, sigma_tgr) describing a
     Gaussian population distribution for the TGR deviation parameter.
     The per-event likelihood uses an analytic Gaussian convolution:
     the per-sample measurement uncertainty A_sigma is added in quadrature
-    with sigma_tgr.
+    with sigma_tgr.  The per-sample memory log-likelihood ratios
+    (log_weights) are included as additive importance-sampling terms so
+    that no pre-resampling by log_weight is required in data preparation.
 
     Parameters
     ----------
@@ -64,6 +66,8 @@ def make_tgr_only_model(A_hats, A_sigmas, Nobs, mu_tgr_scale=None,
         Per-sample ML amplitude estimates, shape (Nobs, N_samples).
     A_sigmas : jnp.ndarray
         Per-sample amplitude uncertainties, shape (Nobs, N_samples).
+    log_weights : jnp.ndarray
+        Per-sample memory log-likelihood ratios, shape (Nobs, N_samples).
     Nobs : int
         Number of observed events.
     mu_tgr_scale : float or None
@@ -83,7 +87,7 @@ def make_tgr_only_model(A_hats, A_sigmas, Nobs, mu_tgr_scale=None,
     sigma_tgr = numpyro.sample("sigma_tgr", dist.Uniform(0, sigma_tgr_scale))
 
     sigma_eff = jnp.sqrt(jnp.square(A_sigmas) + jnp.square(sigma_tgr))
-    log_wts = dist.Normal(mu_tgr, sigma_eff).log_prob(A_hats)
+    log_wts = dist.Normal(mu_tgr, sigma_eff).log_prob(A_hats) + log_weights
 
     log_like = logsumexp(log_wts, axis=1)
     log_like = jnp.nan_to_num(log_like, neginf=-1e20, posinf=1e20)
@@ -116,8 +120,9 @@ def make_joint_model(
     Parameters
     ----------
     event_data_array : ndarray
-        Shape (11, Nobs, N_samples): rows are m1, q, cos_tilt_1,
-        cos_tilt_2, a_1, a_2, A_hat, A_sigma, z, log_pdraw, kde_weights.
+        Shape (12, Nobs, N_samples): rows are m1, q, cos_tilt_1,
+        cos_tilt_2, a_1, a_2, A_hat, A_sigma, z, log_pdraw, kde_weights,
+        log_weights (memory log-likelihood ratios; zeros for astro-only).
     injection_data_array : ndarray
         Shape (8, N_inj): rows are m1, q, cos_tilt_1, cos_tilt_2,
         a_1/spin1z, a_2/spin2z, z, log_prior.
@@ -149,6 +154,7 @@ def make_joint_model(
     A_sigmas = event_data_array[7]
     zs = event_data_array[8]
     log_pdraw = event_data_array[9]
+    log_mem_weights = event_data_array[11]   # zeros for astro-only runs
 
     m1s_sel = injection_data_array[0]
     qs_sel = injection_data_array[1]
@@ -338,6 +344,7 @@ def make_joint_model(
 
         sigma_eff = jnp.sqrt(jnp.square(A_sigmas) + jnp.square(sigma_tgr))
         log_wts += dist.Normal(mu_tgr, sigma_eff).log_prob(A_hats)
+        log_wts += log_mem_weights
 
     # Adding the per event likelihood term (stable log-sum-exp)
     log_like = logsumexp(log_wts, axis=1)

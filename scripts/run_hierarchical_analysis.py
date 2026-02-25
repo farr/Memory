@@ -545,7 +545,7 @@ def main():
 
     # memory: TGR-only model data
     if run_memory:
-        A_hats_mem, A_sigmas_mem, Nobs_mem, A_scale_mem = generate_tgr_only_data(
+        A_hats_mem, A_sigmas_mem, log_weights_mem, Nobs_mem, A_scale_mem = generate_tgr_only_data(
             mem_posteriors, memory_data,
             N_samples=args.n_samples_per_event, prng=seed,
             scale_tgr=args.scale_tgr,
@@ -623,8 +623,8 @@ def main():
         kernel = NUTS(make_tgr_only_model, init_strategy=init_to_feasible())
         mcmc = MCMC(kernel, num_warmup=args.n_warmup,
                     num_samples=args.n_sample, num_chains=args.n_chains)
-        mcmc.run(prng_mem, A_hats_mem, A_sigmas_mem, Nobs_mem,
-                 args.mu_tgr_scale, args.sigma_tgr_scale)
+        mcmc.run(prng_mem, A_hats_mem, A_sigmas_mem, log_weights_mem,
+                 Nobs_mem, args.mu_tgr_scale, args.sigma_tgr_scale)
         fit_memory = az.from_numpyro(mcmc)
         _rescale_tgr_posterior(fit_memory, A_scale_mem)
         fname = os.path.join(outdir, "result_memory.nc")

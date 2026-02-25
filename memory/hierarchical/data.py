@@ -316,6 +316,7 @@ def generate_data(
     log_pdraw = []
     A_hats = []
     A_sigmas = []
+    log_weights = []
     kde_weights = []
 
     BW_matrices = []
@@ -352,9 +353,10 @@ def generate_data(
                     f"match posterior length ({len(event_posterior)}) for "
                     f"event {md['event_name']}"
                 )
-            log_w = np.log(np.clip(w, 1e-300, None)) + md["log_weight"]
-            log_w -= log_w.max()
-            w = np.exp(log_w)
+            # log_weight is NOT used for resampling here; it is passed to the
+            # model as an explicit per-sample additive term in the log
+            # probability, avoiding degenerate resampling when the weights are
+            # concentrated.
 
         neff = np.sum(w) ** 2 / np.sum(w**2)
         event_label = (
@@ -387,9 +389,11 @@ def generate_data(
         if use_tgr:
             A_hats.append(memory_data[i_event]["A_hat"][idxs] / A_scale)
             A_sigmas.append(memory_data[i_event]["A_sigma"][idxs] / A_scale)
+            log_weights.append(memory_data[i_event]["log_weight"][idxs])
         else:
             A_hats.append(np.zeros(N_samples))
             A_sigmas.append(np.zeros(N_samples))
+            log_weights.append(np.zeros(N_samples))
 
         cost1s.append(event_posterior["cos_tilt_1"][idxs])
         cost2s.append(event_posterior["cos_tilt_2"][idxs])
@@ -446,6 +450,7 @@ def generate_data(
             a2s.pop()
             A_hats.pop()
             A_sigmas.pop()
+            log_weights.pop()
             cost1s.pop()
             cost2s.pop()
             zs.pop()
@@ -462,7 +467,8 @@ def generate_data(
     Nobs = len(m1s)
 
     event_data_array = np.array(
-        [m1s, qs, cost1s, cost2s, a1s, a2s, A_hats, A_sigmas, zs, log_pdraw, kde_weights]
+        [m1s, qs, cost1s, cost2s, a1s, a2s, A_hats, A_sigmas, zs, log_pdraw, kde_weights,
+         log_weights]
     )
 
     injection_data = read_injection_file(
@@ -539,8 +545,10 @@ def generate_tgr_only_data(event_posteriors, memory_data,
     Returns
     -------
     tuple
-        (A_hats, A_sigmas, Nobs, A_scale) where A_hats and A_sigmas
-        have shape (Nobs, N_samples).
+        (A_hats, A_sigmas, log_weights, Nobs, A_scale) where A_hats,
+        A_sigmas, and log_weights have shape (Nobs, N_samples).
+        log_weights are the per-sample memory log-likelihood ratios to be
+        included as additive terms in the model's log probability.
     """
     Nobs = len(event_posteriors)
 
@@ -559,18 +567,20 @@ def generate_tgr_only_data(event_posteriors, memory_data,
     else:
         A_scale = 1
 
-    # Construct the event posterior arrays
+    # Construct the event posterior arrays.
+    # Resample uniformly — log_weight is passed to the model explicitly
+    # rather than being baked into the resampling distribution.
     A_hats = []
     A_sigmas = []
+    log_weights = []
     for md in memory_data:
-        w = np.exp(md["log_weight"] - md["log_weight"].max())
-        w /= w.sum()
-        idxs = prng.choice(len(md["A_hat"]), size=N_samples,
-                           replace=True, p=w)
+        idxs = prng.choice(len(md["A_hat"]), size=N_samples, replace=True)
         A_hats.append(md["A_hat"][idxs] / A_scale)
         A_sigmas.append(md["A_sigma"][idxs] / A_scale)
+        log_weights.append(md["log_weight"][idxs])
 
     A_hats = np.array(A_hats)
     A_sigmas = np.array(A_sigmas)
+    log_weights = np.array(log_weights)
 
-    return A_hats, A_sigmas, Nobs, A_scale
+    return A_hats, A_sigmas, log_weights, Nobs, A_scale
