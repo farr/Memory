@@ -94,7 +94,7 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
 
 
 def read_injection_file(
-    vt_file, ifar_threshold=1000, use_tilts=False, snr_inspiral_cut=0, snr_cut=0
+    vt_file, ifar_threshold=1, use_tilts=False, snr_inspiral_cut=0, snr_cut=0
 ):
     """Read an HDF5 injection/selection file and extract relevant data.
 
