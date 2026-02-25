@@ -317,7 +317,6 @@ def generate_data(
     A_hats = []
     A_sigmas = []
     log_weights = []
-    kde_weights = []
 
     BW_matrices = []
     BW_matrices_sel = []
@@ -428,14 +427,7 @@ def generate_data(
                 [a1s[-1], a2s[-1], m1s[-1], qs[-1], zs[-1]]
             )
 
-        # could have applied the weights here instead
-        weights_i = np.ones(N_samples)
-
-        kde_weights.append(weights_i)
-
-        N_eff = np.sum(weights_i) ** 2 / np.sum(weights_i**2)
-
-        full_cov_i = np.cov(data_array, aweights=weights_i)
+        full_cov_i = np.cov(data_array)
         try:
             prec_i = np.linalg.inv(full_cov_i)[:d, :d]
             cov_i = np.linalg.inv(prec_i)
@@ -455,11 +447,10 @@ def generate_data(
             cost2s.pop()
             zs.pop()
             log_pdraw.pop()
-            kde_weights.pop()
             continue
 
-        BW_matrices.append(cov_i * N_eff ** (-2.0 / (4 + d)))
-        BW_matrices_sel.append(cov_i[:2, :2] * N_eff ** (-2.0 / (6)))
+        BW_matrices.append(cov_i * N_samples ** (-2.0 / (4 + d)))
+        BW_matrices_sel.append(cov_i[:2, :2] * N_samples ** (-2.0 / 6))
 
     BW_matrices = np.array(BW_matrices)
     BW_matrices_sel = np.array(BW_matrices_sel)
@@ -467,8 +458,7 @@ def generate_data(
     Nobs = len(m1s)
 
     event_data_array = np.array(
-        [m1s, qs, cost1s, cost2s, a1s, a2s, A_hats, A_sigmas, zs, log_pdraw, kde_weights,
-         log_weights]
+        [m1s, qs, cost1s, cost2s, a1s, a2s, A_hats, A_sigmas, zs, log_pdraw, log_weights]
     )
 
     injection_data = read_injection_file(

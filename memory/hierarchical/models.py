@@ -120,9 +120,9 @@ def make_joint_model(
     Parameters
     ----------
     event_data_array : ndarray
-        Shape (12, Nobs, N_samples): rows are m1, q, cos_tilt_1,
-        cos_tilt_2, a_1, a_2, A_hat, A_sigma, z, log_pdraw, kde_weights,
-        log_weights (memory log-likelihood ratios; zeros for astro-only).
+        Shape (11, Nobs, N_samples): rows are m1, q, cos_tilt_1,
+        cos_tilt_2, a_1, a_2, A_hat, A_sigma, z, log_pdraw, log_weights
+        (memory log-likelihood ratios; zeros for astro-only runs).
     injection_data_array : ndarray
         Shape (8, N_inj): rows are m1, q, cos_tilt_1, cos_tilt_2,
         a_1/spin1z, a_2/spin2z, z, log_prior.
@@ -154,7 +154,7 @@ def make_joint_model(
     A_sigmas = event_data_array[7]
     zs = event_data_array[8]
     log_pdraw = event_data_array[9]
-    log_mem_weights = event_data_array[11]   # zeros for astro-only runs
+    log_mem_weights = event_data_array[10]   # zeros for astro-only runs
 
     m1s_sel = injection_data_array[0]
     qs_sel = injection_data_array[1]
