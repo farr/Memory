@@ -243,6 +243,43 @@ def read_injection_file(
     return injections
 
 
+def _compute_A_scale(memory_data, scale_tgr):
+    """Return the TGR amplitude scale factor for normalisation.
+
+    If *scale_tgr* is True, returns the pooled standard deviation of
+    ``A_hat`` across all events (clamped to 1e-12).  Otherwise returns 1.
+    """
+    if scale_tgr:
+        pooled = np.concatenate([md["A_hat"].ravel() for md in memory_data])
+        return max(np.nanstd(pooled), 1e-12)
+    return 1
+
+
+def _sample_memory_event(md, idxs, A_scale):
+    """Extract resampled memory arrays for one event.
+
+    Parameters
+    ----------
+    md : dict
+        Single-event memory data dict with keys ``A_hat``, ``A_sigma``,
+        ``log_weight``.
+    idxs : ndarray of int
+        Sample indices (already drawn by the caller).
+    A_scale : float
+        Divisor applied to A_hat and A_sigma for normalisation.
+
+    Returns
+    -------
+    A_hat, A_sigma, log_weight : ndarray
+        Resampled arrays of length ``len(idxs)``.
+    """
+    return (
+        md["A_hat"][idxs] / A_scale,
+        md["A_sigma"][idxs] / A_scale,
+        md["log_weight"][idxs],
+    )
+
+
 def generate_data(
     event_posteriors,
     injection_file,
@@ -326,13 +363,7 @@ def generate_data(
     elif isinstance(prng, int):
         prng = np.random.default_rng(prng)
 
-    if use_tgr and scale_tgr:
-        pooled_phi = np.concatenate([
-            md["A_hat"].ravel() for md in memory_data
-        ])
-        A_scale = max(np.nanstd(pooled_phi), 1e-12)
-    else:
-        A_scale = 1
+    A_scale = _compute_A_scale(memory_data, scale_tgr and use_tgr)
 
     for i_event, event_posterior in enumerate(tqdm(event_posteriors)):
         # instead of picking the first N_samples, pick N_samples randomly
@@ -386,13 +417,14 @@ def generate_data(
         a2s.append(event_posterior["a_2"][idxs])
 
         if use_tgr:
-            A_hats.append(memory_data[i_event]["A_hat"][idxs] / A_scale)
-            A_sigmas.append(memory_data[i_event]["A_sigma"][idxs] / A_scale)
-            log_weights.append(memory_data[i_event]["log_weight"][idxs])
+            a_hat_i, a_sig_i, lw_i = _sample_memory_event(
+                memory_data[i_event], idxs, A_scale
+            )
         else:
-            A_hats.append(np.zeros(N_samples))
-            A_sigmas.append(np.zeros(N_samples))
-            log_weights.append(np.zeros(N_samples))
+            a_hat_i = a_sig_i = lw_i = np.zeros(N_samples)
+        A_hats.append(a_hat_i)
+        A_sigmas.append(a_sig_i)
+        log_weights.append(lw_i)
 
         cost1s.append(event_posterior["cos_tilt_1"][idxs])
         cost2s.append(event_posterior["cos_tilt_2"][idxs])
@@ -549,13 +581,7 @@ def generate_tgr_only_data(event_posteriors, memory_data,
     elif isinstance(prng, int):
         prng = np.random.default_rng(prng)
 
-    if scale_tgr:
-        pooled_phi = np.concatenate([
-            md["A_hat"].ravel() for md in memory_data
-        ])
-        A_scale = max(np.nanstd(pooled_phi), 1e-12)
-    else:
-        A_scale = 1
+    A_scale = _compute_A_scale(memory_data, scale_tgr)
 
     # Construct the event posterior arrays.
     # Resample uniformly — log_weight is passed to the model explicitly
@@ -565,9 +591,10 @@ def generate_tgr_only_data(event_posteriors, memory_data,
     log_weights = []
     for md in memory_data:
         idxs = prng.choice(len(md["A_hat"]), size=N_samples, replace=True)
-        A_hats.append(md["A_hat"][idxs] / A_scale)
-        A_sigmas.append(md["A_sigma"][idxs] / A_scale)
-        log_weights.append(md["log_weight"][idxs])
+        a_hat_i, a_sig_i, lw_i = _sample_memory_event(md, idxs, A_scale)
+        A_hats.append(a_hat_i)
+        A_sigmas.append(a_sig_i)
+        log_weights.append(lw_i)
 
     A_hats = np.array(A_hats)
     A_sigmas = np.array(A_sigmas)
