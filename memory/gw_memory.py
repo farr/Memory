@@ -12,6 +12,26 @@ import lalsimulation as lalsim
 
 from memory.gw_residuals import _ensure_bilby_calibration_keys
 
+from scipy.special import log_ndtr
+from scipy.stats import truncnorm
+
+def _log_phi_diff(a, b):
+    """
+    Stable log( Phi(b) - Phi(a) ) for a <= b,
+    where Phi is the standard normal CDF.
+    """
+    logPhi_b = log_ndtr(b)
+    logPhi_a = log_ndtr(a)
+
+    # If b is so small that Phi(b) underflows, logPhi_b = -inf etc.
+    # Use logPhi_b + log(1 - exp(logPhi_a - logPhi_b))
+    if np.isneginf(logPhi_b):
+        return -np.inf
+
+    x = logPhi_a - logPhi_b  # <= 0 if a <= b
+    # If a ~ b, exp(x) ~ 1 and log1p(-1) -> -inf (correct)
+    return logPhi_b + np.log1p(-np.exp(x))
+
 
 def evaluate_surrogate_with_LAL(sample, res, approximant=lalsim.NRSur7dq4, ell_max=4):
     """Evaluate NRSur7dq4 using LALSimulation and return spherical-harmonic modes.
@@ -876,7 +896,7 @@ def make_memories(res, angular_factors=None, approximant=lalsim.NRSur7dq4, ell_m
     return h_memories_in_det
 
 
-def compute_memory_variables_likelihoods_and_weights(res, h_memories_in_dets):
+def compute_memory_variables_likelihoods_and_weights(res, h_memories_in_dets, prior=None):
     """Compute Gaussian amplitude parameters and importance weights for memory.
 
     This function evaluates, for each posterior sample, the optimal
@@ -903,6 +923,38 @@ def compute_memory_variables_likelihoods_and_weights(res, h_memories_in_dets):
         List (indexed by sample) of detector-frame memory waveforms.
         Each entry is a dictionary:
         {ifo_name: h_memory_fd}.
+    prior : dict or None, optional
+        Prior on the memory amplitude A.
+
+        If None (default), an improper flat prior on A over (-∞, ∞)
+        is assumed. In this case:
+            - The marginalization over A is analytic.
+            - The conditional posterior p(A | d, θ) is Gaussian with
+                  mean      A_hat   = K / H
+                  std dev   A_sigma = 1 / sqrt(H)
+              where K = Re<h_m | r> and H = <h_m | h_m>.
+            - The marginal likelihood is defined only up to an
+              overall multiplicative constant.
+
+        If {"type": "gaussian", "mu": μ0, "sigma": σ0}:
+            A ~ Normal(μ0, σ0).
+            - The marginalization over A remains analytic.
+            - The posterior p(A | d, θ) is Gaussian with
+                  mean      (σ0^2 K + μ0) / (1 + σ0^2 H)
+                  std dev   σ0 / sqrt(1 + σ0^2 H).
+            - This prior regularizes large-amplitude solutions and
+              prevents divergence when H is small.
+
+        If {"type": "uniform", "min": A_min, "max": A_max}:
+            A ~ Uniform[A_min, A_max].
+            - The marginalization over A is analytic and expressed
+              in terms of the standard normal CDF.
+            - The posterior p(A | d, θ) is a truncated Gaussian
+              with mean K/H and std dev 1/sqrt(H), restricted to
+              the interval [A_min, A_max].
+            - This prior restricts A to a physically allowed range
+              while remaining non-informative within that range.
+        
 
     Returns
     -------
@@ -928,22 +980,85 @@ def compute_memory_variables_likelihoods_and_weights(res, h_memories_in_dets):
         for det in res["ifos"]:
             hrs += det.template_template_inner_product(
                 h_memories_in_dets[k][det.name], res["fd"][det.name]["residual"][k]
-            )
+            ).real
             hhs += det.template_template_inner_product(
                 h_memories_in_dets[k][det.name], h_memories_in_dets[k][det.name]
-            )
+            ).real
             rrs += det.template_template_inner_product(
                 res["fd"][det.name]["residual"][k], res["fd"][det.name]["residual"][k]
-            )
-        A_hat = np.real(hrs / hhs)
-        A_sigma = 1 / np.sqrt(np.real(hhs))
-        A_sample = np.random.normal(loc=A_hat, scale=A_sigma)
-        log_weight = 0.5 * A_hat * np.real(np.conjugate(hrs)) - 0.5 * np.log(2 * np.pi * hhs)
-        log_likelihood = -0.5 * rrs + log_weight
+            ).real
+            
+        if prior is None:
+            A_hat = np.real(hrs / hhs)
+            A_sigma = 1 / np.sqrt(np.real(hhs))
+            A_sample = np.random.normal(loc=A_hat, scale=A_sigma)
+            log_weight = 0.5 * A_hat * np.real(np.conjugate(hrs)) - 0.5 * np.log(2 * np.pi * hhs)
+            log_likelihood = -0.5 * rrs + log_weight
+        else:
+            ptype = prior.get("type", "").lower()
+            
+            if ptype in ("gaussian", "normal"):
+                # Prior: A ~ N(mu0, sigma0)
+                mu0 = float(prior.get("mu", 0.0))
+                sigma0 = float(prior["sigma"])
+                if sigma0 <= 0:
+                    raise ValueError("Gaussian prior requires sigma > 0")
+                
+                denom = 1.0 + (sigma0 * sigma0) * hhs  # 1 + σ0^2 H
 
+                # Posterior p(A | d, θ) is Gaussian with:
+                A_hat = ((sigma0 * sigma0) * hrs + mu0) / denom
+                A_sigma = sigma0 / np.sqrt(denom)
+                A_sample = np.random.normal(loc=A_hat, scale=A_sigma)
+
+                # Analytic log weight: log ∫ p(A) exp(AK - 0.5 H A^2) dA
+                log_weight = (
+                    -0.5 * np.log(denom)
+                    + 0.5 * ((sigma0 * sigma0) * (hrs * hrs) + 2.0 * mu0 * hrs - (mu0 * mu0) * hhs) / denom
+                )
+                
+                log_likelihood = -0.5 * rrs + log_weight
+            elif ptype in ("uniform", "bounded_uniform", "top_hat", "tophat"):
+                # Prior: A ~ Unif[Amin, Amax]
+                Amin = float(prior["min"])
+                Amax = float(prior["max"])
+                if not (Amax > Amin):
+                    raise ValueError("Uniform prior requires max > min")
+                
+                # Likelihood in A is Gaussian with mean A_mle and std sigma_like:
+                A_mle = hrs / hhs
+                sigma_like = 1.0 / np.sqrt(hhs)
+                
+                # Standardized truncation bounds
+                a = (Amin - A_mle) / sigma_like
+                b = (Amax - A_mle) / sigma_like
+            
+                # Posterior is truncated normal (sample from it)
+                A_sample = truncnorm.rvs(a, b, loc=A_mle, scale=sigma_like)
+                
+                # If you want moments of the truncated posterior:
+                A_hat = truncnorm.mean(a, b, loc=A_mle, scale=sigma_like)
+                A_sigma = truncnorm.std(a, b, loc=A_mle, scale=sigma_like)
+                
+                # Analytic marginalization: involves Phi(b) - Phi(a)
+                log_cdf_diff = _log_phi_diff(a, b)
+                
+                # log weight (exact, includes H-dependent normalization)
+                log_weight = (
+                    -np.log(Amax - Amin)
+                    + 0.5 * (hrs * hrs) / hhs
+                    + 0.5 * np.log(2.0 * np.pi / hhs)
+                    + log_cdf_diff
+                )
+                
+                log_likelihood = -0.5 * rrs + log_weight
+            else:
+                raise ValueError(f"Unknown prior type: {prior.get('type')}")
+        
         memory_variables_likelihoods_and_weights.append(
             [A_hat, A_sigma, A_sample, log_weight, log_likelihood]
         )
+        
     memory_variables_likelihoods_and_weights = np.array(
         memory_variables_likelihoods_and_weights
     )
