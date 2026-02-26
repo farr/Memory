@@ -8,7 +8,9 @@ wave events using PESummary posterior files with spline calibration.
 from __future__ import annotations
 
 import ast
+import glob
 import logging
+import os
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
@@ -187,8 +189,7 @@ def _find_frame_file(frame_dir: str, ifo: str, start: float, end: float) -> Opti
     str or None
         Full path to the first matching file, or ``None`` if none found.
     """
-    import glob as _glob
-    for path in _glob.glob(os.path.join(frame_dir, "*.gwf")):
+    for path in glob.glob(os.path.join(frame_dir, "*.gwf")):
         fname = os.path.basename(path)
         m = _GWF_FILENAME_RE.match(fname)
         if m is None:
