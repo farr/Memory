@@ -72,6 +72,29 @@ def parse_args():
     parser.add_argument("--thin", type=int, default=1)
 
     parser.add_argument(
+        "--frame-dir",
+        type=str,
+        default=None,
+        help=(
+            "Directory containing local BayesWave GWF frame files "
+            "(e.g. downloaded from Zenodo 16857060). For any detector whose "
+            "event time range is covered by a file in this directory, the "
+            "glitch-subtracted strain channel is used instead of GWOSC open "
+            "data. Falls back to GWOSC for uncovered detectors."
+        ),
+    )
+    parser.add_argument(
+        "--glitch-channel-format",
+        type=str,
+        default="{ifo}:DCS-CALIB_STRAIN_CLEAN_C00",
+        help=(
+            "Python format string for the glitch-subtracted channel inside "
+            "the GWF frame files; {ifo} is substituted with the detector "
+            "name. Default: '{ifo}:DCS-CALIB_STRAIN_CLEAN_C00'."
+        ),
+    )
+
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="Overwrite existing output directories.",
@@ -251,6 +274,8 @@ def process_event(filepath, event, args, multiprocess):
             max_samples=args.max_samples,
             label=label,
             thin=args.thin,
+            frame_dir=args.frame_dir,
+            glitch_channel_format=args.glitch_channel_format,
         )
 
         h_memories_in_det = make_memories(

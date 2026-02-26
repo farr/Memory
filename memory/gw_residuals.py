@@ -157,6 +157,80 @@ def _choose_label(data, label: Optional[str]) -> str:
 # GWOSC strain helpers
 # ----------------------------
 
+# GWF filename pattern: {prefix}-{IFO}_HOFT_C00_[AR_]BAYESWAVE_S00-{GPS}-{DUR}.gwf
+_GWF_FILENAME_RE = re.compile(
+    r"^[A-Z]-([A-Z0-9]+)_HOFT_C00_(?:AR_)?BAYESWAVE_S\d+-(\d+)-(\d+)\.gwf$"
+)
+
+# Default channel name for glitch-subtracted strain in BayesWave output frames.
+# Override via glitch_channel_format if your frames use a different convention.
+GLITCH_SUBTRACTED_CHANNEL_FORMAT = "{ifo}:DCS-CALIB_STRAIN_CLEAN_C00"
+
+
+def _find_frame_file(frame_dir: str, ifo: str, start: float, end: float) -> Optional[str]:
+    """Find a BayesWave GWF frame file in *frame_dir* covering [start, end).
+
+    Scans all ``*.gwf`` files in *frame_dir* whose filename encodes the IFO
+    name and a GPS segment that fully contains ``[start, end)``.
+
+    Parameters
+    ----------
+    frame_dir : str
+        Directory containing ``.gwf`` files.
+    ifo : str
+        Interferometer name, e.g. ``"H1"``.
+    start, end : float
+        Requested GPS time range.
+
+    Returns
+    -------
+    str or None
+        Full path to the first matching file, or ``None`` if none found.
+    """
+    import glob as _glob
+    for path in _glob.glob(os.path.join(frame_dir, "*.gwf")):
+        fname = os.path.basename(path)
+        m = _GWF_FILENAME_RE.match(fname)
+        if m is None:
+            continue
+        file_ifo, gps_start, duration = m.group(1), int(m.group(2)), int(m.group(3))
+        if file_ifo != ifo:
+            continue
+        if gps_start <= start and gps_start + duration >= end:
+            return path
+    return None
+
+
+def _read_frame_strain(
+    frame_file: str,
+    ifo: str,
+    start: float,
+    end: float,
+    channel_format: str = GLITCH_SUBTRACTED_CHANNEL_FORMAT,
+) -> TimeSeries:
+    """Read glitch-subtracted strain from a local GWF frame file.
+
+    Parameters
+    ----------
+    frame_file : str
+        Path to the ``.gwf`` file.
+    ifo : str
+        Interferometer name, e.g. ``"H1"``.
+    start, end : float
+        GPS time range to extract.
+    channel_format : str
+        Python format string for the channel name; ``{ifo}`` is replaced by
+        *ifo*.  Default: ``"{ifo}:DCS-CALIB_STRAIN_CLEAN_C00"``.
+
+    Returns
+    -------
+    TimeSeries
+    """
+    channel = channel_format.format(ifo=ifo)
+    LOGGER.info("Reading frame strain: %s  channel=%s  [%.1f, %.1f)", frame_file, channel, start, end)
+    return TimeSeries.read(frame_file, channel, start=start, end=end)
+
+
 def _select_gwosc_dataset(start: float, end: float, fs: float) -> Optional[str]:
     """Select appropriate GWOSC dataset based on time segment and sampling frequency."""
     seg = (int(np.floor(start)), int(np.ceil(end)))
@@ -173,17 +247,52 @@ def _select_gwosc_dataset(start: float, end: float, fs: float) -> Optional[str]:
     return runs[0]
 
 
-def _download_gwosc_strain(detectors: Iterable[str], start: float, end: float, fs: float) -> Dict[str, TimeSeries]:
-    """Download GWOSC open strain data for specified detectors and time range."""
-    dataset = _select_gwosc_dataset(start, end, fs)
+def _download_gwosc_strain(
+    detectors: Iterable[str],
+    start: float,
+    end: float,
+    fs: float,
+    frame_dir: Optional[str] = None,
+    glitch_channel_format: str = GLITCH_SUBTRACTED_CHANNEL_FORMAT,
+) -> Dict[str, TimeSeries]:
+    """Obtain strain data for specified detectors and time range.
+
+    For each detector, if *frame_dir* is given and contains a BayesWave GWF
+    file covering ``[start, end)``, the glitch-subtracted strain is read from
+    that file via :func:`_read_frame_strain`.  Otherwise the data are fetched
+    from GWOSC via :meth:`gwpy.timeseries.TimeSeries.fetch_open_data`.
+
+    Parameters
+    ----------
+    detectors : iterable of str
+        IFO names, e.g. ``["H1", "L1"]``.
+    start, end : float
+        GPS time range.
+    fs : float
+        Sampling frequency (used to select the GWOSC 4 kHz / 16 kHz dataset).
+    frame_dir : str or None
+        Directory containing local ``.gwf`` frame files.  ``None`` disables
+        frame-file lookup (GWOSC only).
+    glitch_channel_format : str
+        Channel format string passed to :func:`_read_frame_strain`.
+    """
+    dataset = None  # lazily queried only when needed
     out: Dict[str, TimeSeries] = {}
     for det in detectors:
-        LOGGER.info("Fetching GWOSC open strain: %s [%s, %s), dataset=%s", det, start, end, dataset)
-        if dataset is None:
-            ts = TimeSeries.fetch_open_data(det, start, end, cache=True, verbose=True)
+        gwf = None
+        if frame_dir is not None:
+            gwf = _find_frame_file(frame_dir, det, start, end)
+
+        if gwf is not None:
+            out[det] = _read_frame_strain(gwf, det, start, end, glitch_channel_format)
         else:
-            ts = TimeSeries.fetch_open_data(det, start, end, cache=True, verbose=True, dataset=dataset)
-        out[det] = ts
+            if dataset is None:
+                dataset = _select_gwosc_dataset(start, end, fs)
+            LOGGER.info("Fetching GWOSC open strain: %s [%s, %s), dataset=%s", det, start, end, dataset)
+            if dataset is None:
+                out[det] = TimeSeries.fetch_open_data(det, start, end, cache=True, verbose=True)
+            else:
+                out[det] = TimeSeries.fetch_open_data(det, start, end, cache=True, verbose=True, dataset=dataset)
     return out
 
 
@@ -440,10 +549,14 @@ def _build_waveform_generator_bbh(cfg: AnalysisConfig) -> WaveformGenerator:
 def _build_ifos_with_psd_and_strain(
     data,
     cfg: AnalysisConfig,
+    frame_dir: Optional[str] = None,
+    glitch_channel_format: str = GLITCH_SUBTRACTED_CHANNEL_FORMAT,
 ) -> InterferometerList:
     """Build interferometer list with PSDs and strain data."""
-    # Download GWOSC open strain
-    strain = _download_gwosc_strain(cfg.detectors, cfg.start_time, cfg.end_time, cfg.sampling_frequency)
+    strain = _download_gwosc_strain(
+        cfg.detectors, cfg.start_time, cfg.end_time, cfg.sampling_frequency,
+        frame_dir=frame_dir, glitch_channel_format=glitch_channel_format,
+    )
 
     # Build IFO objects and set strain
     ifos = InterferometerList([])
@@ -651,13 +764,15 @@ def compute_bbh_residuals_with_spline_calibration(
     calibration_prefix: str = "recalib_",
     default_spline_n_points: int = 10,
     loglevel: str = "INFO",
+    frame_dir: Optional[str] = None,
+    glitch_channel_format: str = GLITCH_SUBTRACTED_CHANNEL_FORMAT,
 ) -> Dict[str, Any]:
     """
     Compute data-model residuals for BBH posterior samples with spline calibration.
-    
+
     This is a convenience function that handles the full pipeline from PESummary
     file to residuals. For more control, use compute_one_sample_fd() directly.
-    
+
     Parameters
     ----------
     pesummary_h5 : str
@@ -680,6 +795,16 @@ def compute_bbh_residuals_with_spline_calibration(
         Default number of spline points if not in config
     loglevel : str, optional
         Logging level (default: 'INFO')
+    frame_dir : str or None, optional
+        Directory containing local BayesWave GWF frame files.  When a file
+        covering the event's time range is found for a given detector, its
+        glitch-subtracted strain channel is used instead of GWOSC open data.
+        Falls back to GWOSC for any detector not covered.
+    glitch_channel_format : str, optional
+        Python format string for the glitch-subtracted channel name inside the
+        GWF file; ``{ifo}`` is replaced with the detector name.  Default:
+        ``"{ifo}:DCS-CALIB_STRAIN_CLEAN_C00"``.  Change this if your frames
+        use a different channel naming convention.
         
     Returns
     -------
@@ -699,7 +824,11 @@ def compute_bbh_residuals_with_spline_calibration(
     use_label = _choose_label(data, label)
     cfg = _parse_analysis_config(data, use_label, event)
 
-    ifos = _build_ifos_with_psd_and_strain(data, cfg)
+    ifos = _build_ifos_with_psd_and_strain(
+        data, cfg,
+        frame_dir=frame_dir,
+        glitch_channel_format=glitch_channel_format,
+    )
     wfgen = _build_waveform_generator_bbh(cfg)
 
     # Attach spline calibration
