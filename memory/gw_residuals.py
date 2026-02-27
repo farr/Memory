@@ -165,8 +165,11 @@ _GWF_FILENAME_RE = re.compile(
 )
 
 # Default channel name for glitch-subtracted strain in BayesWave output frames.
+# Confirmed from Zenodo 16857060 (GWTC-4.0 glitch frames): H1:GDS-CALIB_STRAIN_CLEAN
+# is the finalized PE-ready clean channel.  H1:GDS-CALIB_STRAIN_CLEAN_BAYESWAVE_S00
+# is an intermediate product; H1:GDS-CALIB_STRAIN_CLEAN_glitch is the subtracted model.
 # Override via glitch_channel_format if your frames use a different convention.
-GLITCH_SUBTRACTED_CHANNEL_FORMAT = "{ifo}:GDS-CALIB_STRAIN_CLEAN_BAYESWAVE_S00"
+GLITCH_SUBTRACTED_CHANNEL_FORMAT = "{ifo}:GDS-CALIB_STRAIN_CLEAN"
 
 
 def _find_frame_file(frame_dir: str, ifo: str, start: float, end: float) -> Optional[str]:
