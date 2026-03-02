@@ -101,7 +101,6 @@ def make_joint_model(
     BW_matrices_sel,
     Nobs,
     Ndraw,
-    use_tilts,
     use_tgr,
     mu_tgr_scale=None,
     sigma_tgr_scale=None,
@@ -136,8 +135,6 @@ def make_joint_model(
         Number of observed events.
     Ndraw : int
         Total number of simulated injections drawn.
-    use_tilts : bool
-        Whether to include the spin tilt mixture model.
     use_tgr : bool
         Whether to include TGR hyperparameters in the model.
     mu_tgr_scale : float or None
@@ -284,22 +281,21 @@ def make_joint_model(
         - log_pdraw_sel
     )
 
-    # Adding the tilt
-    if use_tilts:
-        f_iso = numpyro.sample("f_iso", dist.Uniform(0, 1))
-        sigma_tilt = numpyro.sample("sigma_tilt", dist.Uniform(0.05, 10))
+    # Spin tilt mixture model
+    f_iso = numpyro.sample("f_iso", dist.Uniform(0, 1))
+    sigma_tilt = numpyro.sample("sigma_tilt", dist.Uniform(0.05, 10))
 
-        def log_tilt_density(cost1, cost2):
-            quad = ((cost1 - 1) ** 2 + (cost2 - 1) ** 2)
-            log_gauss = -quad / (2 * jnp.square(sigma_tilt)) - jnp.log(
-                2 * jnp.pi * jnp.square(sigma_tilt)
-            )
-            term_a = jnp.log(f_iso) - jnp.log(4.0)
-            term_b = jnp.log1p(-f_iso) + log_gauss
-            return logsumexp(jnp.stack([term_a, term_b], axis=0), axis=0)
+    def log_tilt_density(cost1, cost2):
+        quad = ((cost1 - 1) ** 2 + (cost2 - 1) ** 2)
+        log_gauss = -quad / (2 * jnp.square(sigma_tilt)) - jnp.log(
+            2 * jnp.pi * jnp.square(sigma_tilt)
+        )
+        term_a = jnp.log(f_iso) - jnp.log(4.0) + jnp.zeros_like(log_gauss)
+        term_b = jnp.log1p(-f_iso) + log_gauss
+        return logsumexp(jnp.stack([term_a, term_b], axis=0), axis=0)
 
-        log_wts += log_tilt_density(cost1s, cost2s)
-        log_sel_wts += log_tilt_density(cost1s_sel, cost2s_sel)
+    log_wts += log_tilt_density(cost1s, cost2s)
+    log_sel_wts += log_tilt_density(cost1s_sel, cost2s_sel)
 
     # Spin KDE — always 2×2 (a1, a2); the TGR dimension is handled
     # analytically below.

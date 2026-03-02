@@ -347,11 +347,6 @@ def _build_parser():
         ),
     )
     parser.add_argument(
-        "--use-tilts",
-        action="store_true",
-        help="Include spin-tilt mixture model in the joint fit",
-    )
-    parser.add_argument(
         "--ignore-memory-weights",
         action="store_true",
         help=(
@@ -531,7 +526,6 @@ def main():
         snr_inspiral_cut=args.snr_inspiral_cut,
         N_samples=args.n_samples_per_event,
         snr_cut=args.snr_cut,
-        use_tilts=args.use_tilts,
         prng=seed,
         ignore_memory_weights=args.ignore_memory_weights,
     )
@@ -589,15 +583,14 @@ def main():
         if use_tgr:
             _init["mu_tgr"]    = 1.0
             _init["sigma_tgr"] = 0.5
-        if args.use_tilts:
-            _init["f_iso"]     = 0.5
-            _init["sigma_tilt"] = 1.0
+        _init["f_iso"]      = 0.5
+        _init["sigma_tilt"] = 1.0
         kernel = NUTS(make_joint_model,
                       init_strategy=init_to_value(values=_init))
         mcmc = MCMC(kernel, num_warmup=args.n_warmup,
                     num_samples=args.n_sample, num_chains=args.n_chains)
         mcmc.run(prng_key, event_data, inj_data, BW, BW_sel,
-                 Nobs, Ndraw, args.use_tilts, use_tgr,
+                 Nobs, Ndraw, use_tgr,
                  args.mu_tgr_scale, args.sigma_tgr_scale)
         fit = az.from_numpyro(mcmc)
         _rescale_tgr_posterior(fit, A_scale)

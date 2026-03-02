@@ -192,9 +192,7 @@ Memory signals are DC/step-function-like, concentrated well below 10 Hz where de
 
 ### Injection draw prior Jacobian correction (`data.py:read_injection_file`)
 
-The injection file field `lnpdraw_mass1_source_mass2_source_redshift_spin1x_spin1y_spin1z_spin2x_spin2y_spin2z` stores the draw prior density in **Cartesian spin coordinates**. The population model uses spherical spin parameters (`a`, `cos_tilt`) or aligned-spin (`chi_z`). A Jacobian correction of `2*log(a_1) + 2*log(a_2)` is needed to convert from the Cartesian density (which includes a `1/a²` factor per spin) to the spherical/marginalized density used by the model.
-
-This correction applies to both the `use_tilts=True` and `use_tilts=False` branches. For `use_tilts=False`, an additional `AlignedSpin` prior factor converts from the full spherical draw prior to the marginal draw prior over `chi_z = a*cos(tilt)`.
+The injection file field `lnpdraw_mass1_source_mass2_source_redshift_spin1x_spin1y_spin1z_spin2x_spin2y_spin2z` stores the draw prior density in **Cartesian spin coordinates**. The population model uses spherical spin parameters (`a`, `cos_tilt`). A Jacobian correction of `2*log(a_1) + 2*log(a_2)` is needed to convert from the Cartesian density (which includes a `1/a²` factor per spin) to the spherical density used by the model.
 
 **Sources consulted:**
 - O1+O2+O3 Search Sensitivity Estimates (Zenodo 5636816): *"sampling PDFs are computed in terms of the variates recorded in the summary files"* and *"We define the injected spin distribution over Cartesian spin components."*

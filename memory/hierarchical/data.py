@@ -6,15 +6,12 @@ import re
 
 import numpy as np
 import h5py
-import bilby
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
 IFAR_THRESHOLD = 1
 N_SAMPLES_PER_EVENT = 10000
-
-align_spin_prior = bilby.gw.prior.AlignedSpin()
 
 
 def load_memory_data(event_files, memory_dir, waveform_label=None):
@@ -97,7 +94,7 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
 
 
 def read_injection_file(
-    vt_file, ifar_threshold=IFAR_THRESHOLD, use_tilts=False, snr_inspiral_cut=0, snr_cut=0
+    vt_file, ifar_threshold=IFAR_THRESHOLD, snr_inspiral_cut=0, snr_cut=0
 ):
     """Read an HDF5 injection/selection file and extract relevant data.
 
@@ -117,9 +114,6 @@ def read_injection_file(
     ifar_threshold : float
         Inverse false-alarm rate threshold (yr); injections with min FAR
         below 1/ifar_threshold are considered found.
-    use_tilts : bool
-        If False, reweight the draw prior by the aligned-spin prior
-        (marginalizing over tilt angles).
     snr_inspiral_cut : float
         Inspiral SNR threshold; injections above this are also considered found.
     snr_cut : float
@@ -186,30 +180,18 @@ def read_injection_file(
 
         # The draw prior density (ln_prior) is defined w.r.t. Cartesian spin
         # coordinates: p_draw(m1, m2, z, s1x, s1y, s1z, s2x, s2y, s2z).
-        # The population model uses spherical spin parameters (a, cos_tilt)
-        # or aligned-spin (chi_z). To convert the draw prior to the
+        # The population model uses spherical spin parameters (a, cos_tilt, phi)
+        # or aligned-spin (chi_z, cos_tilt, phi). To convert the draw prior to the
         # marginalized parameter space, we need to:
-        #   1. Factor out the Cartesian spin density, which for isotropic
-        #      uniform spins is p_Cart(sx, sy, sz) = 1/(4*pi*a^2). This
-        #      amounts to adding 2*log(a) per spin (the 4*pi is constant
-        #      and cancels in importance-weight ratios).
-        #   2. For use_tilts=False, add the aligned-spin marginal draw
-        #      prior p_aligned(chi_z) = -log|chi_z|/2, since the model
-        #      describes chi_z = a*cos(tilt) directly.
+        #   The Jacobian for (sx, sy, sz) -> (a, cos_tilt, phi) is a^2,
+        #   so we add 2*log(a) per spin to convert the draw prior to the
+        #   spherical-spin parameter space used by the model.
         log_jacobian = (
             2 * np.log(np.clip(injections["a_1"], 1e-30, None)) +
             2 * np.log(np.clip(injections["a_2"], 1e-30, None))
         )
 
-        if use_tilts:
-            log_prior = ln_prior + log_jacobian
-        else:
-            log_prior = (
-                ln_prior
-                + log_jacobian
-                + np.log(align_spin_prior.prob(events["spin1z"]))
-                + np.log(align_spin_prior.prob(events["spin2z"]))
-            )
+        log_prior = ln_prior + log_jacobian
 
         injections["log_prior"] = log_prior - np.log(events["weights"])
 
@@ -286,7 +268,6 @@ def generate_data(
     injection_file,
     memory_data=None,
     use_tgr=True,
-    use_tilts=False,
     ifar_threshold=IFAR_THRESHOLD,
     N_samples=N_SAMPLES_PER_EVENT,
     snr_cut=0,
@@ -313,8 +294,6 @@ def generate_data(
         ``use_tgr=True``; ignored when ``use_tgr=False``.
     use_tgr : bool
         Whether to include the TGR parameter in the KDE.
-    use_tilts : bool
-        Whether to include tilt angles in the data arrays.
     ifar_threshold : float
         IFAR threshold passed to `read_injection_file`.
     N_samples : int
@@ -409,7 +388,7 @@ def generate_data(
             memory_data[i_event]["event_name"] if use_tgr
             else f"event {i_event}"
         )
-        d_full = 7 if use_tilts else 5
+        d_full = 7
         if neff < d_full + 1:
             logger.warning(
                 "Skipping event %s: effective sample size %.1f is too low "
@@ -460,22 +439,17 @@ def generate_data(
         # BW_matrices are always 2x2 (spins only); the TGR dimension
         # is handled analytically in the model.
         d = 2
-        if use_tilts:
-            data_array = np.array(
-                [
-                    a1s[-1],
-                    a2s[-1],
-                    m1s[-1],
-                    qs[-1],
-                    zs[-1],
-                    cost1s[-1],
-                    cost2s[-1],
-                ]
-            )
-        else:
-            data_array = np.array(
-                [a1s[-1], a2s[-1], m1s[-1], qs[-1], zs[-1]]
-            )
+        data_array = np.array(
+            [
+                a1s[-1],
+                a2s[-1],
+                m1s[-1],
+                qs[-1],
+                zs[-1],
+                cost1s[-1],
+                cost2s[-1],
+            ]
+        )
 
         full_cov_i = np.cov(data_array)
         try:
@@ -516,37 +490,21 @@ def generate_data(
         ifar_threshold=ifar_threshold,
         snr_cut=snr_cut,
         snr_inspiral_cut=snr_inspiral_cut,
-        use_tilts=use_tilts,
     )
     Ndraw = int(injection_data["total_generated"])
 
-    # Construct the injection arrays
-    if use_tilts:
-        injection_data_array = np.array(
-            [
-                injection_data["mass_1_source"],
-                injection_data["mass_ratio"],
-                injection_data["cos_tilt_1"],
-                injection_data["cos_tilt_2"],
-                injection_data["a_1"],
-                injection_data["a_2"],
-                injection_data["redshift"],
-                injection_data["log_prior"],
-            ]
-        )
-    else:
-        injection_data_array = np.array(
-            [
-                injection_data["mass_1_source"],
-                injection_data["mass_ratio"],
-                injection_data["cos_tilt_1"],
-                injection_data["cos_tilt_2"],
-                injection_data["spin1z"],
-                injection_data["spin2z"],
-                injection_data["redshift"],
-                injection_data["log_prior"],
-            ]
-        )
+    injection_data_array = np.array(
+        [
+            injection_data["mass_1_source"],
+            injection_data["mass_ratio"],
+            injection_data["cos_tilt_1"],
+            injection_data["cos_tilt_2"],
+            injection_data["a_1"],
+            injection_data["a_2"],
+            injection_data["redshift"],
+            injection_data["log_prior"],
+        ]
+    )
 
     return (
         event_data_array,
