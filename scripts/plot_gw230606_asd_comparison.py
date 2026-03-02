@@ -98,13 +98,15 @@ def main():
         gridspec_kw={"hspace": 0.35, "wspace": 0.25},
     )
 
+    df = 1.0 / FFT_DT   # frequency resolution = lowest non-zero frequency bin
+
     # H1 ASD
     ax = axes[0, 0]
     ax.loglog(h1_gwosc_asd.frequencies.value, h1_gwosc_asd.value,
               lw=0.8, color="C0", label="GWOSC (fetch_open_data)", alpha=0.9)
     ax.loglog(h1_frame_asd.frequencies.value, h1_frame_asd.value,
               lw=0.8, color="C1", label=f"BayesWave frame\n({H1_CHAN})", alpha=0.9)
-    ax.set_xlim(10, h1_gwosc.sample_rate.value / 2)
+    ax.set_xlim(df, h1_gwosc.sample_rate.value / 2)
     ax.set_ylabel(r"ASD  [strain / $\sqrt{\mathrm{Hz}}$]")
     ax.set_title(f"H1  —  {EVENT}")
     ax.legend(fontsize=8)
@@ -114,7 +116,7 @@ def main():
     ax = axes[1, 0]
     ax.semilogx(freqs, h1_ratio, lw=0.7, color="C2")
     ax.axhline(1, color="k", lw=0.8, ls="--")
-    ax.set_xlim(10, h1_gwosc.sample_rate.value / 2)
+    ax.set_xlim(df, h1_gwosc.sample_rate.value / 2)
     ax.set_ylim(0.5, 2.0)
     ax.set_ylabel("ASD ratio  (frame / GWOSC)")
     ax.set_xlabel("Frequency [Hz]")
@@ -127,7 +129,7 @@ def main():
               lw=0.8, color="C0", label="GWOSC (fetch_open_data)", alpha=0.9)
     ax.loglog(l1_frame_asd.frequencies.value, l1_frame_asd.value,
               lw=0.8, color="C3", label=f"GWOSC frame\n({L1_CHAN})", alpha=0.9)
-    ax.set_xlim(10, l1_gwosc.sample_rate.value / 2)
+    ax.set_xlim(df, l1_gwosc.sample_rate.value / 2)
     ax.set_ylabel(r"ASD  [strain / $\sqrt{\mathrm{Hz}}$]")
     ax.set_title(f"L1  —  {EVENT}")
     ax.legend(fontsize=8)
@@ -137,7 +139,7 @@ def main():
     ax = axes[1, 1]
     ax.semilogx(freqs_l, l1_ratio, lw=0.7, color="C4")
     ax.axhline(1, color="k", lw=0.8, ls="--")
-    ax.set_xlim(10, l1_gwosc.sample_rate.value / 2)
+    ax.set_xlim(df, l1_gwosc.sample_rate.value / 2)
     ax.set_ylim(0.5, 2.0)
     ax.set_ylabel("ASD ratio  (frame / GWOSC)")
     ax.set_xlabel("Frequency [Hz]")

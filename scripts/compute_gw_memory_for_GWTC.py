@@ -100,6 +100,17 @@ def parse_args():
         help="Overwrite existing output directories.",
     )
 
+    parser.add_argument(
+        "--events",
+        type=str,
+        nargs="+",
+        default=None,
+        help=(
+            "Only process these events (e.g. GW230606_004305). "
+            "If not given, all events in base-dir are processed."
+        ),
+    )
+
     return parser.parse_args()
 
 
@@ -190,8 +201,8 @@ def approximant_has_td_generator(approximant_name):
             30 * MSUN_SI,
             0, 0, 0,
             0, 0, 0,
-            16,
-            50,
+            20,
+            20,
             400 * PC_SI * 1e6,
             None,
             4,
@@ -342,6 +353,8 @@ def main():
         event_files = find_unique_event_files(gwtc_dir)
 
         for event, filepath in event_files.items():
+            if args.events is not None and event not in args.events:
+                continue
             tasks.append((str(filepath), event, vars(args)))
 
     nproc = min(mp.cpu_count() - 1, len(tasks))

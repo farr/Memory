@@ -288,7 +288,11 @@ def _download_gwosc_strain(
             gwf = _find_frame_file(frame_dir, det, start, end)
 
         if gwf is not None:
-            out[det] = _read_frame_strain(gwf, det, start, end, glitch_channel_format)
+            ts = _read_frame_strain(gwf, det, start, end, glitch_channel_format)
+            if ts.sample_rate.value != fs:
+                LOGGER.info("Resampling %s frame %g Hz -> %g Hz", det, ts.sample_rate.value, fs)
+                ts = ts.resample(fs)
+            out[det] = ts
         else:
             if dataset is None:
                 dataset = _select_gwosc_dataset(start, end, fs)
@@ -571,6 +575,7 @@ def _build_ifos_with_psd_and_strain(
             ifo.maximum_frequency = float(cfg.maximum_frequency[det])
 
         ifo.strain_data.set_from_gwpy_timeseries(strain[det])
+        ifo.strain_data.roll_off = 0.25 * cfg.duration  # Tukey alpha = 0.5
         ifos.append(ifo)
 
     # Attach PSDs embedded in PESummary
