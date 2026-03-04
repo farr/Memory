@@ -374,8 +374,15 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
 
     trig = float(event_gps(event))
 
-    duration = float(_get_cfg(cfg, "data", "duration", 4.0))
-    sampling_frequency = float(_get_cfg(cfg, "data", "sampling_frequency", 4096))
+    duration = _get_cfg(cfg, "data", "duration", None)
+    if duration is None:
+        duration = _get_cfg(cfg, "engine", "seglen", 4.0)
+    duration = float(duration)
+    
+    sampling_frequency = _get_cfg(cfg, "data", "sampling_frequency", None)
+    if sampling_frequency is None:
+        sampling_frequency = _get_cfg(cfg, "engine", "srate", 4096)
+    sampling_frequency = float(sampling_frequency)
 
     start_time_cfg = _as_float(_get_cfg(cfg, "data", "start_time", None), None)
     end_time_cfg = _as_float(_get_cfg(cfg, "data", "end_time", None), None)
@@ -386,15 +393,33 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
         end_time = trig + duration / 2.0
 
     # IMPORTANT: use the corrected `detectors` when building per-IFO dicts
-    min_freq = _parse_ifo_freq_dict(_get_cfg(cfg, "analysis", "minimum_frequency", 20), detectors, default=20.0)
+    min_freq_val = _get_cfg(cfg, "analysis", "minimum_frequency", None)
+    if min_freq_val is None:
+        min_freq_val = _get_cfg(cfg, "lalinference", "flow", 20)
+    min_freq = _parse_ifo_freq_dict(min_freq_val, detectors, default=20.0)
 
     max_freq_val = _get_cfg(cfg, "analysis", "maximum_frequency", None)
+    if max_freq_val is None:
+        max_freq_val = _get_cfg(cfg, "lalinference", "fhigh", None)
+    
     max_freq = None
     if max_freq_val is not None:
-        max_freq = _parse_ifo_freq_dict(max_freq_val, detectors, default=float(sampling_frequency / 2.0))
+        max_freq = _parse_ifo_freq_dict(
+            max_freq_val,
+            detectors,
+            default=float(sampling_frequency / 2.0),
+        )
 
-    reference_frequency = float(_get_cfg(cfg, "waveform", "reference_frequency", 50.0))
-    waveform_approximant = _infer_waveform_approximant_from_config(cfg, default="IMRPhenomPv2")
+    reference_frequency = _get_cfg(cfg, "waveform", "reference_frequency", None)
+    if reference_frequency is None:
+        reference_frequency = _get_cfg(cfg, "engine", "fref", 50.0)
+    reference_frequency = float(reference_frequency)
+    
+    waveform_approximant = _get_cfg(cfg, "engine", "approx", None)
+    if waveform_approximant is None:
+        waveform_approximant = _infer_waveform_approximant_from_config(
+            cfg, default="IMRPhenomPv2"
+        )
 
     return AnalysisConfig(
         label=label,

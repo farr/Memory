@@ -231,7 +231,7 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
     phiRef = sample["phase"]
 
     fs = config.sampling_frequency
-    deltaT = 1 / fs
+    deltaT = 1.0 / fs
     
     duration = config.duration
     deltaF = 1 / duration

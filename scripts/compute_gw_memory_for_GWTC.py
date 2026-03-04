@@ -460,5 +460,7 @@ def main():
         for task in tasks:
             process_event_wrapper(task, args.multiprocess_samples)
 
+    print("Done!", flush=True)
+
 if __name__ == "__main__":
     main()
