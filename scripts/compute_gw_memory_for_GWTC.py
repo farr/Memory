@@ -284,24 +284,46 @@ def save_histogram(event_dir, label, arr):
 # Main processing
 # ================================================================
 
-def process_event(filepath, event, args, multiprocess):
+def update_results_hdf5(filepath, label, arr):
+    """Create/append one label into the HDF5 file, replacing it if it exists."""
+    with h5py.File(filepath, "a") as f:
+        if label in f:
+            del f[label]
+        grp = f.create_group(label)
+        grp.create_dataset("A_hat", data=arr[:, 0])
+        grp.create_dataset("A_sigma", data=arr[:, 1])
+        grp.create_dataset("A_sample", data=arr[:, 2])
+        grp.create_dataset("log_weight", data=arr[:, 3])
+        grp.create_dataset("log_likelihood", data=arr[:, 4])
+
+
+def process_event(filepath, event, args, event_dir, multiprocess):
+    """
+    Process all labels for a single event.
+
+    NEW BEHAVIOR:
+      - After each label finishes, immediately:
+          * append/replace that label into memory_results.h5
+          * write that label's histogram plot
+    """
     labels = get_waveform_labels_from_hdf5(filepath)
 
     results = {}
+    h5_path = Path(event_dir) / "memory_results.h5"
 
     for label in labels:
         approximant_name = parse_approximant_from_label(label)
 
         if "Mixed" in label:
             continue
-        
+
         print(approximant_name, flush=True)
 
         try:
             approximant = getattr(lalsim, approximant_name)
-        except:
+        except Exception:
             continue
-            
+
         try:
             res = compute_bbh_residuals_with_spline_calibration(
                 str(filepath),
@@ -312,7 +334,8 @@ def process_event(filepath, event, args, multiprocess):
                 frame_dir=args.frame_dir,
                 glitch_channel_format=args.glitch_channel_format,
             )
-        except:
+        except Exception:
+            # Some PESummary files use e.g. "GW150914" rather than "GW150914_XXXXXX"
             res = compute_bbh_residuals_with_spline_calibration(
                 str(filepath),
                 event=event.split("_")[0],
@@ -324,7 +347,7 @@ def process_event(filepath, event, args, multiprocess):
             )
 
         print("Making memories!", flush=True)
-            
+
         h_memories_in_det = make_memories(
             res,
             approximant=approximant,
@@ -339,12 +362,18 @@ def process_event(filepath, event, args, multiprocess):
 
         results[label] = memory_vars
 
+        update_results_hdf5(h5_path, label, memory_vars)
+        save_histogram(event_dir, label, memory_vars)
+
     return results
 
 
 def process_event_wrapper(task, multiprocess=False):
+    """
+    Wrapper used by both serial and multiprocessing event loops.
+    """
     filepath, event, args_dict = task
-    
+
     # Rebuild args namespace (safer for multiprocessing)
     args = argparse.Namespace(**args_dict)
 
@@ -352,28 +381,25 @@ def process_event_wrapper(task, multiprocess=False):
     if event_dir.exists() and not args.overwrite:
         return
 
-    try:
-        results = process_event(filepath, event, args, multiprocess)
-    except Exception as e:
-        print(f"Error processing event {event}: {e}")
-        return None
-        
-    if len(results) == 0:
-        return None
-
+    # Create output dir before processing so we can save after each label
     event_dir = prepare_output_directory(
         args.output_dir,
         event,
         overwrite=args.overwrite,
     )
 
-    h5_path = event_dir / "memory_results.h5"
-    save_results_hdf5(h5_path, results)
+    try:
+        results = process_event(filepath, event, args, event_dir, multiprocess)
+    except Exception as e:
+        print(f"Error processing event {event}: {e}")
+        return None
 
-    for label, arr in results.items():
-        save_histogram(event_dir, label, arr)
+    if results is None or len(results) == 0:
+        # No successful labels; keep directory (or remove if you prefer)
+        return None
 
     return event
+    
 
 # ================================================================
 # Main
