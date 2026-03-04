@@ -258,49 +258,56 @@ def _download_gwosc_strain(
     fs: float,
     frame_dir: Optional[str] = None,
     glitch_channel_format: str = GLITCH_SUBTRACTED_CHANNEL_FORMAT,
+    *,
+    skip_missing: bool = True,
 ) -> Dict[str, TimeSeries]:
-    """Obtain strain data for specified detectors and time range.
+    """
+    Obtain strain data for specified detectors and time range.
 
-    For each detector, if *frame_dir* is given and contains a BayesWave GWF
-    file covering ``[start, end)``, the glitch-subtracted strain is read from
-    that file via :func:`_read_frame_strain`.  Otherwise the data are fetched
-    from GWOSC via :meth:`gwpy.timeseries.TimeSeries.fetch_open_data`.
-
-    Parameters
-    ----------
-    detectors : iterable of str
-        IFO names, e.g. ``["H1", "L1"]``.
-    start, end : float
-        GPS time range.
-    fs : float
-        Sampling frequency (used to select the GWOSC 4 kHz / 16 kHz dataset).
-    frame_dir : str or None
-        Directory containing local ``.gwf`` frame files.  ``None`` disables
-        frame-file lookup (GWOSC only).
-    glitch_channel_format : str
-        Channel format string passed to :func:`_read_frame_strain`.
+    If a detector's strain cannot be obtained (e.g., not observing / not in GWOSC),
+    skip it when skip_missing=True.
     """
     dataset = None  # lazily queried only when needed
     out: Dict[str, TimeSeries] = {}
+
     for det in detectors:
+        # 1) Try local frames first
         gwf = None
         if frame_dir is not None:
             gwf = _find_frame_file(frame_dir, det, start, end)
 
-        if gwf is not None:
-            ts = _read_frame_strain(gwf, det, start, end, glitch_channel_format)
-            if ts.sample_rate.value != fs:
-                LOGGER.info("Resampling %s frame %g Hz -> %g Hz", det, ts.sample_rate.value, fs)
-                ts = ts.resample(fs)
-            out[det] = ts
-        else:
-            if dataset is None:
-                dataset = _select_gwosc_dataset(start, end, fs)
-            LOGGER.info("Fetching GWOSC open strain: %s [%s, %s), dataset=%s", det, start, end, dataset)
-            if dataset is None:
-                out[det] = TimeSeries.fetch_open_data(det, start, end, cache=True, verbose=True)
+        try:
+            if gwf is not None:
+                ts = _read_frame_strain(gwf, det, start, end, glitch_channel_format)
             else:
-                out[det] = TimeSeries.fetch_open_data(det, start, end, cache=True, verbose=True, dataset=dataset)
+                if dataset is None:
+                    dataset = _select_gwosc_dataset(start, end, fs)
+                LOGGER.info("Fetching GWOSC open strain: %s [%s, %s), dataset=%s", det, start, end, dataset)
+                if dataset is None:
+                    ts = TimeSeries.fetch_open_data(det, start, end, cache=True, verbose=True)
+                else:
+                    ts = TimeSeries.fetch_open_data(det, start, end, cache=True, verbose=True, dataset=dataset)
+
+            # resample if needed
+            if ts.sample_rate.value != fs:
+                LOGGER.info("Resampling %s %g Hz -> %g Hz", det, ts.sample_rate.value, fs)
+                ts = ts.resample(fs)
+
+            out[det] = ts
+
+        except Exception as e:
+            msg = f"Could not obtain strain for {det} covering [{start}, {end}): {e!r}"
+            if skip_missing:
+                LOGGER.warning("%s. Dropping detector %s.", msg, det)
+                continue
+            raise
+
+    if not out:
+        raise RuntimeError(
+            "Could not obtain strain for any detector. "
+            "Provide frame_dir with local frames or choose a different time segment."
+        )
+
     return out
 
 
@@ -335,18 +342,35 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
     """Parse PESummary config into AnalysisConfig dataclass."""
     cfg = data.config[label]
 
+    # --- 1) Start with detectors from config (if present) ---
     dets = _get_cfg(cfg, "data", "detectors", None)
     if dets is None:
-        detectors = tuple(sorted(event_detectors(event)))
+        detectors_cfg = tuple(sorted(event_detectors(event)))
     else:
         dets = _maybe_literal(dets)
         if isinstance(dets, str):
             try:
-                detectors = tuple(ast.literal_eval(dets))
+                detectors_cfg = tuple(ast.literal_eval(dets))
             except Exception:
-                detectors = tuple(dets.replace(",", " ").split())
+                detectors_cfg = tuple(dets.replace(",", " ").split())
         else:
-            detectors = tuple(dets)
+            detectors_cfg = tuple(dets)
+
+    detectors_cfg = tuple(str(d).strip() for d in detectors_cfg if str(d).strip())
+
+    # --- 2) OVERRIDE using detectors actually present in PESummary PSD for this label ---
+    # This prevents "only L1" config entries from dropping H1 even though the run has H1 PSD/samples.
+    psd_for_label = None
+    try:
+        psd_for_label = data.psd[label]
+    except Exception:
+        psd_for_label = None
+
+    if isinstance(psd_for_label, dict) and len(psd_for_label) > 0:
+        detectors_psd = tuple(sorted(psd_for_label.keys()))
+        detectors = detectors_psd
+    else:
+        detectors = detectors_cfg
 
     trig = float(event_gps(event))
 
@@ -361,6 +385,7 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
         start_time = trig - duration / 2.0
         end_time = trig + duration / 2.0
 
+    # IMPORTANT: use the corrected `detectors` when building per-IFO dicts
     min_freq = _parse_ifo_freq_dict(_get_cfg(cfg, "analysis", "minimum_frequency", 20), detectors, default=20.0)
 
     max_freq_val = _get_cfg(cfg, "analysis", "maximum_frequency", None)
@@ -564,23 +589,35 @@ def _build_ifos_with_psd_and_strain(
     strain = _download_gwosc_strain(
         cfg.detectors, cfg.start_time, cfg.end_time, cfg.sampling_frequency,
         frame_dir=frame_dir, glitch_channel_format=glitch_channel_format,
+        skip_missing=True,
     )
 
-    # Build IFO objects and set strain
+    available = tuple(sorted(strain.keys()))
+    if set(available) != set(cfg.detectors):
+        LOGGER.warning(
+            "Requested detectors=%s but strain available only for %s. Proceeding with available detectors.",
+            cfg.detectors, available
+        )
+
+    # Build IFO objects and set strain (ONLY available)
     ifos = InterferometerList([])
-    for det in cfg.detectors:
+    for det in available:
         ifo = bilby.gw.detector.get_empty_interferometer(det)
-        ifo.minimum_frequency = float(cfg.minimum_frequency[det])
-        if cfg.maximum_frequency is not None:
+
+        ifo.minimum_frequency = float(cfg.minimum_frequency.get(det, 20.0))
+        if cfg.maximum_frequency is not None and det in cfg.maximum_frequency:
             ifo.maximum_frequency = float(cfg.maximum_frequency[det])
 
         ifo.strain_data.set_from_gwpy_timeseries(strain[det])
-        ifo.strain_data.roll_off = 0.25 * cfg.duration  # Tukey alpha = 0.5
+        ifo.strain_data.roll_off = 0.25 * cfg.duration
         ifos.append(ifo)
 
-    # Attach PSDs embedded in PESummary
+    # Attach PSDs embedded in PESummary (ONLY for available)
     psd_dict = data.psd[cfg.label]
     for ifo in ifos:
+        if ifo.name not in psd_dict:
+            LOGGER.warning("No PSD in PESummary for %s; leaving PSD unset.", ifo.name)
+            continue
         psd = psd_dict[ifo.name]
         freq = np.asarray(psd.frequencies)
         psd_vals = np.asarray(psd.strains)
@@ -601,21 +638,42 @@ _CAL_KIND_SYNONYMS = {
     "phase": ["phase", "phi", "dphi", "deltaPhi", "delta_phase"],
 }
 
+_SPCAL_PATTERNS = {
+    "amplitude": [
+        "{ifo}_spcal_amp_{i}",
+        "{ifo}_spcal_amplitude_{i}",
+        "spcal_{ifo}_amp_{i}",
+        "spcal_{ifo}_amplitude_{i}",
+    ],
+    "phase": [
+        "{ifo}_spcal_phi_{i}",
+        "{ifo}_spcal_phase_{i}",
+        "spcal_{ifo}_phi_{i}",
+        "spcal_{ifo}_phase_{i}",
+    ],
+}
+
 
 def _find_cal_key(sample_keys: List[str], ifo: str, kind: str, i: int) -> Optional[str]:
-    """
-    Find calibration parameter key in posterior sample.
-    
-    Supports multiple naming conventions:
-      - recalib_H1_amplitude_0
-      - H1_recalib_amplitude_0
-      - recalib_H1_amp_0
-      - etc.
-    """
     syns = _CAL_KIND_SYNONYMS[kind]
+    keys_lut = {k.lower(): k for k in sample_keys}  # lower -> original
 
+    # 0) First: exact known spcal patterns
+    for pat in _SPCAL_PATTERNS.get(kind, []):
+        want_l = pat.format(ifo=ifo.lower(), i=i)
+        # sample keys might have original case like "H1_spcal_amp_0"
+        # so try both lower(ifo) and raw ifo just in case:
+        for want in (
+            pat.format(ifo=ifo, i=i),
+            pat.format(ifo=ifo.lower(), i=i),
+            pat.format(ifo=ifo.upper(), i=i),
+        ):
+            hit = keys_lut.get(want.lower())
+            if hit is not None:
+                return hit
+
+    # 1) Your existing fuzzy logic (recalib_* etc.)
     idx_pat = rf"(?:_{i}\b|{i}\b)"
-
     candidates = []
     for k in sample_keys:
         kl = k.lower()
@@ -630,12 +688,10 @@ def _find_cal_key(sample_keys: List[str], ifo: str, kind: str, i: int) -> Option
     if not candidates:
         return None
 
-    # Prefer exact bilby naming
     want = f"recalib_{ifo}_{kind}_{i}"
     if want in candidates:
         return want
 
-    # Prefer keys starting with recalib_{ifo}_
     pref = f"recalib_{ifo}_"
     starts = [k for k in candidates if k.startswith(pref)]
     if len(starts) == 1:
@@ -696,7 +752,6 @@ def compute_one_sample_fd(
     ifos: InterferometerList,
     waveform_generator: WaveformGenerator,
     sample: Dict[str, Any],
-    is_SEOB: bool,
 ) -> Dict[str, Dict[str, np.ndarray]]:
     """
     Compute frequency-domain model and residual for a single posterior sample.
@@ -722,11 +777,8 @@ def compute_one_sample_fd(
     pols = waveform_generator.frequency_domain_strain(sample)
 
     # Normalize calibration parameter names to bilby conventions
-    if not is_SEOB:
-        n_points = int(ifos[0].calibration_model.n_points)
-        sample_normalized = _ensure_bilby_calibration_keys(sample, tuple(ifo.name for ifo in ifos), n_points)
-    else:
-        sample_normalized = sample
+    n_points = int(ifos[0].calibration_model.n_points)
+    sample_normalized = _ensure_bilby_calibration_keys(sample, tuple(ifo.name for ifo in ifos), n_points)
         
     out: Dict[str, Dict[str, np.ndarray]] = {}
     for ifo in ifos:
@@ -838,19 +890,19 @@ def compute_bbh_residuals_with_spline_calibration(
         frame_dir=frame_dir,
         glitch_channel_format=glitch_channel_format,
     )
+    used_detectors = tuple(ifo.name for ifo in ifos)
     wfgen = _build_waveform_generator_bbh(cfg)
 
     # Attach spline calibration
-    if not "SEOBNRv4PHM" in label:
-        cfg_dict = data.config[cfg.label]
-        calibration_info = _attach_spline_calibration_from_config(
-            ifos,
-            cfg_dict,
-            cfg.detectors,
-            base_prefix=calibration_prefix,
-            default_n_points=default_spline_n_points,
-        )
-        LOGGER.info("Calibration spline settings: %s", calibration_info)
+    cfg_dict = data.config[cfg.label]
+    calibration_info = _attach_spline_calibration_from_config(
+        ifos,
+        cfg_dict,
+        used_detectors,
+        base_prefix=calibration_prefix,
+        default_n_points=default_spline_n_points,
+    )
+    LOGGER.info("Calibration spline settings: %s", calibration_info)
 
     samples: List[Dict[str, Any]] = list(_iter_samples_as_dicts(data, use_label, max_samples, thin))
     if len(samples) == 0:
@@ -866,11 +918,12 @@ def compute_bbh_residuals_with_spline_calibration(
                 calibration_prefix,
             )
 
-    if not "SEOBNRv4PHM" in label: 
-        _check_expected_spline_keys(samples[0], ifos)
+    n_points = int(ifos[0].calibration_model.n_points)
+    s0_norm = _ensure_bilby_calibration_keys(samples[0], used_detectors, n_points)
+    _check_expected_spline_keys(s0_norm, ifos)
 
     # Pre-allocate output arrays
-    first = compute_one_sample_fd(ifos, wfgen, samples[0], "SEOBNRv4PHM" in label)
+    first = compute_one_sample_fd(ifos, wfgen, samples[0])
 
     fd_out: Dict[str, Dict[str, np.ndarray]] = {}
     td_out: Dict[str, Dict[str, np.ndarray]] = {}
@@ -887,7 +940,7 @@ def compute_bbh_residuals_with_spline_calibration(
 
     # Main computation loop
     for i, s in enumerate(samples):
-        r = compute_one_sample_fd(ifos, wfgen, s, "SEOBNRv4PHM" in label)
+        r = compute_one_sample_fd(ifos, wfgen, s)
         for ifo_name, d in r.items():
             fd_out[ifo_name]["model"][i, :] = d["model_fd"]
             fd_out[ifo_name]["residual"][i, :] = d["residual_fd"]
@@ -896,9 +949,10 @@ def compute_bbh_residuals_with_spline_calibration(
 
     out: Dict[str, Any] = {
         "config": cfg,
+        "used_detectors": used_detectors,
         "ifos": ifos,
         "waveform_generator": wfgen,
-        "calibration_info": None if "SEOBNRv4PHM" in label else calibration_info,
+        "calibration_info": calibration_info,
         "samples": samples,
         "fd": fd_out,
     }

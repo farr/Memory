@@ -133,20 +133,38 @@ def extract_event_string(filename):
     return match.group(1) if match else None
 
 
+from collections import defaultdict
+
 def find_unique_event_files(gwtc_dir):
     """
     Returns dict: {event_string: filepath}
-    If multiple files for same event exist, pick first alphabetically.
-    """
-    event_files = {}
 
-    for f in sorted(gwtc_dir.glob("*.h5")) + sorted(gwtc_dir.glob("*.hdf5")):
+    For each event:
+        - Prefer *_nocosmo* file if present
+        - Otherwise use first file alphabetically
+    """
+    grouped = defaultdict(list)
+
+    # Collect all candidate files
+    files = sorted(gwtc_dir.glob("*.h5")) + sorted(gwtc_dir.glob("*.hdf5"))
+
+    for f in files:
         event = extract_event_string(f.name)
         if event is None:
             continue
+        grouped[event].append(f)
 
-        if event not in event_files:
-            event_files[event] = f
+    event_files = {}
+
+    for event, flist in grouped.items():
+        # Prefer nocosmo if present
+        nocosmo_files = [f for f in flist if "nocosmo" in f.name]
+
+        if nocosmo_files:
+            event_files[event] = sorted(nocosmo_files)[0]
+        else:
+            # fallback: first alphabetically
+            event_files[event] = sorted(flist)[0]
 
     return event_files
 
@@ -274,20 +292,36 @@ def process_event(filepath, event, args, multiprocess):
     for label in labels:
         approximant_name = parse_approximant_from_label(label)
 
-        if not approximant_has_td_generator(approximant_name):
+        if "Mixed" in label:
             continue
+        
+        print(approximant_name, flush=True)
 
-        approximant = getattr(lalsim, approximant_name)
-
-        res = compute_bbh_residuals_with_spline_calibration(
-            str(filepath),
-            event=event,
-            max_samples=args.max_samples,
-            label=label,
-            thin=args.thin,
-            frame_dir=args.frame_dir,
-            glitch_channel_format=args.glitch_channel_format,
-        )
+        try:
+            approximant = getattr(lalsim, approximant_name)
+        except:
+            continue
+            
+        try:
+            res = compute_bbh_residuals_with_spline_calibration(
+                str(filepath),
+                event=event,
+                max_samples=args.max_samples,
+                label=label,
+                thin=args.thin,
+                frame_dir=args.frame_dir,
+                glitch_channel_format=args.glitch_channel_format,
+            )
+        except:
+            res = compute_bbh_residuals_with_spline_calibration(
+                str(filepath),
+                event=event.split("_")[0],
+                max_samples=args.max_samples,
+                label=label,
+                thin=args.thin,
+                frame_dir=args.frame_dir,
+                glitch_channel_format=args.glitch_channel_format,
+            )
 
         h_memories_in_det = make_memories(
             res,
@@ -351,10 +385,11 @@ def main():
     tasks = []
     for gwtc_dir in gwtc_dirs:
         event_files = find_unique_event_files(gwtc_dir)
-
+        
         for event, filepath in event_files.items():
             if args.events is not None and event not in args.events:
                 continue
+            
             tasks.append((str(filepath), event, vars(args)))
 
     nproc = min(mp.cpu_count() - 1, len(tasks))
@@ -364,6 +399,7 @@ def main():
             pool.map(process_event_wrapper, tasks)
     else:
         for task in tasks:
+            print(task[1], flush=True)
             process_event_wrapper(task, args.multiprocess_samples)
 
 if __name__ == "__main__":
