@@ -166,7 +166,7 @@ def ifft_modes_from_ChooseFDModes(h_modes_lal, config, ell_max=4, n_pos=None, ce
 
     return h_modes_td, t
 
-def evaluate_surrogate_with_LAL(sample, res, approximant=lalsim.NRSur7dq4, ell_max=4, FD=False):
+def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7dq4, ell_max=4, FD=False):
     """Evaluate NRSur7dq4 using LALSimulation and return spherical-harmonic modes.
 
     This function calls `lalsimulation.SimInspiralChooseTDModes`
@@ -195,6 +195,8 @@ def evaluate_surrogate_with_LAL(sample, res, approximant=lalsim.NRSur7dq4, ell_m
             Dictionary of low-frequency cutoffs in Hz.
         - reference_frequency : float
             Reference frequency in Hz.
+    ifos : object
+        IFOs.
     approximant : lalsim.Approximant
         Waveform approximant with which to generate modes.
         Default is lalsim.NRSur7dq4.
@@ -228,15 +230,15 @@ def evaluate_surrogate_with_LAL(sample, res, approximant=lalsim.NRSur7dq4, ell_m
 
     phiRef = sample["phase"]
 
-    fs = res["config"].sampling_frequency
+    fs = config.sampling_frequency
     deltaT = 1 / fs
     
-    duration = res["config"].duration
+    duration = config.duration
     deltaF = 1 / duration
 
-    f_low = res["config"].minimum_frequency[res["ifos"][0].name]
+    f_low = config.minimum_frequency[ifos[0].name]
     f_max = fs/2
-    f_ref = res["config"].reference_frequency
+    f_ref = config.reference_frequency
 
     if approximant == lalsim.NRSur7dq4:
         f_low = -1
@@ -295,7 +297,7 @@ def evaluate_surrogate_with_LAL(sample, res, approximant=lalsim.NRSur7dq4, ell_m
             approximant,
         )
 
-        return ifft_modes_from_ChooseFDModes(h_modes_lal, res["config"], ell_max=4, n_pos=None)
+        return ifft_modes_from_ChooseFDModes(h_modes_lal, config, ell_max=4, n_pos=None)
     
 
 def map_modes_to_polarizations(modes, t, sample, longAscNodes=0.0):
@@ -548,7 +550,7 @@ def compute_memory_correction(
 
 
 def compute_memory_and_map_to_polarizations(
-    sample, res, angular_factors=None, ell_max=4, approximant=lalsim.NRSur7dq4, is_TD=True
+    sample, config, ifos, angular_factors=None, ell_max=4, approximant=lalsim.NRSur7dq4, is_TD=True
 ):
     """Compute the memory and project it to plus/cross polarizations.
 
@@ -573,16 +575,16 @@ def compute_memory_and_map_to_polarizations(
             Inclination angle (radians).
         - 'phase' : float
             Reference orbital phase (radians).
-    res : dict
-        Result dictionary containing:
-        - 'ifos' : list
-            Interferometer objects.
-        - 'config' : object
-            Configuration object.
-        - 'samples' : list of dict
-            Posterior samples.
-        - 'fd' : dict
-            Frequency-domain waveform data used for sizing arrays.
+    config : object
+        Configuration object with attributes:
+        - sampling_frequency : float
+            Sampling frequency in Hz.
+        - minimum_frequency : dict
+            Dictionary of low-frequency cutoffs in Hz.
+        - reference_frequency : float
+            Reference frequency in Hz.
+    ifos : object
+        IFOs.
     angular_factors : dict, optional
         Precomputed angular factors from `compute_angular_factors`.
         If None, angular factors are computed internally.
@@ -607,9 +609,9 @@ def compute_memory_and_map_to_polarizations(
     # evaluate surrogate
     try:
         if is_TD:
-            h, t = evaluate_surrogate_with_LAL(sample, res, approximant=approximant, ell_max=ell_max)
+            h, t = evaluate_surrogate_with_LAL(sample, config, ifos, approximant=approximant, ell_max=ell_max)
         else:
-            h, t = evaluate_surrogate_with_LAL(sample, res, approximant=approximant, ell_max=ell_max, FD=True)
+            h, t = evaluate_surrogate_with_LAL(sample, config, ifos, approximant=approximant, ell_max=ell_max, FD=True)
     except:
         raise ValueError(f"Can't evaluate approximant {approximant}.")
 
@@ -871,16 +873,18 @@ def project_to_detectors(hp, hc, sample, ifos):
     return out
 
 
-_G_RES = None
+_G_CONFIG = None
+_G_IFOs = None
 _G_ANG = None
 _G_ELL_MAX = None
 _G_APPROX = None
 _G_IS_TD = None
 
 
-def init_worker(res, angular_factors, ell_max, approximant, is_TD):
-    global _G_RES, _G_ANG, _G_ELL_MAX, _G_APPROX, _G_IS_TD
-    _G_RES = res
+def init_worker(config, ifos, angular_factors, ell_max, approximant, is_TD):
+    global _G_CONFIG, _G_IFOs, _G_ANG, _G_ELL_MAX, _G_APPROX, _G_IS_TD
+    _G_CONFIG = config
+    _G_IFOs = ifos
     _G_ANG = angular_factors
     _G_ELL_MAX = ell_max
     _G_APPROX = approximant
@@ -888,21 +892,20 @@ def init_worker(res, angular_factors, ell_max, approximant, is_TD):
 
 
 def process_sample_small(args):
-    i, sample = args
-    return process_sample((i, sample, _G_RES, _G_ANG, _G_ELL_MAX, _G_APPROX, _G_IS_TD))
+    i, sample_and_fd_residual_in_dets = args
+    return process_sample((i, sample_and_fd_residual_in_dets, _G_CONFIG, _G_IFOs, _G_ANG, _G_ELL_MAX, _G_APPROX, _G_IS_TD))
 
 
 def process_sample(args):
     """Trivial wrapper for multiprocessing in function below.
     """
-    i, sample, res, angular_factors, ell_max, approximant, is_TD = args
-
-    ifos = res["ifos"]
-    config = res["config"]
+    i, sample_and_fd_residual_in_dets, config, ifos, angular_factors, ell_max, approximant, is_TD = args
+    sample, fd_residual_in_dets = sample_and_fd_residual_in_dets
 
     hp, hc, t = compute_memory_and_map_to_polarizations(
         sample,
-        res,
+        config,
+        ifos,
         angular_factors=angular_factors,
         ell_max=ell_max,
         approximant=approximant,
@@ -915,7 +918,7 @@ def process_sample(args):
         t,
         sample,
         config,
-        res["fd"][ifos[0].name]["model"][i],
+        fd_residual_in_dets[ifos[0].name],
     )
 
     hp_FD, hc_FD = polarizations_to_FD(
@@ -925,15 +928,17 @@ def process_sample(args):
         config,
     )
 
-    return project_to_detectors(
+    h_memory_in_dets = project_to_detectors(
         hp_FD,
         hc_FD,
         sample,
         ifos,
     )
 
+    return compute_memory_variables_likelihoods_and_weights(fd_residual_in_dets, h_memory_in_dets, ifos)
 
-def make_memories(res, angular_factors=None, approximant=lalsim.NRSur7dq4, ell_max=4, multiprocess=False):
+
+def make_memories(samples, fd_residuals_in_dets, config, ifos, angular_factors=None, approximant=lalsim.NRSur7dq4, ell_max=4, multiprocess=False):
     """Compute memory waveforms for a set of posterior samples.
 
     This function computes the gravitational-wave memory
@@ -943,16 +948,20 @@ def make_memories(res, angular_factors=None, approximant=lalsim.NRSur7dq4, ell_m
 
     Parameters
     ----------
-    res : dict
-        Result dictionary containing:
-        - 'ifos' : list
-            Interferometer objects.
-        - 'config' : object
-            Configuration object.
-        - 'samples' : list of dict
-            Posterior samples.
-        - 'fd' : dict
-            Frequency-domain waveform data used for sizing arrays.
+    samples : list
+        Event samples.
+    fd_model : list
+        Event frequency domain residuals.
+    config : object
+        Configuration object with attributes:
+        - sampling_frequency : float
+            Sampling frequency in Hz.
+        - minimum_frequency : dict
+            Dictionary of low-frequency cutoffs in Hz.
+        - reference_frequency : float
+            Reference frequency in Hz.
+    ifos : list
+        Detector IFOs.
     angular_factors : dict, optional
         Precomputed angular factors (from `compute_angular_factors`).
         If None, they are computed on the fly.
@@ -968,76 +977,7 @@ def make_memories(res, angular_factors=None, approximant=lalsim.NRSur7dq4, ell_m
 
     Returns
     -------
-    list of dict
-        List of detector-frame memory waveforms, one per sample.
-        Each entry is a dictionary:
-        {ifo_name: h_memory_fd}.
-    """
-    samples = res["samples"]
-
-    if angular_factors is None:
-        angular_factors = compute_angular_factors(ell_max)
-
-    try:
-        h, t = evaluate_surrogate_with_LAL(samples[0], res, approximant=approximant, ell_max=ell_max)
-        is_TD = True
-    except:
-        try:
-            h, t = evaluate_surrogate_with_LAL(samples[0], res, approximant=approximant, ell_max=ell_max, FD=True)
-            is_TD = False
-        except:
-            raise ValueError(f"Can't evaluate approximant {approximant}.")
-
-    print("Analyzing", len(samples), "samples.", flush=True)
-    if multiprocess:
-        nproc = int(os.environ.get("SLURM_CPUS_PER_TASK", "1"))
-        print("Using", nproc, "processes.", flush=True)
-        ctx = mp.get_context("spawn")
-        with ctx.Pool(
-            processes=nproc,
-            initializer=init_worker,
-            initargs=(res, angular_factors, ell_max, approximant, is_TD),
-        ) as pool:
-            h_memories_in_det = pool.map(process_sample_small, enumerate(samples), chunksize=1)
-    else:
-        h_memories_in_det = []
-        for i, sample in enumerate(samples):
-            h_memories_in_det.append(process_sample(i, sample, res, angular_factors, ell_max, approximant, is_TD))
-            
-    return h_memories_in_det
-
-
-def compute_memory_variables_likelihoods_and_weights(res, h_memories_in_dets):
-    """Compute Gaussian amplitude parameters and importance weights for memory.
-
-    This function evaluates, for each posterior sample, the optimal
-    Gaussian amplitude estimator for the memory contribution.
-    It computes the maximum-likelihood amplitude, its uncertainty,
-    a random draw from the corresponding Gaussian distribution,
-    and the associated log-weight and log-likelihood contribution.
-
-    The calculation is performed by combining inner products across
-    all detectors.
-
-    Parameters
-    ----------
-    res : dict
-        Result dictionary containing:
-        - 'ifos' : list
-            List of interferometer objects with a
-            `template_template_inner_product` method.
-        - 'fd' : dict
-            Frequency-domain data products, including:
-            res['fd'][ifo_name]['residual']
-            which contains residual frequency-domain data for each sample.
-    h_memories_in_dets : list of dict
-        List (indexed by sample) of detector-frame memory waveforms.
-        Each entry is a dictionary:
-        {ifo_name: h_memory_fd}.
-
-    Returns
-    -------
-    ndarray
+    memory_variables_likelihoods_and_weights : ndarray
         Array of shape (n_samples, 5) where each row contains:
         - A_hat : float
             Maximum-likelihood amplitude estimator.
@@ -1051,34 +991,105 @@ def compute_memory_variables_likelihoods_and_weights(res, h_memories_in_dets):
         - log_likelihood : float
             Log-likelihood contribution including the memory term.
     """
-    memory_variables_likelihoods_and_weights = []
-    for k in range(len(res["fd"][res["ifos"][0].name]["residual"])):
-        hrs = 0.0
-        hhs = 0.0
-        rrs = 0.0
-        for det in res["ifos"]:
-            hrs += det.template_template_inner_product(
-                h_memories_in_dets[k][det.name], res["fd"][det.name]["residual"][k]
-            ).real
-            hhs += det.template_template_inner_product(
-                h_memories_in_dets[k][det.name], h_memories_in_dets[k][det.name]
-            ).real
-            rrs += det.template_template_inner_product(
-                res["fd"][det.name]["residual"][k], res["fd"][det.name]["residual"][k]
-            ).real
+    if angular_factors is None:
+        angular_factors = compute_angular_factors(ell_max)
+
+    try:
+        h, t = evaluate_surrogate_with_LAL(samples[0], config, ifos, approximant=approximant, ell_max=ell_max)
+        is_TD = True
+    except:
+        try:
+            h, t = evaluate_surrogate_with_LAL(samples[0], config, ifos, approximant=approximant, ell_max=ell_max, FD=True)
+            is_TD = False
+        except:
+            raise ValueError(f"Can't evaluate approximant {approximant}.")
+
+    print("Analyzing", len(samples), "samples.", flush=True)
+    if multiprocess:
+        nproc = int(os.environ.get("SLURM_CPUS_PER_TASK", "1"))
+        print("Using", nproc, "processes.", flush=True)
+        ctx = mp.get_context("spawn")
+        args = [(samples[i], fd_residuals_in_dets[i]) for i in range(len(samples))]
+        with ctx.Pool(
+            processes=nproc,
+            initializer=init_worker,
+            initargs=(config, ifos, angular_factors, ell_max, approximant, is_TD),
+        ) as pool:
+            memory_variables_likelihoods_and_weights = pool.map(
+                process_sample_small,
+                enumerate(args),
+                chunksize=max(100, len(samples) // (nproc * 200))
+            )
+    else:
+        memory_variables_likelihoods_and_weights = []
+        for i, sample in enumerate(samples):
+            args = [sample, fd_residuals_in_dets[i]]
+            memory_variables_likelihoods_and_weights.append(process_sample((i, args, config, ifos, angular_factors, ell_max, approximant, is_TD)))
             
-        A_hat = np.real(hrs / hhs)
-        A_sigma = 1 / np.sqrt(np.real(hhs))
-        A_sample = np.random.normal(loc=A_hat, scale=A_sigma)
-        log_weight = 0.5 * A_hat * np.real(np.conjugate(hrs)) - 0.5 * np.log(2 * np.pi * hhs)
-        log_likelihood = -0.5 * rrs + log_weight
-        
-        memory_variables_likelihoods_and_weights.append(
-            [A_hat, A_sigma, A_sample, log_weight, log_likelihood]
-        )
+    return np.array(memory_variables_likelihoods_and_weights)
+
+
+def compute_memory_variables_likelihoods_and_weights(fd_residual_in_dets, h_memory_in_dets, ifos):
+    """Compute Gaussian amplitude parameters and importance weights for memory.
+
+    This function evaluates, for each posterior sample, the optimal
+    Gaussian amplitude estimator for the memory contribution.
+    It computes the maximum-likelihood amplitude, its uncertainty,
+    a random draw from the corresponding Gaussian distribution,
+    and the associated log-weight and log-likelihood contribution.
+
+    The calculation is performed by combining inner products across
+    all detectors.
+
+    Parameters
+    ----------
+    fd_residual_in_dets : dict
+        Dictionary containing the ifo names as keys and storing
+        the frequency domain residual data.
+    h_memory_in_dets : dict
+        Dictionary containing the ifo names as keys and storing
+        the frequency domain memory data.
+    ifos : list
+        Detector IFOs.
+
+    Returns
+    -------
+    memory_variables_likelihoods_and_weights : ndarray
+        Array of shape (1, 5) where each row contains:
+        - A_hat : float
+            Maximum-likelihood amplitude estimator.
+        - A_sigma : float
+            Standard deviation of the Gaussian amplitude posterior.
+        - A_sample : float
+            Random draw from the Gaussian posterior.
+        - log_weight : float
+            Logarithmic importance weight associated with the
+            marginalization over amplitude.
+        - log_likelihood : float
+            Log-likelihood contribution including the memory term.
+    """
+    hrs = 0.0
+    hhs = 0.0
+    rrs = 0.0
+    for det in ifos:
+        hrs += det.template_template_inner_product(
+            h_memory_in_dets[det.name], fd_residual_in_dets[det.name]
+        ).real
+        hhs += det.template_template_inner_product(
+            h_memory_in_dets[det.name], h_memory_in_dets[det.name]
+        ).real
+        rrs += det.template_template_inner_product(
+            fd_residual_in_dets[det.name], fd_residual_in_dets[det.name]
+        ).real
+            
+    A_hat = np.real(hrs / hhs)
+    A_sigma = 1 / np.sqrt(np.real(hhs))
+    A_sample = np.random.normal(loc=A_hat, scale=A_sigma)
+    log_weight = 0.5 * A_hat * np.real(np.conjugate(hrs)) - 0.5 * np.log(2 * np.pi * hhs)
+    log_likelihood = -0.5 * rrs + log_weight
         
     memory_variables_likelihoods_and_weights = np.array(
-        memory_variables_likelihoods_and_weights
+        [A_hat, A_sigma, A_sample, log_weight, log_likelihood]
     )
 
     return memory_variables_likelihoods_and_weights

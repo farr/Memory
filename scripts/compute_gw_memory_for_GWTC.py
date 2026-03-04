@@ -377,17 +377,18 @@ def process_event(filepath, event, args, event_dir, multiprocess):
             )
 
         print(f"[{event}] making memories!", flush=True)
-
-        h_memories_in_det = make_memories(
-            res,
+        
+        memory_vars = make_memories(
+            res['samples'],
+            [
+                {det: res["fd"][det]["residual"][k] for det in res["fd"].keys()}
+                for k in range(len(next(iter(res["fd"].values()))["residual"]))
+            ],
+            res['config'],
+            res['ifos'],
             approximant=approximant,
             ell_max=args.ell_max,
             multiprocess=multiprocess,
-        )
-
-        memory_vars = compute_memory_variables_likelihoods_and_weights(
-            res,
-            h_memories_in_det,
         )
 
         results[label] = memory_vars
