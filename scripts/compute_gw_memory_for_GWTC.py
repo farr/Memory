@@ -240,13 +240,6 @@ def approximant_has_td_generator(approximant_name):
 
 def prepare_output_directory(output_dir, event, overwrite=False):
     event_dir = Path(output_dir) / event
-
-    if event_dir.exists() and not overwrite:
-        raise RuntimeError(
-            f"Output directory {event_dir} already exists. "
-            "Use --overwrite to overwrite."
-        )
-
     event_dir.mkdir(parents=True, exist_ok=True)
     return event_dir
 
@@ -280,10 +273,6 @@ def save_histogram(event_dir, label, arr):
     plt.close()
 
 
-# ================================================================
-# Main processing
-# ================================================================
-
 def update_results_hdf5(filepath, label, arr):
     """Create/append one label into the HDF5 file, replacing it if it exists."""
     with h5py.File(filepath, "a") as f:
@@ -296,6 +285,43 @@ def update_results_hdf5(filepath, label, arr):
         grp.create_dataset("log_weight", data=arr[:, 3])
         grp.create_dataset("log_likelihood", data=arr[:, 4])
 
+
+def expected_histogram_path(event_dir: Path, label: str) -> Path:
+    safe_label = label.replace(":", "_")
+    return event_dir / f"histogram_{safe_label}.png"
+
+
+def label_results_complete_in_h5(h5_path: Path, label: str) -> bool:
+    """
+    True iff memory_results.h5 contains the label group and all expected datasets
+    have the same length (and non-zero length).
+    """
+    if not h5_path.exists():
+        return False
+
+    required = ["A_hat", "A_sigma", "A_sample", "log_weight", "log_likelihood"]
+    try:
+        with h5py.File(h5_path, "r") as f:
+            if label not in f:
+                return False
+            grp = f[label]
+            if not all(k in grp for k in required):
+                return False
+            lens = [grp[k].shape[0] for k in required]
+            return (min(lens) > 0) and (len(set(lens)) == 1)
+    except OSError:
+        # Corrupt/unreadable file => treat as incomplete
+        return False
+
+
+def label_is_finished(event_dir: Path, label: str) -> bool:
+    h5_path = event_dir / "memory_results.h5"
+    return label_results_complete_in_h5(h5_path, label) and expected_histogram_path(event_dir, label).exists()
+
+
+# ================================================================
+# Main processing
+# ================================================================
 
 def process_event(filepath, event, args, event_dir, multiprocess):
     """
@@ -312,12 +338,16 @@ def process_event(filepath, event, args, event_dir, multiprocess):
     h5_path = Path(event_dir) / "memory_results.h5"
 
     for label in labels:
-        approximant_name = parse_approximant_from_label(label)
-
         if "Mixed" in label:
             continue
 
-        print(approximant_name, flush=True)
+        approximant_name = parse_approximant_from_label(label)
+    
+        if (not args.overwrite) and label_is_finished(Path(event_dir), label):
+            print(f"[{event}] skipping finished model {approximant_name}.", flush=True)
+            continue
+
+        print(f"[{event}] working with model {approximant_name}.", flush=True)
 
         try:
             approximant = getattr(lalsim, approximant_name)
@@ -346,7 +376,7 @@ def process_event(filepath, event, args, event_dir, multiprocess):
                 glitch_channel_format=args.glitch_channel_format,
             )
 
-        print("Making memories!", flush=True)
+        print(f"[{event}] making memories!", flush=True)
 
         h_memories_in_det = make_memories(
             res,
@@ -378,15 +408,15 @@ def process_event_wrapper(task, multiprocess=False):
     args = argparse.Namespace(**args_dict)
 
     event_dir = Path(args.output_dir) / event
-    if event_dir.exists() and not args.overwrite:
-        return
-
-    # Create output dir before processing so we can save after each label
-    event_dir = prepare_output_directory(
-        args.output_dir,
-        event,
-        overwrite=args.overwrite,
-    )
+    if event_dir.exists() and args.overwrite:
+        # optional: wipe only the per-event outputs you generate
+        h5p = event_dir / "memory_results.h5"
+        if h5p.exists():
+            h5p.unlink()
+        for p in event_dir.glob("histogram_*.png"):
+            p.unlink()
+    
+    event_dir = prepare_output_directory(args.output_dir, event, overwrite=args.overwrite)
 
     try:
         results = process_event(filepath, event, args, event_dir, multiprocess)
@@ -427,7 +457,6 @@ def main():
             pool.map(process_event_wrapper, tasks)
     else:
         for task in tasks:
-            print(task[1], flush=True)
             process_event_wrapper(task, args.multiprocess_samples)
 
 if __name__ == "__main__":

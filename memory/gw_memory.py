@@ -871,6 +871,27 @@ def project_to_detectors(hp, hc, sample, ifos):
     return out
 
 
+_G_RES = None
+_G_ANG = None
+_G_ELL_MAX = None
+_G_APPROX = None
+_G_IS_TD = None
+
+
+def init_worker(res, angular_factors, ell_max, approximant, is_TD):
+    global _G_RES, _G_ANG, _G_ELL_MAX, _G_APPROX, _G_IS_TD
+    _G_RES = res
+    _G_ANG = angular_factors
+    _G_ELL_MAX = ell_max
+    _G_APPROX = approximant
+    _G_IS_TD = is_TD
+
+
+def process_sample_small(args):
+    i, sample = args
+    return process_sample((i, sample, _G_RES, _G_ANG, _G_ELL_MAX, _G_APPROX, _G_IS_TD))
+
+
 def process_sample(args):
     """Trivial wrapper for multiprocessing in function below.
     """
@@ -966,19 +987,22 @@ def make_memories(res, angular_factors=None, approximant=lalsim.NRSur7dq4, ell_m
             is_TD = False
         except:
             raise ValueError(f"Can't evaluate approximant {approximant}.")
-    
-    args_iterable = [
-        (i, sample, res, angular_factors, ell_max, approximant, is_TD)
-        for i, sample in enumerate(samples)
-    ]
 
-    print("Analyzing", len(args_iterable), "samples.", flush=True)
+    print("Analyzing", len(samples), "samples.", flush=True)
     if multiprocess:
-        print("Using", int(os.environ.get("SLURM_CPUS_PER_TASK"))," processes.", flush=True)
-        with mp.Pool(processes=int(os.environ.get("SLURM_CPUS_PER_TASK"))) as pool:
-            h_memories_in_det = pool.map(process_sample, args_iterable)
+        nproc = int(os.environ.get("SLURM_CPUS_PER_TASK", "1"))
+        print("Using", nproc, "processes.", flush=True)
+        ctx = mp.get_context("spawn")
+        with ctx.Pool(
+            processes=nproc,
+            initializer=init_worker,
+            initargs=(res, angular_factors, ell_max, approximant, is_TD),
+        ) as pool:
+            h_memories_in_det = pool.map(process_sample_small, enumerate(samples), chunksize=1)
     else:
-        h_memories_in_det = [process_sample(arg_iterable) for arg_iterable in args_iterable]
+        h_memories_in_det = []
+        for i, sample in enumerate(samples):
+            h_memories_in_det.append(process_sample(i, sample, res, angular_factors, ell_max, approximant, is_TD))
             
     return h_memories_in_det
 
