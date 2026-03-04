@@ -383,15 +383,17 @@ def _build_parser():
         help="Inverse false-alarm rate threshold in years (default: 1000)",
     )
     parser.add_argument(
-        "--snr-cut", type=float, default=0, help="Network SNR threshold"
+        "--min-detector-frame-total-mass",
+        type=float,
+        default=66.0,
+        help="Minimum detector-frame total mass (default: 66)",
     )
     parser.add_argument(
-        "--snr-inspiral-cut",
+        "--min-mass-ratio",
         type=float,
-        default=6,
-        help="Inspiral SNR threshold (default: 6)",
+        default=1.0 / 6.0,
+        help="Minimum mass ratio q = m2/m1 (default: 1/6)",
     )
-
     # -- Output -------------------------------------------------------------
     parser.add_argument(
         "-o", "--outdir",
@@ -523,9 +525,9 @@ def main():
     _gen_kwargs = dict(
         injection_file=injection_file,
         ifar_threshold=args.ifar_threshold,
-        snr_inspiral_cut=args.snr_inspiral_cut,
+        min_detector_frame_total_mass=args.min_detector_frame_total_mass,
+        min_mass_ratio=args.min_mass_ratio,
         N_samples=args.n_samples_per_event,
-        snr_cut=args.snr_cut,
         prng=seed,
         ignore_memory_weights=args.ignore_memory_weights,
     )

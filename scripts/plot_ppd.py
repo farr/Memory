@@ -622,6 +622,7 @@ def main():
 
     # Formatting
     ax_m1.set_yscale("log")
+    ax_m1.set_ylim(bottom=1e-5)
     ax_m1.set_xlabel(r"$m_1\ [M_\odot]$")
     if inj_data is not None:
         ax_m1.set_ylabel(

@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 IFAR_THRESHOLD = 1
 N_SAMPLES_PER_EVENT = 10000
+MIN_DETECTOR_FRAME_TOTAL_MASS = 66.0
+MIN_MASS_RATIO = 1.0 / 6.0
 
 
 def load_memory_data(event_files, memory_dir, waveform_label=None):
@@ -94,14 +96,18 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
 
 
 def read_injection_file(
-    vt_file, ifar_threshold=IFAR_THRESHOLD, snr_inspiral_cut=0, snr_cut=0
+    vt_file,
+    ifar_threshold=IFAR_THRESHOLD,
+    min_detector_frame_total_mass=MIN_DETECTOR_FRAME_TOTAL_MASS,
+    min_mass_ratio=MIN_MASS_RATIO,
 ):
     """Read an HDF5 injection/selection file and extract relevant data.
 
-    Applies IFAR and SNR cuts to determine which injections were "found",
-    then extracts source-frame masses, spins, redshifts, and draw priors.
-    Also computes derived spin quantities (chi_eff, chi_p) and converts
-    the analysis time to years.
+    Applies IFAR, detector-frame total-mass, and mass-ratio cuts to
+    determine which injections were "found", then extracts source-frame
+    masses, spins, redshifts, and draw priors. Also computes derived
+    spin quantities (chi_eff, chi_p) and converts the analysis time to
+    years.
 
     Sources:
     - https://iopscience.iop.org/article/10.3847/2515-5172/ac2ba7
@@ -114,12 +120,13 @@ def read_injection_file(
     ifar_threshold : float
         Inverse false-alarm rate threshold (yr); injections with min FAR
         below 1/ifar_threshold are considered found.
-    snr_inspiral_cut : float
-        Inspiral SNR threshold; injections above this are also considered found.
-    snr_cut : float
-        Network optimal SNR threshold; injections above this are also
-        considered found.
-
+    min_detector_frame_total_mass : float
+        Minimum detector-frame total mass threshold in solar masses.
+        Injections with ``(m1_source + m2_source) * (1 + z)`` below this
+        value are excluded.
+    min_mass_ratio : float
+        Minimum mass-ratio threshold, where ``q = m2_source / m1_source``.
+        Injections with ``q`` below this value are excluded.
     Returns
     -------
     dict
@@ -135,21 +142,13 @@ def read_injection_file(
         fars = [events[key] for key in events.dtype.names if "far" in key]
         min_fars = np.min(fars, axis=0)
         found = min_fars < 1 / ifar_threshold
-
-        snrs = events["estimated_optimal_snr_net"]
-
-        if snr_cut > 0:
-            found = found | (snrs > snr_cut)
-
-        if snr_inspiral_cut > 0:
-            snrs_inspiral = (
-                1.1
-                - 0.9
-                * (events["mass1_source"] + events["mass2_source"])
-                * (1 + events["redshift"])
-                / 100
-            ) * snrs
-            found = found | (snrs_inspiral > snr_inspiral_cut)
+        detector_frame_total_mass = (
+            (events["mass1_source"] + events["mass2_source"])
+            * (1 + events["redshift"])
+        )
+        found &= detector_frame_total_mass >= min_detector_frame_total_mass
+        mass_ratio = events["mass2_source"] / events["mass1_source"]
+        found &= mass_ratio >= min_mass_ratio
 
         events = events[found]
 
@@ -269,9 +268,9 @@ def generate_data(
     memory_data=None,
     use_tgr=True,
     ifar_threshold=IFAR_THRESHOLD,
+    min_detector_frame_total_mass=MIN_DETECTOR_FRAME_TOTAL_MASS,
+    min_mass_ratio=MIN_MASS_RATIO,
     N_samples=N_SAMPLES_PER_EVENT,
-    snr_cut=0,
-    snr_inspiral_cut=0,
     prng=None,
     scale_tgr=False,
     ignore_memory_weights=False,
@@ -296,12 +295,13 @@ def generate_data(
         Whether to include the TGR parameter in the KDE.
     ifar_threshold : float
         IFAR threshold passed to `read_injection_file`.
+    min_detector_frame_total_mass : float
+        Minimum detector-frame total mass cut passed to
+        `read_injection_file`.
+    min_mass_ratio : float
+        Minimum mass-ratio cut passed to `read_injection_file`.
     N_samples : int
         Number of posterior samples to draw per event.
-    snr_cut : float
-        Network SNR cut passed to `read_injection_file`.
-    snr_inspiral_cut : float
-        Inspiral SNR cut passed to `read_injection_file`.
     prng : None, int, or numpy.random.Generator
         Random state for reproducible resampling.
     scale_tgr : bool
@@ -488,8 +488,8 @@ def generate_data(
     injection_data = read_injection_file(
         injection_file,
         ifar_threshold=ifar_threshold,
-        snr_cut=snr_cut,
-        snr_inspiral_cut=snr_inspiral_cut,
+        min_detector_frame_total_mass=min_detector_frame_total_mass,
+        min_mass_ratio=min_mass_ratio,
     )
     Ndraw = int(injection_data["total_generated"])
 
