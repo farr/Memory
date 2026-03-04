@@ -654,6 +654,18 @@ _SPCAL_PATTERNS = {
 }
 
 
+class IdentityCalibration:
+    """Calibration model that applies no calibration (factor = 1)."""
+
+    def __init__(self, prefix: str = ""):
+        self.prefix = prefix
+        self.n_points = 0  # for compatibility with code that inspects n_points
+
+    def get_calibration_factor(self, frequency_array, prefix: str = "", **parameters):
+        # bilby expects a complex array of same length as frequency_array
+        return np.ones_like(np.asarray(frequency_array), dtype=np.complex128)
+
+
 def _find_cal_key(sample_keys: List[str], ifo: str, kind: str, i: int) -> Optional[str]:
     syns = _CAL_KIND_SYNONYMS[kind]
     keys_lut = {k.lower(): k for k in sample_keys}  # lower -> original
@@ -705,6 +717,38 @@ def _find_cal_key(sample_keys: List[str], ifo: str, kind: str, i: int) -> Option
     return sorted(candidates)[0]
 
 
+def _posterior_has_any_calibration_keys(
+    samples: List[Dict[str, Any]],
+    ifo_names: Tuple[str, ...],
+    *,
+    calibration_prefix: str = "recalib_",
+    n_points_probe: int = 3,
+) -> bool:
+    """
+    Return True if any of the first few samples appears to contain calibration parameters.
+
+    We check:
+      - keys starting with the expected prefix (e.g. 'recalib_')
+      - spcal-style patterns handled by _find_cal_key
+    """
+    probe = samples[: min(10, len(samples))]
+    for s in probe:
+        keys = list(s.keys())
+
+        # quick prefix check
+        if any(str(k).startswith(calibration_prefix) for k in keys):
+            return True
+
+        # try a small number of indices with your existing matcher
+        for ifo in ifo_names:
+            for kind in ("amplitude", "phase"):
+                for i in range(n_points_probe):
+                    if _find_cal_key(keys, ifo=ifo, kind=kind, i=i) is not None:
+                        return True
+
+    return False
+
+
 def _ensure_bilby_calibration_keys(
     sample: Dict[str, Any],
     ifo_names: Tuple[str, ...],
@@ -753,36 +797,20 @@ def compute_one_sample_fd(
     waveform_generator: WaveformGenerator,
     sample: Dict[str, Any],
 ) -> Dict[str, Dict[str, np.ndarray]]:
-    """
-    Compute frequency-domain model and residual for a single posterior sample.
-    
-    This is the primary interface for computing waveforms with calibration.
-    
-    Parameters
-    ----------
-    ifos : InterferometerList
-        Bilby interferometer list with calibration models attached
-    waveform_generator : WaveformGenerator
-        Bilby waveform generator
-    sample : dict
-        Posterior sample with source and calibration parameters
-        
-    Returns
-    -------
-    dict
-        Per-IFO dict with keys:
-          - 'model_fd': complex array of calibrated waveform
-          - 'residual_fd': complex array of data - model
-    """
     pols = waveform_generator.frequency_domain_strain(sample)
 
-    # Normalize calibration parameter names to bilby conventions
-    n_points = int(ifos[0].calibration_model.n_points)
-    sample_normalized = _ensure_bilby_calibration_keys(sample, tuple(ifo.name for ifo in ifos), n_points)
-        
+    cal_model = getattr(ifos[0], "calibration_model", None) if len(ifos) else None
+    use_spline = cal_model is not None and getattr(cal_model, "n_points", 0) and int(cal_model.n_points) > 0
+
+    if use_spline:
+        n_points = int(ifos[0].calibration_model.n_points)
+        sample_used = _ensure_bilby_calibration_keys(sample, tuple(ifo.name for ifo in ifos), n_points)
+    else:
+        sample_used = sample
+
     out: Dict[str, Dict[str, np.ndarray]] = {}
     for ifo in ifos:
-        model_fd = np.asarray(ifo.get_detector_response(pols, sample_normalized))
+        model_fd = np.asarray(ifo.get_detector_response(pols, sample_used))
         data_fd = np.asarray(ifo.strain_data.frequency_domain_strain)
         out[ifo.name] = {"model_fd": model_fd, "residual_fd": data_fd - model_fd}
     return out
@@ -831,53 +859,9 @@ def compute_bbh_residuals_with_spline_calibration(
     """
     Compute data-model residuals for BBH posterior samples with spline calibration.
 
-    This is a convenience function that handles the full pipeline from PESummary
-    file to residuals. For more control, use compute_one_sample_fd() directly.
-
-    Parameters
-    ----------
-    pesummary_h5 : str
-        Path to PESummary HDF5 file
-    event : str
-        Event name (e.g., 'GW150914')
-    label : str, optional
-        Analysis label in PESummary file (auto-selected if None)
-    max_samples : int, optional
-        Maximum number of samples to process
-    thin : int, optional
-        Thinning factor for samples
-    return_time_domain : bool, optional
-        Whether to also compute time-domain residuals
-    sanity_check_calibration_params : bool, optional
-        Whether to check for calibration parameters in samples
-    calibration_prefix : str, optional
-        Prefix for calibration parameters (default: 'recalib_')
-    default_spline_n_points : int, optional
-        Default number of spline points if not in config
-    loglevel : str, optional
-        Logging level (default: 'INFO')
-    frame_dir : str or None, optional
-        Directory containing local BayesWave GWF frame files.  When a file
-        covering the event's time range is found for a given detector, its
-        glitch-subtracted strain channel is used instead of GWOSC open data.
-        Falls back to GWOSC for any detector not covered.
-    glitch_channel_format : str, optional
-        Python format string for the glitch-subtracted channel name inside the
-        GWF file; ``{ifo}`` is replaced with the detector name.  Default:
-        ``"{ifo}:DCS-CALIB_STRAIN_CLEAN_C00"``.  Change this if your frames
-        use a different channel naming convention.
-        
-    Returns
-    -------
-    dict
-        Dictionary with keys:
-          - config: AnalysisConfig
-          - ifos: InterferometerList
-          - waveform_generator: WaveformGenerator
-          - calibration_info: dict of calibration settings
-          - samples: list of posterior sample dicts
-          - fd: per-IFO frequency-domain arrays (model, residual)
-          - td: per-IFO time-domain residuals (if return_time_domain=True)
+    If the PESummary posterior does not contain calibration parameters, this
+    function will automatically disable calibration (identity response) and
+    compute residuals without attempting to normalize/check calibration keys.
     """
     logging.basicConfig(level=getattr(logging, loglevel.upper(), logging.INFO))
 
@@ -893,36 +877,52 @@ def compute_bbh_residuals_with_spline_calibration(
     used_detectors = tuple(ifo.name for ifo in ifos)
     wfgen = _build_waveform_generator_bbh(cfg)
 
-    # Attach spline calibration
-    cfg_dict = data.config[cfg.label]
-    calibration_info = _attach_spline_calibration_from_config(
-        ifos,
-        cfg_dict,
-        used_detectors,
-        base_prefix=calibration_prefix,
-        default_n_points=default_spline_n_points,
-    )
-    LOGGER.info("Calibration spline settings: %s", calibration_info)
-
+    # ---- Load samples early so we can decide whether calibration is available ----
     samples: List[Dict[str, Any]] = list(_iter_samples_as_dicts(data, use_label, max_samples, thin))
     if len(samples) == 0:
         raise RuntimeError("No posterior samples selected (check max_samples/thin).")
 
-    if sanity_check_calibration_params:
-        probe = samples[: min(10, len(samples))]
-        any_pref = any(any(str(k).startswith(calibration_prefix) for k in s.keys()) for s in probe)
-        if not any_pref:
-            LOGGER.warning(
-                "Did not see any keys starting with '%s' in the first few samples. "
-                "If your calibration parameters use a different prefix, set calibration_prefix=... .",
-                calibration_prefix,
-            )
+    # ---- Decide whether to enable calibration based on posterior contents ----
+    enable_calibration = _posterior_has_any_calibration_keys(
+        samples,
+        used_detectors,
+        calibration_prefix=calibration_prefix,
+    )
 
-    n_points = int(ifos[0].calibration_model.n_points)
-    s0_norm = _ensure_bilby_calibration_keys(samples[0], used_detectors, n_points)
-    _check_expected_spline_keys(s0_norm, ifos)
+    cfg_dict = data.config[cfg.label]
+    if enable_calibration:
+        calibration_info = _attach_spline_calibration_from_config(
+            ifos,
+            cfg_dict,
+            used_detectors,
+            base_prefix=calibration_prefix,
+            default_n_points=default_spline_n_points,
+        )
+        LOGGER.info("Calibration enabled. Spline settings: %s", calibration_info)
 
-    # Pre-allocate output arrays
+        if sanity_check_calibration_params:
+            probe = samples[: min(10, len(samples))]
+            any_pref = any(any(str(k).startswith(calibration_prefix) for k in s.keys()) for s in probe)
+            if not any_pref:
+                LOGGER.warning(
+                    "Calibration enabled, but did not see any keys starting with '%s' in the first few samples. "
+                    "Key mapping will rely on fuzzy matching (spcal patterns etc.).",
+                    calibration_prefix,
+                )
+
+        # Validate expected spline keys (only when enabled)
+        n_points = int(ifos[0].calibration_model.n_points)
+        s0_norm = _ensure_bilby_calibration_keys(samples[0], used_detectors, n_points)
+        _check_expected_spline_keys(s0_norm, ifos)
+    else:
+        # No calibration keys: attach identity calibration model so bilby doesn't crash
+        for ifo in ifos:
+            ifo.calibration_model = IdentityCalibration(prefix=f"{calibration_prefix}{ifo.name}_")
+
+        calibration_info = {"enabled": False, "reason": "No calibration keys found in posterior samples."}
+        LOGGER.info("Calibration disabled: no calibration keys found in posterior samples.")
+
+    # ---- Pre-allocate output arrays ----
     first = compute_one_sample_fd(ifos, wfgen, samples[0])
 
     fd_out: Dict[str, Dict[str, np.ndarray]] = {}
@@ -938,14 +938,16 @@ def compute_bbh_residuals_with_spline_calibration(
             nt = int(round(cfg.sampling_frequency * cfg.duration))
             td_out[ifo_name] = {"residual": np.empty((len(samples), nt), dtype=np.float64)}
 
-    # Main computation loop
+    # ---- Main computation loop ----
     for i, s in enumerate(samples):
         r = compute_one_sample_fd(ifos, wfgen, s)
         for ifo_name, d in r.items():
             fd_out[ifo_name]["model"][i, :] = d["model_fd"]
             fd_out[ifo_name]["residual"][i, :] = d["residual_fd"]
             if return_time_domain:
-                td_out[ifo_name]["residual"][i, :] = _fd_to_td(d["residual_fd"], cfg.sampling_frequency, cfg.duration)
+                td_out[ifo_name]["residual"][i, :] = _fd_to_td(
+                    d["residual_fd"], cfg.sampling_frequency, cfg.duration
+                )
 
     out: Dict[str, Any] = {
         "config": cfg,

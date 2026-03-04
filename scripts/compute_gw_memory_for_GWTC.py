@@ -323,6 +323,8 @@ def process_event(filepath, event, args, multiprocess):
                 glitch_channel_format=args.glitch_channel_format,
             )
 
+        print("Making memories!", flush=True)
+            
         h_memories_in_det = make_memories(
             res,
             approximant=approximant,

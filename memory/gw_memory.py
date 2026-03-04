@@ -972,7 +972,9 @@ def make_memories(res, angular_factors=None, approximant=lalsim.NRSur7dq4, ell_m
         for i, sample in enumerate(samples)
     ]
 
+    print("Analyzing", len(args_iterable), "samples.", flush=True)
     if multiprocess:
+        print("Using", int(os.environ.get("SLURM_CPUS_PER_TASK"))," processes.", flush=True)
         with mp.Pool(processes=int(os.environ.get("SLURM_CPUS_PER_TASK"))) as pool:
             h_memories_in_det = pool.map(process_sample, args_iterable)
     else:
