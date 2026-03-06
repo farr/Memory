@@ -17,6 +17,17 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import numpy as np
 
+# Ensure the bundled waveform data directory is on LAL_DATA_PATH so that
+# LALSimulation can find NRSur7dq4_v1.0.h5 and similar data files.
+_PACKAGE_DATA_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "data"))
+if os.path.isdir(_PACKAGE_DATA_DIR):
+    _lal_path = os.environ.get("LAL_DATA_PATH", "")
+    _lal_dirs = _lal_path.split(":") if _lal_path else []
+    if _PACKAGE_DATA_DIR not in _lal_dirs:
+        os.environ["LAL_DATA_PATH"] = (
+            _PACKAGE_DATA_DIR + (":" + _lal_path if _lal_path else "")
+        )
+
 from pesummary.io import read as pesummary_read
 from gwosc.datasets import event_gps, event_detectors, find_datasets
 from gwpy.timeseries import TimeSeries
@@ -342,10 +353,15 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
     """Parse PESummary config into AnalysisConfig dataclass."""
     cfg = data.config[label]
 
+    # Accept either a bare GWOSC event name ("GW230608_205047") or a
+    # filename that contains one ("IGWN-...-GW230608_205047-....hdf5").
+    gw_name_match = re.search(r"(GW\d{6}_\d{6})", event)
+    gw_name = gw_name_match.group(1) if gw_name_match else event
+
     # --- 1) Start with detectors from config (if present) ---
     dets = _get_cfg(cfg, "data", "detectors", None)
     if dets is None:
-        detectors_cfg = tuple(sorted(event_detectors(event)))
+        detectors_cfg = tuple(sorted(event_detectors(gw_name)))
     else:
         dets = _maybe_literal(dets)
         if isinstance(dets, str):
@@ -372,7 +388,7 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
     else:
         detectors = detectors_cfg
 
-    trig = float(event_gps(event))
+    trig = float(event_gps(gw_name))
 
     duration = _get_cfg(cfg, "data", "duration", None)
     if duration is None:
@@ -891,6 +907,10 @@ def compute_bbh_residuals_with_spline_calibration(
     logging.basicConfig(level=getattr(logging, loglevel.upper(), logging.INFO))
 
     data = pesummary_read(pesummary_h5)
+    if label is not None and label not in data.labels:
+        raise ValueError(
+            f"Label '{label}' not found in file. Available labels: {data.labels}"
+        )
     use_label = _choose_label(data, label)
     cfg = _parse_analysis_config(data, use_label, event)
 
