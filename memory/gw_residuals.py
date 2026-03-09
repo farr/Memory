@@ -323,25 +323,15 @@ def _download_gwosc_strain(
 
 
 def _infer_waveform_approximant_from_config(cfg_dict: Dict[str, Dict[str, Any]], default: str = "IMRPhenomPv2") -> str:
-    """Infer waveform approximant from config, trying multiple naming conventions."""
-    # Try flattened bilby_pipe style
-    val = _cfg_first_match(cfg_dict, "config", ["waveform-approximant", "waveform_approximant", "approximant"], default=None)
+    """Infer waveform approximant from config.
+
+    GWTC files store this as ``waveform-approximant`` in the flat ``[config]``
+    section (bilby_pipe convention).
+    """
+    flat = cfg_dict.get("config", {})
+    val = flat.get("waveform-approximant", None)
     if val is not None:
-        return str(val)
-
-    # Try older sectioned style
-    val = _cfg_first_match(cfg_dict, "waveform", ["waveform-approximant", "waveform_approximant", "approximant"], default=None)
-    if val is not None:
-        return str(val)
-
-    # Fallback: scan any section for approximant key
-    for section, sec in cfg_dict.items():
-        if not isinstance(sec, dict):
-            continue
-        for k, v in sec.items():
-            if "approximant" in str(k).lower() and "injection" not in str(k).lower():
-                return str(_maybe_literal(v))
-
+        return str(_maybe_literal(val))
     return str(default)
 
 
@@ -350,92 +340,77 @@ def _infer_waveform_approximant_from_config(cfg_dict: Dict[str, Dict[str, Any]],
 # ----------------------------
 
 def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
-    """Parse PESummary config into AnalysisConfig dataclass."""
+    """Parse PESummary config into AnalysisConfig dataclass.
+
+    All GWTC files (GWTC-2.1, GWTC-3, GWTC-4) use a single flat ``[config]``
+    section with bilby_pipe-style hyphenated keys.  We read directly from there
+    and fall back to GWOSC lookups only when a key is absent.
+    """
     cfg = data.config[label]
+    flat = cfg.get("config", {})
 
     # Accept either a bare GWOSC event name ("GW230608_205047") or a
     # filename that contains one ("IGWN-...-GW230608_205047-....hdf5").
     gw_name_match = re.search(r"(GW\d{6}_\d{6})", event)
     gw_name = gw_name_match.group(1) if gw_name_match else event
 
-    # --- 1) Start with detectors from config (if present) ---
-    dets = _get_cfg(cfg, "data", "detectors", None)
-    if dets is None:
+    # --- 1) Detectors ---
+    dets_raw = _maybe_literal(flat.get("detectors", None))
+    if dets_raw is None:
         detectors_cfg = tuple(sorted(event_detectors(gw_name)))
+    elif isinstance(dets_raw, (list, tuple)):
+        detectors_cfg = tuple(str(d).strip() for d in dets_raw if str(d).strip())
     else:
-        dets = _maybe_literal(dets)
-        if isinstance(dets, str):
-            try:
-                detectors_cfg = tuple(ast.literal_eval(dets))
-            except Exception:
-                detectors_cfg = tuple(dets.replace(",", " ").split())
-        else:
-            detectors_cfg = tuple(dets)
+        s = str(dets_raw).strip()
+        try:
+            detectors_cfg = tuple(str(d).strip() for d in ast.literal_eval(s) if str(d).strip())
+        except Exception:
+            detectors_cfg = tuple(p.strip() for p in s.replace(",", " ").split() if p.strip())
 
-    detectors_cfg = tuple(str(d).strip() for d in detectors_cfg if str(d).strip())
-
-    # --- 2) OVERRIDE using detectors actually present in PESummary PSD for this label ---
-    # This prevents "only L1" config entries from dropping H1 even though the run has H1 PSD/samples.
+    # --- 2) OVERRIDE with detectors present in PESummary PSDs ---
+    # This handles cases where the config lists fewer IFOs than the run used.
     psd_for_label = None
     try:
         psd_for_label = data.psd[label]
     except Exception:
-        psd_for_label = None
-
+        pass
     if isinstance(psd_for_label, dict) and len(psd_for_label) > 0:
-        detectors_psd = tuple(sorted(psd_for_label.keys()))
-        detectors = detectors_psd
+        detectors = tuple(sorted(psd_for_label.keys()))
     else:
         detectors = detectors_cfg
 
-    trig = float(event_gps(gw_name))
-
-    duration = _get_cfg(cfg, "data", "duration", None)
-    if duration is None:
-        duration = _get_cfg(cfg, "engine", "seglen", 4.0)
-    duration = float(duration)
-    
-    sampling_frequency = _get_cfg(cfg, "data", "sampling_frequency", None)
-    if sampling_frequency is None:
-        sampling_frequency = _get_cfg(cfg, "engine", "srate", 4096)
-    sampling_frequency = float(sampling_frequency)
-
-    start_time_cfg = _as_float(_get_cfg(cfg, "data", "start_time", None), None)
-    end_time_cfg = _as_float(_get_cfg(cfg, "data", "end_time", None), None)
-    if start_time_cfg is not None and end_time_cfg is not None:
-        start_time, end_time = start_time_cfg, end_time_cfg
+    # --- 3) Trigger time ---
+    trig_raw = flat.get("trigger-time", None)
+    if trig_raw is not None:
+        trig = float(trig_raw)
     else:
-        start_time = trig - duration / 2.0
-        end_time = trig + duration / 2.0
+        trig = float(event_gps(gw_name))
 
-    # IMPORTANT: use the corrected `detectors` when building per-IFO dicts
-    min_freq_val = _get_cfg(cfg, "analysis", "minimum_frequency", None)
-    if min_freq_val is None:
-        min_freq_val = _get_cfg(cfg, "lalinference", "flow", 20)
-    min_freq = _parse_ifo_freq_dict(min_freq_val, detectors, default=20.0)
+    # --- 4) Segment duration and start/end times ---
+    duration = float(flat.get("duration", 4.0))
+    post_trigger = float(flat.get("post-trigger-duration", duration / 2.0))
+    start_time = trig - (duration - post_trigger)
+    end_time = trig + post_trigger
 
-    max_freq_val = _get_cfg(cfg, "analysis", "maximum_frequency", None)
-    if max_freq_val is None:
-        max_freq_val = _get_cfg(cfg, "lalinference", "fhigh", None)
-    
-    max_freq = None
-    if max_freq_val is not None:
-        max_freq = _parse_ifo_freq_dict(
-            max_freq_val,
-            detectors,
-            default=float(sampling_frequency / 2.0),
-        )
+    # --- 5) Sampling frequency ---
+    sampling_frequency = float(flat.get("sampling-frequency", 4096.0))
 
-    reference_frequency = _get_cfg(cfg, "waveform", "reference_frequency", None)
-    if reference_frequency is None:
-        reference_frequency = _get_cfg(cfg, "engine", "fref", 50.0)
-    reference_frequency = float(reference_frequency)
-    
-    waveform_approximant = _get_cfg(cfg, "engine", "approx", None)
-    if waveform_approximant is None:
-        waveform_approximant = _infer_waveform_approximant_from_config(
-            cfg, default="IMRPhenomPv2"
-        )
+    # --- 6) Per-IFO frequency bounds ---
+    min_freq = _parse_ifo_freq_dict(
+        flat.get("minimum-frequency", 20.0), detectors, default=20.0
+    )
+    max_freq_raw = flat.get("maximum-frequency", None)
+    max_freq = (
+        _parse_ifo_freq_dict(max_freq_raw, detectors, default=sampling_frequency / 2.0)
+        if max_freq_raw is not None
+        else None
+    )
+
+    # --- 7) Reference frequency ---
+    reference_frequency = float(flat.get("reference-frequency", 50.0))
+
+    # --- 8) Waveform approximant ---
+    waveform_approximant = str(flat.get("waveform-approximant", "IMRPhenomPv2"))
 
     return AnalysisConfig(
         label=label,
@@ -459,37 +434,19 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
 # ----------------------------
 
 def _infer_spline_npoints_from_config(cfg_dict: Dict[str, Dict[str, Any]], default: int = 10) -> int:
-    """Infer number of spline calibration points from config."""
-    candidates = [
-        "spline_calibration_npoints",
-        "spline_calibration_n_points",
-        "spline_calibration_points",
-        "calibration_npoints",
-        "calibration_n_points",
-        "npoints",
-        "n_points",
-        "recalib_npoints",
-        "recalib_n_points",
-        "spline_npoints",
-        "spline_n_points",
-    ]
+    """Infer number of spline calibration points from config.
 
-    for section in ("calibration", "analysis", "likelihood", "data"):
-        val = _cfg_first_match(cfg_dict, section, candidates, default=None)
-        if val is not None:
-            try:
-                return int(val)
-            except Exception:
-                pass
-
-    # Last resort: look for any "*npoint*" key in [calibration]
-    for k, v in cfg_dict.get("calibration", {}).items():
-        if "npoint" in str(k).lower():
-            try:
-                return int(_maybe_literal(v))
-            except Exception:
-                continue
-
+    GWTC files store this as ``spline-calibration-nodes`` in the flat ``[config]``
+    section.
+    """
+    flat = cfg_dict.get("config", {})
+    # bilby_pipe convention (all GWTC files)
+    val = flat.get("spline-calibration-nodes", None)
+    if val is not None:
+        try:
+            return int(_maybe_literal(val))
+        except Exception:
+            pass
     return int(default)
 
 
@@ -497,41 +454,13 @@ def _infer_calib_minmax_freq_from_config(
     cfg_dict: Dict[str, Dict[str, Any]],
     detectors: Tuple[str, ...],
 ) -> Tuple[Dict[str, float], Dict[str, float]]:
-    """Infer per-IFO calibration spline min/max frequencies from config."""
-    min_keys = [
-        "calibration_minimum_frequency",
-        "calibration_minimum_frequency_dict",
-        "spline_calibration_minimum_frequency",
-        "spline_calibration_minimum_frequency_dict",
-        "minimum_frequency_calibration",
-        "minimum_frequency_calibration_dict",
-        "spline_minimum_frequency",
-    ]
-    max_keys = [
-        "calibration_maximum_frequency",
-        "calibration_maximum_frequency_dict",
-        "spline_calibration_maximum_frequency",
-        "spline_calibration_maximum_frequency_dict",
-        "maximum_frequency_calibration",
-        "maximum_frequency_calibration_dict",
-        "spline_maximum_frequency",
-    ]
+    """Infer per-IFO calibration spline min/max frequencies from config.
 
-    min_val = _cfg_first_match(cfg_dict, "calibration", min_keys, default=None)
-    max_val = _cfg_first_match(cfg_dict, "calibration", max_keys, default=None)
-
-    min_dict: Dict[str, float] = {}
-    max_dict: Dict[str, float] = {}
-
-    if min_val is not None:
-        parsed = _parse_ifo_freq_dict(min_val, detectors, default=np.nan)
-        min_dict = {k: float(v) for k, v in parsed.items() if np.isfinite(v)}
-
-    if max_val is not None:
-        parsed = _parse_ifo_freq_dict(max_val, detectors, default=np.nan)
-        max_dict = {k: float(v) for k, v in parsed.items() if np.isfinite(v)}
-
-    return min_dict, max_dict
+    GWTC files do not store explicit calibration frequency bounds; the spline
+    covers the full analysis band.  Return empty dicts so the caller falls back
+    to the IFO min/max frequency.
+    """
+    return {}, {}
 
 
 def _attach_spline_calibration_from_config(
