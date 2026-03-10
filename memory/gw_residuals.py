@@ -328,8 +328,9 @@ def _infer_waveform_approximant_from_config(cfg_dict: Dict[str, Dict[str, Any]],
     GWTC files store this as ``waveform-approximant`` in the flat ``[config]``
     section (bilby_pipe convention).
     """
-    flat = cfg_dict.get("config", {})
-    val = flat.get("waveform-approximant", None)
+    # bilby_pipe: [config] waveform-approximant; LALInference: [engine] approx
+    val = (cfg_dict.get("config", {}).get("waveform-approximant")
+           or cfg_dict.get("engine", {}).get("approx"))
     if val is not None:
         return str(_maybe_literal(val))
     return str(default)
@@ -347,7 +348,23 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
     and fall back to GWOSC lookups only when a key is absent.
     """
     cfg = data.config[label]
-    flat = cfg.get("config", {})
+
+    # Two config conventions in the GWTC catalog:
+    #   bilby_pipe (GWTC-3/4, most GWTC-2.1): single flat [config] section
+    #                                           with hyphenated keys.
+    #   LALInference (older GWTC-2.1 events):  sectioned INI with [engine],
+    #                                           [analysis], [lalinference] etc.
+    flat = cfg.get("config", {})          # bilby_pipe
+    engine = cfg.get("engine", {})        # LALInference
+    analysis = cfg.get("analysis", {})    # LALInference
+    lalinf = cfg.get("lalinference", {})  # LALInference
+
+    def _first(*vals):
+        """Return first non-None value after _maybe_literal conversion."""
+        for v in vals:
+            if v is not None:
+                return _maybe_literal(v)
+        return None
 
     # Accept either a bare GWOSC event name ("GW230608_205047") or a
     # filename that contains one ("IGWN-...-GW230608_205047-....hdf5").
@@ -355,7 +372,8 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
     gw_name = gw_name_match.group(1) if gw_name_match else event
 
     # --- 1) Detectors ---
-    dets_raw = _maybe_literal(flat.get("detectors", None))
+    # bilby_pipe: [config] detectors; LALInference: [analysis] ifos
+    dets_raw = _first(flat.get("detectors"), analysis.get("ifos"))
     if dets_raw is None:
         detectors_cfg = tuple(sorted(event_detectors(gw_name)))
     elif isinstance(dets_raw, (list, tuple)):
@@ -380,26 +398,42 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
         detectors = detectors_cfg
 
     # --- 3) Trigger time ---
+    # bilby_pipe: [config] trigger-time
+    # LALInference: not in config; read median geocent_time from posterior samples,
+    # falling back to GWOSC (which may require a shorter event name like "GW170608").
     trig_raw = flat.get("trigger-time", None)
     if trig_raw is not None:
         trig = float(trig_raw)
     else:
-        trig = float(event_gps(gw_name))
+        try:
+            df_t = data.samples_dict[label].to_pandas()
+            trig = float(df_t["geocent_time"].median())
+        except Exception:
+            trig = float(event_gps(gw_name))
 
     # --- 4) Segment duration and start/end times ---
-    duration = float(flat.get("duration", 4.0))
-    post_trigger = float(flat.get("post-trigger-duration", duration / 2.0))
+    # bilby_pipe: [config] duration + post-trigger-duration
+    # LALInference: [engine] seglen; post-trigger always 2 s by convention
+    duration_raw = _first(flat.get("duration"), engine.get("seglen"))
+    duration = float(duration_raw) if duration_raw is not None else 4.0
+    post_trigger_raw = flat.get("post-trigger-duration", None)
+    post_trigger = float(post_trigger_raw) if post_trigger_raw is not None else 2.0
     start_time = trig - (duration - post_trigger)
     end_time = trig + post_trigger
 
     # --- 5) Sampling frequency ---
-    sampling_frequency = float(flat.get("sampling-frequency", 4096.0))
+    # bilby_pipe: [config] sampling-frequency; LALInference: [engine] srate
+    fs_raw = _first(flat.get("sampling-frequency"), engine.get("srate"))
+    sampling_frequency = float(fs_raw) if fs_raw is not None else 4096.0
 
     # --- 6) Per-IFO frequency bounds ---
+    # bilby_pipe: [config] minimum/maximum-frequency
+    # LALInference: [lalinference] flow / fhigh
     min_freq = _parse_ifo_freq_dict(
-        flat.get("minimum-frequency", 20.0), detectors, default=20.0
+        _first(flat.get("minimum-frequency"), lalinf.get("flow")) or 20.0,
+        detectors, default=20.0
     )
-    max_freq_raw = flat.get("maximum-frequency", None)
+    max_freq_raw = _first(flat.get("maximum-frequency"), lalinf.get("fhigh"))
     max_freq = (
         _parse_ifo_freq_dict(max_freq_raw, detectors, default=sampling_frequency / 2.0)
         if max_freq_raw is not None
@@ -407,10 +441,15 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
     )
 
     # --- 7) Reference frequency ---
-    reference_frequency = float(flat.get("reference-frequency", 50.0))
+    # bilby_pipe: [config] reference-frequency; LALInference: [engine] fref
+    fref_raw = _first(flat.get("reference-frequency"), engine.get("fref"))
+    reference_frequency = float(fref_raw) if fref_raw is not None else 50.0
 
     # --- 8) Waveform approximant ---
-    waveform_approximant = str(flat.get("waveform-approximant", "IMRPhenomPv2"))
+    # bilby_pipe: [config] waveform-approximant; LALInference: [engine] approx
+    waveform_approximant = str(
+        _first(flat.get("waveform-approximant"), engine.get("approx")) or "IMRPhenomPv2"
+    )
 
     return AnalysisConfig(
         label=label,
@@ -439,9 +478,11 @@ def _infer_spline_npoints_from_config(cfg_dict: Dict[str, Dict[str, Any]], defau
     GWTC files store this as ``spline-calibration-nodes`` in the flat ``[config]``
     section.
     """
-    flat = cfg_dict.get("config", {})
-    # bilby_pipe convention (all GWTC files)
-    val = flat.get("spline-calibration-nodes", None)
+    # bilby_pipe: [config] spline-calibration-nodes
+    val = cfg_dict.get("config", {}).get("spline-calibration-nodes", None)
+    # LALInference: [engine] spcal-nodes
+    if val is None:
+        val = cfg_dict.get("engine", {}).get("spcal-nodes", None)
     if val is not None:
         try:
             return int(_maybe_literal(val))
