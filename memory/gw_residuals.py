@@ -328,8 +328,9 @@ def _infer_waveform_approximant_from_config(cfg_dict: Dict[str, Dict[str, Any]],
     GWTC files store this as ``waveform-approximant`` in the flat ``[config]``
     section (bilby_pipe convention).
     """
-    # bilby_pipe: [config] waveform-approximant; LALInference: [engine] approx
-    val = (cfg_dict.get("config", {}).get("waveform-approximant")
+    flat = cfg_dict.get("config", {})
+    # bilby_pipe: hyphen or underscore; LALInference: [engine] approx
+    val = (flat.get("waveform-approximant") or flat.get("waveform_approximant")
            or cfg_dict.get("engine", {}).get("approx"))
     if val is not None:
         return str(_maybe_literal(val))
@@ -349,15 +350,26 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
     """
     cfg = data.config[label]
 
-    # Two config conventions in the GWTC catalog:
-    #   bilby_pipe (GWTC-3/4, most GWTC-2.1): single flat [config] section
-    #                                           with hyphenated keys.
-    #   LALInference (older GWTC-2.1 events):  sectioned INI with [engine],
-    #                                           [analysis], [lalinference] etc.
-    flat = cfg.get("config", {})          # bilby_pipe
+    # Three config conventions in the GWTC catalog:
+    #   bilby_pipe hyphen  (GWTC-3/4 BBH, most GWTC-2.1): flat [config] with
+    #                       hyphenated keys, e.g. "sampling-frequency".
+    #   bilby_pipe underscore (GWTC-4 NSBH): flat [config] with underscore
+    #                       keys, e.g. "sampling_frequency".
+    #   LALInference (older GWTC-2.1): sectioned INI — [engine], [analysis],
+    #                       [lalinference].
+    flat = cfg.get("config", {})          # bilby_pipe (both hyphen & underscore)
     engine = cfg.get("engine", {})        # LALInference
     analysis = cfg.get("analysis", {})    # LALInference
     lalinf = cfg.get("lalinference", {})  # LALInference
+
+    def _flat(hyphen_key):
+        """Look up a bilby_pipe key in the flat [config] section, trying both
+        the hyphenated form (e.g. 'sampling-frequency') and the underscore
+        form (e.g. 'sampling_frequency')."""
+        v = flat.get(hyphen_key)
+        if v is None:
+            v = flat.get(hyphen_key.replace("-", "_"))
+        return v
 
     def _first(*vals):
         """Return first non-None value after _maybe_literal conversion."""
@@ -373,7 +385,7 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
 
     # --- 1) Detectors ---
     # bilby_pipe: [config] detectors; LALInference: [analysis] ifos
-    dets_raw = _first(flat.get("detectors"), analysis.get("ifos"))
+    dets_raw = _first(_flat("detectors"), analysis.get("ifos"))
     if dets_raw is None:
         detectors_cfg = tuple(sorted(event_detectors(gw_name)))
     elif isinstance(dets_raw, (list, tuple)):
@@ -401,7 +413,7 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
     # bilby_pipe: [config] trigger-time
     # LALInference: not in config; read median geocent_time from posterior samples,
     # falling back to GWOSC (which may require a shorter event name like "GW170608").
-    trig_raw = flat.get("trigger-time", None)
+    trig_raw = _flat("trigger-time")
     if trig_raw is not None:
         trig = float(trig_raw)
     else:
@@ -411,29 +423,37 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
         except Exception:
             trig = float(event_gps(gw_name))
 
+    def _warn_default(name, value):
+        LOGGER.warning(
+            "%s/%s: '%s' not found in config; using default %r. "
+            "Config sections: %s",
+            event, label, name, value, sorted(cfg.keys()),
+        )
+        return value
+
     # --- 4) Segment duration and start/end times ---
     # bilby_pipe: [config] duration + post-trigger-duration
     # LALInference: [engine] seglen; post-trigger always 2 s by convention
-    duration_raw = _first(flat.get("duration"), engine.get("seglen"))
-    duration = float(duration_raw) if duration_raw is not None else 4.0
-    post_trigger_raw = flat.get("post-trigger-duration", None)
-    post_trigger = float(post_trigger_raw) if post_trigger_raw is not None else 2.0
+    duration_raw = _first(_flat("duration"), engine.get("seglen"))
+    duration = float(duration_raw) if duration_raw is not None else float(_warn_default("duration", 4.0))
+    post_trigger_raw = _flat("post-trigger-duration")
+    post_trigger = float(post_trigger_raw) if post_trigger_raw is not None else float(_warn_default("post-trigger-duration", 2.0))
     start_time = trig - (duration - post_trigger)
     end_time = trig + post_trigger
 
     # --- 5) Sampling frequency ---
     # bilby_pipe: [config] sampling-frequency; LALInference: [engine] srate
-    fs_raw = _first(flat.get("sampling-frequency"), engine.get("srate"))
-    sampling_frequency = float(fs_raw) if fs_raw is not None else 4096.0
+    fs_raw = _first(_flat("sampling-frequency"), engine.get("srate"))
+    sampling_frequency = float(fs_raw) if fs_raw is not None else float(_warn_default("sampling-frequency", 4096.0))
 
     # --- 6) Per-IFO frequency bounds ---
     # bilby_pipe: [config] minimum/maximum-frequency
     # LALInference: [lalinference] flow / fhigh
-    min_freq = _parse_ifo_freq_dict(
-        _first(flat.get("minimum-frequency"), lalinf.get("flow")) or 20.0,
-        detectors, default=20.0
-    )
-    max_freq_raw = _first(flat.get("maximum-frequency"), lalinf.get("fhigh"))
+    min_freq_raw = _first(_flat("minimum-frequency"), lalinf.get("flow"))
+    if min_freq_raw is None:
+        min_freq_raw = _warn_default("minimum-frequency", 20.0)
+    min_freq = _parse_ifo_freq_dict(min_freq_raw, detectors, default=20.0)
+    max_freq_raw = _first(_flat("maximum-frequency"), lalinf.get("fhigh"))
     max_freq = (
         _parse_ifo_freq_dict(max_freq_raw, detectors, default=sampling_frequency / 2.0)
         if max_freq_raw is not None
@@ -442,14 +462,13 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
 
     # --- 7) Reference frequency ---
     # bilby_pipe: [config] reference-frequency; LALInference: [engine] fref
-    fref_raw = _first(flat.get("reference-frequency"), engine.get("fref"))
-    reference_frequency = float(fref_raw) if fref_raw is not None else 50.0
+    fref_raw = _first(_flat("reference-frequency"), engine.get("fref"))
+    reference_frequency = float(fref_raw) if fref_raw is not None else float(_warn_default("reference-frequency", 50.0))
 
     # --- 8) Waveform approximant ---
     # bilby_pipe: [config] waveform-approximant; LALInference: [engine] approx
-    waveform_approximant = str(
-        _first(flat.get("waveform-approximant"), engine.get("approx")) or "IMRPhenomPv2"
-    )
+    approx_raw = _first(_flat("waveform-approximant"), engine.get("approx"))
+    waveform_approximant = str(approx_raw) if approx_raw is not None else str(_warn_default("waveform-approximant", "IMRPhenomPv2"))
 
     return AnalysisConfig(
         label=label,
@@ -478,8 +497,9 @@ def _infer_spline_npoints_from_config(cfg_dict: Dict[str, Dict[str, Any]], defau
     GWTC files store this as ``spline-calibration-nodes`` in the flat ``[config]``
     section.
     """
-    # bilby_pipe: [config] spline-calibration-nodes
-    val = cfg_dict.get("config", {}).get("spline-calibration-nodes", None)
+    flat = cfg_dict.get("config", {})
+    # bilby_pipe: hyphen or underscore form
+    val = flat.get("spline-calibration-nodes") or flat.get("spline_calibration_nodes")
     # LALInference: [engine] spcal-nodes
     if val is None:
         val = cfg_dict.get("engine", {}).get("spcal-nodes", None)
