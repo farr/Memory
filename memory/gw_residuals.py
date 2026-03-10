@@ -828,16 +828,33 @@ def compute_one_sample_fd(
     waveform_generator: WaveformGenerator,
     sample: Dict[str, Any],
 ) -> Dict[str, Dict[str, np.ndarray]]:
-    pols = waveform_generator.frequency_domain_strain(sample)
+    f_ref_orig = waveform_generator.waveform_arguments.get("reference_frequency", 20.0)
+    retry_frefs = [f_ref_orig * 0.6, f_ref_orig * 0.4, 5.0]
+    sample_try = sample
+    while True:
+        try:
+            pols = waveform_generator.frequency_domain_strain(sample_try)
+            break
+        except Exception as exc:
+            msg = str(exc).lower()
+            if ("too high" in msg or "initial frequency" in msg) and retry_frefs:
+                f_try = retry_frefs.pop(0)
+                LOGGER.warning(
+                    "reference_frequency=%.4g failed (%s); retrying with %.4g Hz",
+                    sample_try.get("reference_frequency", f_ref_orig), exc, f_try,
+                )
+                sample_try = {**sample_try, "reference_frequency": f_try}
+            else:
+                raise
 
     cal_model = getattr(ifos[0], "calibration_model", None) if len(ifos) else None
     use_spline = cal_model is not None and getattr(cal_model, "n_points", 0) and int(cal_model.n_points) > 0
 
     if use_spline:
         n_points = int(ifos[0].calibration_model.n_points)
-        sample_used = _ensure_bilby_calibration_keys(sample, tuple(ifo.name for ifo in ifos), n_points)
+        sample_used = _ensure_bilby_calibration_keys(sample_try, tuple(ifo.name for ifo in ifos), n_points)
     else:
-        sample_used = sample
+        sample_used = sample_try
 
     out: Dict[str, Dict[str, np.ndarray]] = {}
     for ifo in ifos:
