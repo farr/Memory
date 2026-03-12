@@ -397,12 +397,6 @@ def process_event(filepath, event, args, event_dir, multiprocess):
         if approximant is None:
             continue
 
-        # Skip FD-only LAL approximants that don't support TD SH modes
-        # (needed for memory template computation in make_memories)
-        if isinstance(approximant, int) and not approximant_has_td_generator(approximant_name):
-            print(f"[{event}] skipping {approximant_name}: no TD mode support.", flush=True)
-            continue
-
         try:
             try:
                 res = compute_bbh_residuals_with_spline_calibration(

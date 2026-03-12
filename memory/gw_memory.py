@@ -245,6 +245,12 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
 
     if approximant == lalsim.NRSur7dq4:
         f_low = -1
+    else:
+        # Some approximants (e.g. IMRPhenomXO4a, NRSur7dq4 FD) require f_low <= f_ref.
+        # When the analysis config has f_ref < f_low (e.g. 9 Hz vs 20 Hz), lower f_low
+        # so the waveform starts at or below the reference frequency.
+        # We must NOT change f_ref — it sets the spin angle convention.
+        f_low = min(f_low, f_ref)
 
     # --- gwsignal path (e.g. SEOBNRv5PHM via pyseobnr) ---
     if isinstance(approximant, CompactBinaryCoalescenceGenerator):

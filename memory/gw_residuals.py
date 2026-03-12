@@ -850,13 +850,8 @@ def compute_one_sample_fd(
     sample: Dict[str, Any],
 ) -> Dict[str, Dict[str, np.ndarray]]:
     f_ref_orig = waveform_generator.waveform_arguments.get("reference_frequency", 20.0)
-    # Decreasing sequence for "freq too high" (SEOBNRv4PHM-style errors).
-    # When f_ref is below 21 Hz, prepend increasing candidates first to handle
-    # "fRef < f_min" errors (IMRPhenomXO4a at 9 Hz, NRSur7dq4 at 19 Hz, etc.).
-    if f_ref_orig < 21.0:
-        retry_frefs = [20.0, 50.0, f_ref_orig * 0.6, f_ref_orig * 0.4, 5.0]
-    else:
-        retry_frefs = [f_ref_orig * 0.6, f_ref_orig * 0.4, 5.0]
+    retry_frefs_down = [f_ref_orig * 0.6, f_ref_orig * 0.4, 5.0]  # for "freq too high"
+    tried_fmin_reduction = False  # for "fRef < f_min"
     sample_try = sample
     while True:
         try:
@@ -866,25 +861,33 @@ def compute_one_sample_fd(
             msg = str(exc).lower()
             f_ref_curr = sample_try.get("reference_frequency", f_ref_orig)
             is_freq_too_high = "too high" in msg or "initial frequency" in msg
-            # "internal function call failed" alone (without nyquist/ringdown text)
-            # signals fRef < f_min for IMRPhenomXO4a/IMRPhenomXPHM; distinguish from
-            # SEOBNRv5PHM Nyquist errors which embed the full error description.
+            # "internal function call failed" without nyquist/ringdown text signals
+            # fRef < f_min (IMRPhenomXO4a, NRSur7dq4, etc.).  Fix by lowering
+            # minimum_frequency to f_ref — never change f_ref itself, as that
+            # would alter the spin-angle convention for the sample.
             is_freq_too_low = (
                 "internal function call failed" in msg
                 and "nyquist" not in msg
                 and "ringdown" not in msg
                 and f_ref_curr < 21.0
             )
-            if (is_freq_too_high or is_freq_too_low) and retry_frefs:
-                f_try = retry_frefs.pop(0)
+            if is_freq_too_high and retry_frefs_down:
+                f_try = retry_frefs_down.pop(0)
                 LOGGER.warning(
-                    "reference_frequency=%.4g failed (%s); retrying with %.4g Hz",
+                    "reference_frequency=%.4g too high (%s); retrying with %.4g Hz",
                     f_ref_curr, exc, f_try,
                 )
                 sample_try = {**sample_try, "reference_frequency": f_try}
-                # bilby's lal_binary_black_hole reads reference_frequency from
-                # waveform_arguments (nested dict), not from the sample; update both.
                 waveform_generator.waveform_arguments["reference_frequency"] = f_try
+            elif is_freq_too_low and not tried_fmin_reduction:
+                tried_fmin_reduction = True
+                LOGGER.warning(
+                    "reference_frequency=%.4g < minimum_frequency (%s); "
+                    "lowering minimum_frequency to match",
+                    f_ref_curr, exc,
+                )
+                waveform_generator.waveform_arguments["minimum_frequency"] = f_ref_curr
+                sample_try = {**sample_try, "minimum_frequency": f_ref_curr}
             else:
                 raise
 
