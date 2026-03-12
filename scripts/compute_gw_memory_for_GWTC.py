@@ -17,6 +17,7 @@ import multiprocessing as mp
 import matplotlib.pyplot as plt
 
 import lalsimulation as lalsim
+import lalsimulation.gwsignal as gwsignal
 from lal import MSUN_SI, PC_SI
 
 from memory.gw_residuals import (
@@ -261,8 +262,14 @@ def save_results_hdf5(filepath, results_dict):
 
 
 def save_histogram(event_dir, label, arr):
+    a_sample = arr[:, 2]
+    finite = a_sample[np.isfinite(a_sample)]
     plt.figure()
-    plt.hist(arr[:, 2], bins=40, density=True)
+    if len(finite) > 0:
+        plt.hist(finite, bins=40, density=True)
+    else:
+        plt.text(0.5, 0.5, "No finite samples", ha="center", va="center",
+                 transform=plt.gca().transAxes)
     plt.xlabel(r"$A_{\mathrm{memory}}$")
     plt.ylabel("Density")
     plt.title(f"{label} Memory Amplitude Posterior")
@@ -320,6 +327,43 @@ def label_is_finished(event_dir: Path, label: str) -> bool:
 
 
 # ================================================================
+# Approximant resolution
+# ================================================================
+
+def _resolve_approximant(event, approximant_name):
+    """
+    Resolve an approximant name to either a LAL integer enum or a gwsignal
+    CompactBinaryCoalescenceGenerator.  Returns None if not resolvable.
+
+    Resolution order:
+      1. Native LAL integer (SimInspiralGetApproximantFromString)
+      2. gwsignal generator (handles pyseobnr models like SEOBNRv5PHM)
+      3. Strip a trailing '-SpinTaylor' suffix and retry both paths
+         (GWTC-4 labels 'IMRPhenomXPHM-SpinTaylor' map to 'IMRPhenomXPHM')
+    """
+    candidates = [approximant_name]
+    if "-" in approximant_name:
+        candidates.append(approximant_name.split("-")[0])
+
+    for name in candidates:
+        # LAL integer path
+        try:
+            return lalsim.SimInspiralGetApproximantFromString(name)
+        except Exception:
+            pass
+        # gwsignal path (pyseobnr etc.)
+        try:
+            gen = gwsignal.gwsignal_get_waveform_generator(name)
+            if gen is not None:
+                return gen
+        except Exception:
+            pass
+
+    print(f"[{event}] skipping {approximant_name}: not resolvable via LAL or gwsignal.", flush=True)
+    return None
+
+
+# ================================================================
 # Main processing
 # ================================================================
 
@@ -349,52 +393,60 @@ def process_event(filepath, event, args, event_dir, multiprocess):
 
         print(f"[{event}] working with model {approximant_name}.", flush=True)
 
-        try:
-            approximant = getattr(lalsim, approximant_name)
-        except Exception:
+        approximant = _resolve_approximant(event, approximant_name)
+        if approximant is None:
+            continue
+
+        # Skip FD-only LAL approximants that don't support TD SH modes
+        # (needed for memory template computation in make_memories)
+        if isinstance(approximant, int) and not approximant_has_td_generator(approximant_name):
+            print(f"[{event}] skipping {approximant_name}: no TD mode support.", flush=True)
             continue
 
         try:
-            res = compute_bbh_residuals_with_spline_calibration(
-                str(filepath),
-                event=event,
-                max_samples=args.max_samples,
-                label=label,
-                thin=args.thin,
-                frame_dir=args.frame_dir,
-                glitch_channel_format=args.glitch_channel_format,
+            try:
+                res = compute_bbh_residuals_with_spline_calibration(
+                    str(filepath),
+                    event=event,
+                    max_samples=args.max_samples,
+                    label=label,
+                    thin=args.thin,
+                    frame_dir=args.frame_dir,
+                    glitch_channel_format=args.glitch_channel_format,
+                )
+            except Exception:
+                # Some PESummary files use e.g. "GW150914" rather than "GW150914_XXXXXX"
+                res = compute_bbh_residuals_with_spline_calibration(
+                    str(filepath),
+                    event=event.split("_")[0],
+                    max_samples=args.max_samples,
+                    label=label,
+                    thin=args.thin,
+                    frame_dir=args.frame_dir,
+                    glitch_channel_format=args.glitch_channel_format,
+                )
+
+            print(f"[{event}] making memories!", flush=True)
+
+            memory_vars = make_memories(
+                res['samples'],
+                [
+                    {det: res["fd"][det]["residual"][k] for det in res["fd"].keys()}
+                    for k in range(len(next(iter(res["fd"].values()))["residual"]))
+                ],
+                res['config'],
+                res['ifos'],
+                approximant=approximant,
+                ell_max=args.ell_max,
+                multiprocess=multiprocess,
             )
-        except Exception:
-            # Some PESummary files use e.g. "GW150914" rather than "GW150914_XXXXXX"
-            res = compute_bbh_residuals_with_spline_calibration(
-                str(filepath),
-                event=event.split("_")[0],
-                max_samples=args.max_samples,
-                label=label,
-                thin=args.thin,
-                frame_dir=args.frame_dir,
-                glitch_channel_format=args.glitch_channel_format,
-            )
 
-        print(f"[{event}] making memories!", flush=True)
-        
-        memory_vars = make_memories(
-            res['samples'],
-            [
-                {det: res["fd"][det]["residual"][k] for det in res["fd"].keys()}
-                for k in range(len(next(iter(res["fd"].values()))["residual"]))
-            ],
-            res['config'],
-            res['ifos'],
-            approximant=approximant,
-            ell_max=args.ell_max,
-            multiprocess=multiprocess,
-        )
+            results[label] = memory_vars
 
-        results[label] = memory_vars
-
-        update_results_hdf5(h5_path, label, memory_vars)
-        save_histogram(event_dir, label, memory_vars)
+            update_results_hdf5(h5_path, label, memory_vars)
+            save_histogram(event_dir, label, memory_vars)
+        except Exception as e:
+            print(f"[{event}] failed for {approximant_name}: {e}", flush=True)
 
     return results
 

@@ -9,6 +9,9 @@ from scipy.integrate import cumulative_trapezoid as cumtrapz
 
 import lal
 import lalsimulation as lalsim
+import lalsimulation.gwsignal as gwsignal
+import astropy.units as u
+from lalsimulation.gwsignal.core.waveform import CompactBinaryCoalescenceGenerator
 
 from memory.gw_residuals import _ensure_bilby_calibration_keys
 
@@ -242,6 +245,41 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
 
     if approximant == lalsim.NRSur7dq4:
         f_low = -1
+
+    # --- gwsignal path (e.g. SEOBNRv5PHM via pyseobnr) ---
+    if isinstance(approximant, CompactBinaryCoalescenceGenerator):
+        params = {
+            "mass1":       mass_1 * u.kg,
+            "mass2":       mass_2 * u.kg,
+            "spin1x":      s1x * u.dimensionless_unscaled,
+            "spin1y":      s1y * u.dimensionless_unscaled,
+            "spin1z":      s1z * u.dimensionless_unscaled,
+            "spin2x":      s2x * u.dimensionless_unscaled,
+            "spin2y":      s2y * u.dimensionless_unscaled,
+            "spin2z":      s2z * u.dimensionless_unscaled,
+            "distance":    distance * u.m,
+            "deltaT":      deltaT * u.s,
+            "f22_start":   max(f_low, 1.0) * u.Hz,
+            "f22_ref":     f_ref * u.Hz,
+            "phi_ref":     phiRef * u.rad,
+            "inclination": inclination * u.rad,
+            "lmax":        ell_max,
+        }
+        modes_gw = gwsignal.GenerateTDModes(params, approximant)
+        h_modes = {}
+        t = None
+        for key, ts in modes_gw.items():
+            if isinstance(key, str):
+                continue  # skip 'time_array' or metadata entries
+            l, m = int(key[0]), int(key[1])
+            if l > ell_max:
+                continue
+            h_modes[(l, m)] = np.asarray(ts.value)
+            if t is None:
+                t = ts.times.value
+        if t is None:
+            raise ValueError("gwsignal returned no modes.")
+        return h_modes, t
 
     if not FD:
         h_modes_lal = lalsim.SimInspiralChooseTDModes(
@@ -1005,6 +1043,11 @@ def make_memories(samples, fd_residuals_in_dets, config, ifos, angular_factors=N
             raise ValueError(f"Can't evaluate approximant {approximant}.")
 
     print("Analyzing", len(samples), "samples.", flush=True)
+    # gwsignal generators (e.g. SEOBNRv5PHM via pyseobnr) cannot be pickled
+    # across spawn-based multiprocessing workers; fall back to serial.
+    if multiprocess and isinstance(approximant, CompactBinaryCoalescenceGenerator):
+        print("gwsignal approximant: disabling multiprocessing (not picklable).", flush=True)
+        multiprocess = False
     if multiprocess:
         nproc = int(os.environ.get("SLURM_CPUS_PER_TASK", "1"))
         print("Using", nproc, "processes.", flush=True)

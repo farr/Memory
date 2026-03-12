@@ -11,6 +11,7 @@ dependencies = [
     "h5py>=3.15.1",
     "ipykernel>=7.2.0",
     "lalsuite>=7.26.4",
+    "pyseobnr>=0.3.6",
     "matplotlib>=3.10.8",
     "numpy>=2.2.6",
     "pesummary>=1.6",

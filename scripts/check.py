@@ -18,10 +18,11 @@ for catalog in sorted([x for x in os.listdir('/mnt/home/ccalvk/ceph/') if 'GWTC'
 failure_count = 0
 specific_failure_count = 0
 complete_failure_count = 0
-for event in sorted(os.listdir("analysis")):
+OUTDIR = "results/memory_gwtc"
+for event in sorted(os.listdir(OUTDIR)):
     count = 0
     keys = []
-    for x in sorted(os.listdir(f"analysis/{event}")):
+    for x in sorted(os.listdir(f"{OUTDIR}/{event}")):
         if not "histogram" in x:
             continue
         key = x.split("_")[-1].split(".png")[0]

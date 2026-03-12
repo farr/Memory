@@ -35,7 +35,8 @@ from gwpy.timeseries import TimeSeries
 import bilby
 from bilby.gw.detector.psd import PowerSpectralDensity
 from bilby.gw.detector import InterferometerList
-from bilby.gw.waveform_generator import WaveformGenerator
+from bilby.gw.waveform_generator import WaveformGenerator, GWSignalWaveformGenerator
+import lalsimulation as _lalsim
 
 
 LOGGER = logging.getLogger("gw_residuals")
@@ -595,12 +596,32 @@ def _check_expected_spline_keys(sample: Dict[str, Any], ifos: InterferometerList
 # bilby objects
 # ----------------------------
 
+def _is_gwsignal_only_approximant(name: str) -> bool:
+    """Return True if this approximant is not available as a native LAL integer enum."""
+    try:
+        _lalsim.SimInspiralGetApproximantFromString(name)
+        return False
+    except Exception:
+        return True
+
+
 def _build_waveform_generator_bbh(cfg: AnalysisConfig) -> WaveformGenerator:
-    """Build bilby WaveformGenerator for binary black hole signals."""
+    """Build bilby WaveformGenerator for binary black hole signals.
+
+    Uses GWSignalWaveformGenerator for approximants only available via gwsignal
+    (e.g. SEOBNRv5PHM via pyseobnr), and standard WaveformGenerator otherwise.
+    """
     waveform_arguments = dict(
         waveform_approximant=cfg.waveform_approximant,
         reference_frequency=cfg.reference_frequency,
     )
+    if _is_gwsignal_only_approximant(cfg.waveform_approximant):
+        return GWSignalWaveformGenerator(
+            duration=cfg.duration,
+            sampling_frequency=cfg.sampling_frequency,
+            parameter_conversion=bilby.gw.conversion.convert_to_lal_binary_black_hole_parameters,
+            waveform_arguments=waveform_arguments,
+        )
     return WaveformGenerator(
         duration=cfg.duration,
         sampling_frequency=cfg.sampling_frequency,
@@ -829,7 +850,13 @@ def compute_one_sample_fd(
     sample: Dict[str, Any],
 ) -> Dict[str, Dict[str, np.ndarray]]:
     f_ref_orig = waveform_generator.waveform_arguments.get("reference_frequency", 20.0)
-    retry_frefs = [f_ref_orig * 0.6, f_ref_orig * 0.4, 5.0]
+    # Decreasing sequence for "freq too high" (SEOBNRv4PHM-style errors).
+    # When f_ref is below 21 Hz, prepend increasing candidates first to handle
+    # "fRef < f_min" errors (IMRPhenomXO4a at 9 Hz, NRSur7dq4 at 19 Hz, etc.).
+    if f_ref_orig < 21.0:
+        retry_frefs = [20.0, 50.0, f_ref_orig * 0.6, f_ref_orig * 0.4, 5.0]
+    else:
+        retry_frefs = [f_ref_orig * 0.6, f_ref_orig * 0.4, 5.0]
     sample_try = sample
     while True:
         try:
@@ -837,13 +864,27 @@ def compute_one_sample_fd(
             break
         except Exception as exc:
             msg = str(exc).lower()
-            if ("too high" in msg or "initial frequency" in msg) and retry_frefs:
+            f_ref_curr = sample_try.get("reference_frequency", f_ref_orig)
+            is_freq_too_high = "too high" in msg or "initial frequency" in msg
+            # "internal function call failed" alone (without nyquist/ringdown text)
+            # signals fRef < f_min for IMRPhenomXO4a/IMRPhenomXPHM; distinguish from
+            # SEOBNRv5PHM Nyquist errors which embed the full error description.
+            is_freq_too_low = (
+                "internal function call failed" in msg
+                and "nyquist" not in msg
+                and "ringdown" not in msg
+                and f_ref_curr < 21.0
+            )
+            if (is_freq_too_high or is_freq_too_low) and retry_frefs:
                 f_try = retry_frefs.pop(0)
                 LOGGER.warning(
                     "reference_frequency=%.4g failed (%s); retrying with %.4g Hz",
-                    sample_try.get("reference_frequency", f_ref_orig), exc, f_try,
+                    f_ref_curr, exc, f_try,
                 )
                 sample_try = {**sample_try, "reference_frequency": f_try}
+                # bilby's lal_binary_black_hole reads reference_frequency from
+                # waveform_arguments (nested dict), not from the sample; update both.
+                waveform_generator.waveform_arguments["reference_frequency"] = f_try
             else:
                 raise
 
@@ -852,7 +893,12 @@ def compute_one_sample_fd(
 
     if use_spline:
         n_points = int(ifos[0].calibration_model.n_points)
-        sample_used = _ensure_bilby_calibration_keys(sample_try, tuple(ifo.name for ifo in ifos), n_points)
+        try:
+            sample_used = _ensure_bilby_calibration_keys(
+                sample_try, tuple(ifo.name for ifo in ifos), n_points
+            )
+        except KeyError:
+            sample_used = sample_try
     else:
         sample_used = sample_try
 
@@ -964,8 +1010,18 @@ def compute_bbh_residuals_with_spline_calibration(
 
         # Validate expected spline keys (only when enabled)
         n_points = int(ifos[0].calibration_model.n_points)
-        s0_norm = _ensure_bilby_calibration_keys(samples[0], used_detectors, n_points)
-        _check_expected_spline_keys(s0_norm, ifos)
+        try:
+            s0_norm = _ensure_bilby_calibration_keys(samples[0], used_detectors, n_points)
+            _check_expected_spline_keys(s0_norm, ifos)
+        except KeyError as e:
+            LOGGER.warning(
+                "Calibration key lookup failed (%s); disabling calibration.", e
+            )
+            for ifo in ifos:
+                ifo.calibration_model = IdentityCalibration(
+                    prefix=f"{calibration_prefix}{ifo.name}_"
+                )
+            calibration_info = {"enabled": False, "reason": f"Key lookup failed: {e}"}
     else:
         # No calibration keys: attach identity calibration model so bilby doesn't crash
         for ifo in ifos:

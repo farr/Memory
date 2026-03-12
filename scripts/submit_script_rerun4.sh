@@ -19,7 +19,7 @@ export LD_PRELOAD=/lib64/libgslcblas.so.0
 # to avoid "no locator available" crashes in multiprocessing workers
 export NUMBA_CACHE_DIR=/tmp/numba_cache_${SLURM_JOB_ID}
 
-EVENT_FILE="scripts/events.txt"
+EVENT_FILE="scripts/events_rerun4.txt"
 OUTDIR="results/memory_gwtc"
 
 mkdir -p "$OUTDIR/logs"
