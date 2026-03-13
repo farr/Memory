@@ -1,3 +1,4 @@
+import ast
 import os
 import copy
 import scipy
@@ -13,10 +14,46 @@ import lalsimulation.gwsignal as gwsignal
 import astropy.units as u
 from lalsimulation.gwsignal.core.waveform import CompactBinaryCoalescenceGenerator
 
-from memory.gw_residuals import _ensure_bilby_calibration_keys
+from memory.gw_residuals import _ensure_bilby_calibration_keys, _maybe_literal
 
 from scipy.special import log_ndtr
 from scipy.stats import truncnorm
+
+
+def _build_lal_dict_from_waveform_args(config):
+    """Build a LALDict populated with extra waveform parameters from the PE config.
+
+    Reads ``waveform_arguments_dict`` from the flat [config] section of the
+    PESummary config dict and inserts each parameter into a LALDict via the
+    corresponding ``lalsim.SimInspiralWaveformParamsInsert{Key}`` function.
+
+    Parameters that are pyseobnr-specific (e.g. ``lmax_nyquist``) and have no
+    LALSim insert function are silently skipped.
+
+    Returns None if there are no extra parameters to insert.
+    """
+    flat = config.config_dict.get("config", {})
+    raw = flat.get("waveform_arguments_dict") or flat.get("waveform-arguments-dict")
+    if raw is None:
+        return None
+
+    extra = _maybe_literal(raw)
+    if not isinstance(extra, dict) or not extra:
+        return None
+
+    d = lal.CreateDict()
+    inserted = 0
+    for key, val in extra.items():
+        fn_name = f"SimInspiralWaveformParamsInsert{key}"
+        fn = getattr(lalsim, fn_name, None)
+        if fn is None:
+            continue  # pyseobnr-only key (e.g. lmax_nyquist) — not a LALSim param
+        try:
+            fn(d, int(val) if isinstance(val, float) and val == int(val) else val)
+            inserted += 1
+        except Exception:
+            pass
+    return d if inserted > 0 else None
 
 
 def lal_mode_to_numpy_fft_bins(fs_mode, n_pos, dt):
@@ -263,7 +300,6 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
         cfg_lmax_nyquist = 2
         if raw_wf_args is not None:
             try:
-                import ast
                 extra = ast.literal_eval(str(raw_wf_args)) if isinstance(raw_wf_args, str) else raw_wf_args
                 if isinstance(extra, dict) and "lmax_nyquist" in extra:
                     cfg_lmax_nyquist = int(extra["lmax_nyquist"])
@@ -303,6 +339,8 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
             raise ValueError("gwsignal returned no modes.")
         return h_modes, t
 
+    lal_dict = _build_lal_dict_from_waveform_args(config)
+
     if not FD:
         h_modes_lal = lalsim.SimInspiralChooseTDModes(
             phiRef,
@@ -318,7 +356,7 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
             f_low,
             f_ref,
             distance,
-            None,
+            lal_dict,
             ell_max,
             approximant,
         )
@@ -353,7 +391,7 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
             phiRef + np.pi/4 + np.pi,
             distance,
             inclination,
-            None,
+            lal_dict,
             approximant,
         )
 
