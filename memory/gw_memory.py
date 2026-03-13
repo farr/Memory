@@ -252,24 +252,93 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
         # We must NOT change f_ref — it sets the spin angle convention.
         f_low = min(f_low, f_ref)
 
-    # --- gwsignal path (e.g. SEOBNRv5PHM via pyseobnr) ---
+    # --- pyseobnr generate_modes_opt path (SEOBNRv5PHM) ---
+    # Tried first for CompactBinaryCoalescenceGenerator objects because it uses
+    # its own internal time step and avoids the gwsignal deltaT-based Nyquist
+    # constraint that causes "ringdown frequency > Nyquist" failures.
     if isinstance(approximant, CompactBinaryCoalescenceGenerator):
+        try:
+            from pyseobnr.generate_waveform import generate_modes_opt
+
+            M_total_SI = mass_1 + mass_2  # already in kg
+            GM_over_c3 = lal.G_SI * M_total_SI / lal.C_SI**3  # natural time unit [s]
+
+            # generate_modes_opt requires q = m_heavy / m_light >= 1
+            m1_msun = sample["mass_1"]
+            m2_msun = sample["mass_2"]
+            if m1_msun >= m2_msun:
+                q = m1_msun / m2_msun
+                chi1 = np.array([s1x, s1y, s1z])
+                chi2 = np.array([s2x, s2y, s2z])
+            else:
+                q = m2_msun / m1_msun
+                chi1 = np.array([s2x, s2y, s2z])
+                chi2 = np.array([s1x, s1y, s1z])
+
+            f_start = max(f_low, 1.0) if f_low > 0 else 20.0
+            omega_start = np.pi * f_start * GM_over_c3   # orbital frequency in geometric units
+            omega_ref   = np.pi * f_ref   * GM_over_c3
+
+            t_nat, modes_nat = generate_modes_opt(
+                q=q,
+                chi1=chi1,
+                chi2=chi2,
+                omega_start=omega_start,
+                omega_ref=omega_ref,
+            )
+
+            # Convert natural units → SI
+            t_SI = np.asarray(t_nat) * GM_over_c3
+            strain_factor = lal.G_SI * M_total_SI / (lal.C_SI**2 * distance)
+
+            h_modes = {}
+            for key_str, h_nat in modes_nat.items():
+                l_str, m_str = key_str.split(",")
+                l, m = int(l_str), int(m_str)
+                if l > ell_max:
+                    continue
+                h_SI = np.asarray(h_nat, dtype=complex) * strain_factor
+                h_modes[(l, m)] = h_SI
+                # negative-m modes via conjugate symmetry: h_{l,-m} = (-1)^l conj(h_{l,m})
+                if m != 0:
+                    h_modes[(l, -m)] = ((-1) ** l) * np.conj(h_SI)
+
+            if not h_modes:
+                raise ValueError("generate_modes_opt returned no modes within ell_max.")
+
+            # Shift time so peak of |h_22| is at t = 0 (consistent with LAL TD path)
+            if (2, 2) in h_modes:
+                peak_idx = int(np.argmax(np.abs(h_modes[(2, 2)])))
+                t_SI = t_SI - t_SI[peak_idx]
+
+            return h_modes, t_SI
+
+        except Exception as _exc:
+            print(
+                f"generate_modes_opt failed ({_exc}); falling back to gwsignal.",
+                flush=True,
+            )
+
+        # --- gwsignal fallback (e.g. other CompactBinaryCoalescenceGenerator models) ---
         params = {
-            "mass1":       mass_1 * u.kg,
-            "mass2":       mass_2 * u.kg,
-            "spin1x":      s1x * u.dimensionless_unscaled,
-            "spin1y":      s1y * u.dimensionless_unscaled,
-            "spin1z":      s1z * u.dimensionless_unscaled,
-            "spin2x":      s2x * u.dimensionless_unscaled,
-            "spin2y":      s2y * u.dimensionless_unscaled,
-            "spin2z":      s2z * u.dimensionless_unscaled,
-            "distance":    distance * u.m,
-            "deltaT":      deltaT * u.s,
-            "f22_start":   max(f_low, 1.0) * u.Hz,
-            "f22_ref":     f_ref * u.Hz,
-            "phi_ref":     phiRef * u.rad,
-            "inclination": inclination * u.rad,
-            "lmax":        ell_max,
+            "mass1":        mass_1 * u.kg,
+            "mass2":        mass_2 * u.kg,
+            "spin1x":       s1x * u.dimensionless_unscaled,
+            "spin1y":       s1y * u.dimensionless_unscaled,
+            "spin1z":       s1z * u.dimensionless_unscaled,
+            "spin2x":       s2x * u.dimensionless_unscaled,
+            "spin2y":       s2y * u.dimensionless_unscaled,
+            "spin2z":       s2z * u.dimensionless_unscaled,
+            "distance":     distance * u.m,
+            "deltaT":       deltaT * u.s,
+            "f22_start":    max(f_low, 1.0) * u.Hz,
+            "f22_ref":      f_ref * u.Hz,
+            "phi_ref":      phiRef * u.rad,
+            "inclination":  inclination * u.rad,
+            "lmax":         ell_max,
+            # Restrict Nyquist check to ell=2 modes so that higher modes
+            # (e.g. (4,4)) with ringdown above the analysis Nyquist don't abort.
+            "lmax_nyquist": 2,
         }
         modes_gw = gwsignal.GenerateTDModes(params, approximant)
         h_modes = {}

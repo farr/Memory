@@ -852,6 +852,7 @@ def compute_one_sample_fd(
     f_ref_orig = waveform_generator.waveform_arguments.get("reference_frequency", 20.0)
     retry_frefs_down = [f_ref_orig * 0.6, f_ref_orig * 0.4, 5.0]  # for "freq too high"
     tried_fmin_reduction = False  # for "fRef < f_min"
+    tried_lmax_nyquist = False    # for "ringdown freq > Nyquist" (SEOBNRv5PHM high-l modes)
     sample_try = sample
     while True:
         try:
@@ -871,6 +872,11 @@ def compute_one_sample_fd(
                 and "ringdown" not in msg
                 and f_ref_curr < 21.0
             )
+            # pyseobnr (SEOBNRv5PHM via gwsignal) raises "ringdown frequency of
+            # (N,N) mode greater than maximum frequency from Nyquist theorem".
+            # Retry with lmax_nyquist=2, which restricts the Nyquist check to
+            # the (2,2) mode only.
+            is_nyquist_ringdown = "nyquist" in msg and "ringdown" in msg
             if is_freq_too_high and retry_frefs_down:
                 f_try = retry_frefs_down.pop(0)
                 LOGGER.warning(
@@ -888,6 +894,14 @@ def compute_one_sample_fd(
                 )
                 waveform_generator.waveform_arguments["minimum_frequency"] = f_ref_curr
                 sample_try = {**sample_try, "minimum_frequency": f_ref_curr}
+            elif is_nyquist_ringdown and not tried_lmax_nyquist:
+                tried_lmax_nyquist = True
+                LOGGER.warning(
+                    "Ringdown Nyquist error (%s); retrying with lmax_nyquist=2",
+                    exc,
+                )
+                waveform_generator.waveform_arguments["lmax_nyquist"] = 2
+                sample_try = {**sample_try, "lmax_nyquist": 2}
             else:
                 raise
 
