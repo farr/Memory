@@ -907,8 +907,8 @@ def compute_one_sample_fd(
 ) -> Dict[str, Dict[str, np.ndarray]]:
     f_ref_orig = waveform_generator.waveform_arguments.get("reference_frequency", 20.0)
     tried_fmin_reduction = False  # for "fRef < f_min"
-    tried_fmin_isco = False       # for SEOBNRv4PHM "initial frequency too high"
     tried_lmax_nyquist = False    # for "ringdown freq > Nyquist" (SEOBNRv5PHM high-l modes)
+    _FMIN_FLOOR = 1.0             # Hz — never go below this for ISCO retries
     sample_try = sample
     while True:
         _stderr_cap = _CaptureCStderr()
@@ -958,9 +958,12 @@ def compute_one_sample_fd(
             # mirrors the original PE config for such events (e.g. GW230529).
             is_nyquist_ringdown = "nyquist" in msg and "ringdown" in msg
             curr_lmax = waveform_generator.waveform_arguments.get("lmax_nyquist", 4)
-            if isco_limit is not None and not tried_fmin_isco:
-                tried_fmin_isco = True
+            curr_fmin = waveform_generator.waveform_arguments.get("minimum_frequency",
+                                                                      f_ref_orig)
+            if isco_limit is not None:
                 new_fmin = 0.99 * isco_limit
+                if new_fmin >= curr_fmin or new_fmin < _FMIN_FLOOR:
+                    raise  # no progress or hit floor — give up
                 LOGGER.warning(
                     "SEOB initial frequency too high (limit=%.4g Hz); "
                     "retrying with minimum_frequency=%.4g Hz",

@@ -343,8 +343,12 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
 
     if not FD:
         import re as _re
+        import logging as _logging
+        _log = _logging.getLogger("gw_memory")
         f_low_try = f_low
-        for _attempt in range(2):
+        _FMIN_FLOOR = 1.0  # Hz — never go below this
+        _MAX_ISCO_RETRIES = 20
+        for _attempt in range(_MAX_ISCO_RETRIES + 1):
             _stderr_cap = _CaptureCStderr()
             try:
                 with _stderr_cap:
@@ -368,16 +372,26 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
                     )
                 break
             except Exception as exc:
-                if _attempt == 0:
-                    # The ISCO error text ("the limit is X") is written to
-                    # C-level stderr, not to the Python exception string.
-                    # Search both sources.
-                    _combined = str(exc) + _stderr_cap.captured
-                    m = _re.search(r"the limit is ([\d.]+)", _combined, _re.IGNORECASE)
-                    if m and ("initial frequency is too high" in _combined.lower()
-                              or "intitial frequency is too high" in _combined.lower()):
-                        f_low_try = 0.99 * float(m.group(1))
-                        continue
+                # The ISCO error text ("the limit is X") is written to
+                # C-level stderr, not to the Python exception string.
+                # Search both sources and keep lowering f_low until the
+                # waveform starts successfully or we hit the floor.
+                _combined = str(exc) + _stderr_cap.captured
+                m = _re.search(r"the limit is ([\d.]+)", _combined, _re.IGNORECASE)
+                if m and ("initial frequency is too high" in _combined.lower()
+                          or "intitial frequency is too high" in _combined.lower()):
+                    new_f_low = 0.99 * float(m.group(1))
+                    if new_f_low >= f_low_try:
+                        raise  # no progress — give up
+                    if new_f_low < _FMIN_FLOOR:
+                        raise  # hit physical floor — give up
+                    _log.warning(
+                        "SEOB initial frequency too high (limit=%.4g Hz); "
+                        "retrying with f_low=%.4g Hz (attempt %d)",
+                        float(m.group(1)), new_f_low, _attempt + 1,
+                    )
+                    f_low_try = new_f_low
+                    continue
                 raise
 
         h_modes = {}
