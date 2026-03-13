@@ -12,6 +12,7 @@ import glob
 import logging
 import os
 import re
+import sys
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
@@ -850,6 +851,52 @@ def _ensure_bilby_calibration_keys(
 
 
 # ----------------------------
+# C-level stderr capture helper
+# ----------------------------
+
+class _CaptureCStderr:
+    """Context manager that captures C-level stderr (fd 2).
+
+    LAL/XLAL error messages are written directly to the C file descriptor,
+    not to Python's sys.stderr, so they never appear in Python exception
+    strings.  Capturing fd 2 lets us parse XLAL messages (e.g. the ISCO
+    frequency limit from SEOBNRv4PHM) after the call raises.
+
+    After __exit__ the captured text is re-emitted to real stderr so that
+    messages are not silently swallowed.
+    """
+
+    def __init__(self):
+        self.captured = ""
+
+    def __enter__(self):
+        self._saved_fd = os.dup(2)
+        self._r, w = os.pipe()
+        os.dup2(w, 2)
+        os.close(w)
+        return self
+
+    def __exit__(self, *_):
+        # Restore real stderr (closes the pipe write end held by fd 2).
+        os.dup2(self._saved_fd, 2)
+        os.close(self._saved_fd)
+        # Drain pipe — write end is now closed so os.read returns b"" at EOF.
+        chunks = []
+        while True:
+            try:
+                data = os.read(self._r, 65536)
+                if not data:
+                    break
+                chunks.append(data)
+            except OSError:
+                break
+        os.close(self._r)
+        self.captured = b"".join(chunks).decode("utf-8", errors="replace")
+        if self.captured:
+            os.write(2, self.captured.encode())  # fd 2 is real stderr again
+
+
+# ----------------------------
 # Core computation function
 # ----------------------------
 
@@ -864,8 +911,10 @@ def compute_one_sample_fd(
     tried_lmax_nyquist = False    # for "ringdown freq > Nyquist" (SEOBNRv5PHM high-l modes)
     sample_try = sample
     while True:
+        _stderr_cap = _CaptureCStderr()
         try:
-            pols = waveform_generator.frequency_domain_strain(sample_try)
+            with _stderr_cap:
+                pols = waveform_generator.frequency_domain_strain(sample_try)
             break
         except Exception as exc:
             msg = str(exc).lower()
@@ -876,10 +925,16 @@ def compute_one_sample_fd(
             # mass/spin parameters.  Parse X from the message and lower
             # minimum_frequency to just below it.  This is distinct from the
             # f_ref < f_min case below; both produce "internal function call failed".
+            #
+            # XLAL writes the detail ("the limit is X") only to C-level stderr,
+            # NOT to the Python exception string.  We capture C stderr via
+            # _CaptureCStderr and search there as well as in the exception text.
+            _combined = str(exc) + _stderr_cap.captured
+            _combined_lower = _combined.lower()
             isco_limit = None
-            isco_match = re.search(r"the limit is ([\d.]+)", str(exc), re.IGNORECASE)
-            if isco_match and ("initial frequency is too high" in msg
-                               or "intitial frequency is too high" in msg):
+            isco_match = re.search(r"the limit is ([\d.]+)", _combined, re.IGNORECASE)
+            if isco_match and ("initial frequency is too high" in _combined_lower
+                               or "intitial frequency is too high" in _combined_lower):
                 isco_limit = float(isco_match.group(1))
 
             # "internal function call failed" without nyquist/ringdown text signals

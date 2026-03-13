@@ -14,7 +14,7 @@ import lalsimulation.gwsignal as gwsignal
 import astropy.units as u
 from lalsimulation.gwsignal.core.waveform import CompactBinaryCoalescenceGenerator
 
-from memory.gw_residuals import _ensure_bilby_calibration_keys, _maybe_literal
+from memory.gw_residuals import _ensure_bilby_calibration_keys, _maybe_literal, _CaptureCStderr
 
 from scipy.special import log_ndtr
 from scipy.stats import truncnorm
@@ -345,31 +345,37 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
         import re as _re
         f_low_try = f_low
         for _attempt in range(2):
+            _stderr_cap = _CaptureCStderr()
             try:
-                h_modes_lal = lalsim.SimInspiralChooseTDModes(
-                    phiRef,
-                    deltaT,
-                    mass_1,
-                    mass_2,
-                    s1x,
-                    s1y,
-                    s1z,
-                    s2x,
-                    s2y,
-                    s2z,
-                    f_low_try,
-                    f_ref,
-                    distance,
-                    lal_dict,
-                    ell_max,
-                    approximant,
-                )
+                with _stderr_cap:
+                    h_modes_lal = lalsim.SimInspiralChooseTDModes(
+                        phiRef,
+                        deltaT,
+                        mass_1,
+                        mass_2,
+                        s1x,
+                        s1y,
+                        s1z,
+                        s2x,
+                        s2y,
+                        s2z,
+                        f_low_try,
+                        f_ref,
+                        distance,
+                        lal_dict,
+                        ell_max,
+                        approximant,
+                    )
                 break
             except Exception as exc:
                 if _attempt == 0:
-                    m = _re.search(r"the limit is ([\d.]+)", str(exc), _re.IGNORECASE)
-                    if m and ("initial frequency is too high" in str(exc).lower()
-                              or "intitial frequency is too high" in str(exc).lower()):
+                    # The ISCO error text ("the limit is X") is written to
+                    # C-level stderr, not to the Python exception string.
+                    # Search both sources.
+                    _combined = str(exc) + _stderr_cap.captured
+                    m = _re.search(r"the limit is ([\d.]+)", _combined, _re.IGNORECASE)
+                    if m and ("initial frequency is too high" in _combined.lower()
+                              or "intitial frequency is too high" in _combined.lower()):
                         f_low_try = 0.99 * float(m.group(1))
                         continue
                 raise
