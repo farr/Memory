@@ -342,24 +342,37 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
     lal_dict = _build_lal_dict_from_waveform_args(config)
 
     if not FD:
-        h_modes_lal = lalsim.SimInspiralChooseTDModes(
-            phiRef,
-            deltaT,
-            mass_1,
-            mass_2,
-            s1x,
-            s1y,
-            s1z,
-            s2x,
-            s2y,
-            s2z,
-            f_low,
-            f_ref,
-            distance,
-            lal_dict,
-            ell_max,
-            approximant,
-        )
+        import re as _re
+        f_low_try = f_low
+        for _attempt in range(2):
+            try:
+                h_modes_lal = lalsim.SimInspiralChooseTDModes(
+                    phiRef,
+                    deltaT,
+                    mass_1,
+                    mass_2,
+                    s1x,
+                    s1y,
+                    s1z,
+                    s2x,
+                    s2y,
+                    s2z,
+                    f_low_try,
+                    f_ref,
+                    distance,
+                    lal_dict,
+                    ell_max,
+                    approximant,
+                )
+                break
+            except Exception as exc:
+                if _attempt == 0:
+                    m = _re.search(r"the limit is ([\d.]+)", str(exc), _re.IGNORECASE)
+                    if m and ("initial frequency is too high" in str(exc).lower()
+                              or "intitial frequency is too high" in str(exc).lower()):
+                        f_low_try = 0.99 * float(m.group(1))
+                        continue
+                raise
 
         h_modes = {}
     

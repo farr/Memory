@@ -860,6 +860,7 @@ def compute_one_sample_fd(
 ) -> Dict[str, Dict[str, np.ndarray]]:
     f_ref_orig = waveform_generator.waveform_arguments.get("reference_frequency", 20.0)
     tried_fmin_reduction = False  # for "fRef < f_min"
+    tried_fmin_isco = False       # for SEOBNRv4PHM "initial frequency too high"
     tried_lmax_nyquist = False    # for "ringdown freq > Nyquist" (SEOBNRv5PHM high-l modes)
     sample_try = sample
     while True:
@@ -869,14 +870,29 @@ def compute_one_sample_fd(
         except Exception as exc:
             msg = str(exc).lower()
             f_ref_curr = waveform_generator.waveform_arguments.get("reference_frequency", f_ref_orig)
+
+            # SEOBNRv4PHM raises "Initial frequency is too high, the limit is X Hz"
+            # when minimum_frequency > the ISCO frequency for a particular sample's
+            # mass/spin parameters.  Parse X from the message and lower
+            # minimum_frequency to just below it.  This is distinct from the
+            # f_ref < f_min case below; both produce "internal function call failed".
+            isco_limit = None
+            isco_match = re.search(r"the limit is ([\d.]+)", str(exc), re.IGNORECASE)
+            if isco_match and ("initial frequency is too high" in msg
+                               or "intitial frequency is too high" in msg):
+                isco_limit = float(isco_match.group(1))
+
             # "internal function call failed" without nyquist/ringdown text signals
             # fRef < f_min (IMRPhenomXO4a, NRSur7dq4, etc.).  Fix by lowering
             # minimum_frequency to f_ref — never change f_ref itself, as that
             # would alter the spin-angle convention for the sample.
+            # Guard: don't fire this on the ISCO-limit error (which is unrelated
+            # to f_ref and produces the same "internal function call failed" text).
             is_freq_too_low = (
                 "internal function call failed" in msg
                 and "nyquist" not in msg
                 and "ringdown" not in msg
+                and isco_limit is None
                 and f_ref_curr < 21.0
             )
             # pyseobnr (SEOBNRv5PHM via gwsignal) raises "ringdown frequency of
@@ -887,7 +903,17 @@ def compute_one_sample_fd(
             # mirrors the original PE config for such events (e.g. GW230529).
             is_nyquist_ringdown = "nyquist" in msg and "ringdown" in msg
             curr_lmax = waveform_generator.waveform_arguments.get("lmax_nyquist", 4)
-            if is_freq_too_low and not tried_fmin_reduction:
+            if isco_limit is not None and not tried_fmin_isco:
+                tried_fmin_isco = True
+                new_fmin = 0.99 * isco_limit
+                LOGGER.warning(
+                    "SEOB initial frequency too high (limit=%.4g Hz); "
+                    "retrying with minimum_frequency=%.4g Hz",
+                    isco_limit, new_fmin,
+                )
+                waveform_generator.waveform_arguments["minimum_frequency"] = new_fmin
+                sample_try = {**sample_try, "minimum_frequency": new_fmin}
+            elif is_freq_too_low and not tried_fmin_reduction:
                 tried_fmin_reduction = True
                 LOGGER.warning(
                     "reference_frequency=%.4g < minimum_frequency (%s); "
