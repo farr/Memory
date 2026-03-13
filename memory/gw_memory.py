@@ -254,6 +254,21 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
 
     # --- gwsignal path (e.g. SEOBNRv5PHM via pyseobnr) ---
     if isinstance(approximant, CompactBinaryCoalescenceGenerator):
+        # Read lmax_nyquist from the PE config's waveform_arguments_dict if
+        # present (e.g. {'lmax_nyquist': 1} for low-mass NSBH events like
+        # GW230529 where even the (2,2) ringdown exceeds Nyquist at 4096 Hz).
+        # Default to 2 so higher modes don't abort for typical BBH events.
+        flat_cfg = config.config_dict.get("config", {})
+        raw_wf_args = flat_cfg.get("waveform_arguments_dict") or flat_cfg.get("waveform-arguments-dict")
+        cfg_lmax_nyquist = 2
+        if raw_wf_args is not None:
+            try:
+                import ast
+                extra = ast.literal_eval(str(raw_wf_args)) if isinstance(raw_wf_args, str) else raw_wf_args
+                if isinstance(extra, dict) and "lmax_nyquist" in extra:
+                    cfg_lmax_nyquist = int(extra["lmax_nyquist"])
+            except Exception:
+                pass
         params = {
             "mass1":        mass_1 * u.kg,
             "mass2":        mass_2 * u.kg,
@@ -270,9 +285,7 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
             "phi_ref":      phiRef * u.rad,
             "inclination":  inclination * u.rad,
             "lmax":         ell_max,
-            # Restrict Nyquist check to ell=2 modes so that higher modes
-            # (e.g. (4,4)) with ringdown above the analysis Nyquist don't abort.
-            "lmax_nyquist": 2,
+            "lmax_nyquist": cfg_lmax_nyquist,
         }
         modes_gw = gwsignal.GenerateTDModes(params, approximant)
         h_modes = {}

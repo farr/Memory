@@ -615,6 +615,15 @@ def _build_waveform_generator_bbh(cfg: AnalysisConfig) -> WaveformGenerator:
         waveform_approximant=cfg.waveform_approximant,
         reference_frequency=cfg.reference_frequency,
     )
+    # Merge any extra waveform arguments from the PE config
+    # (e.g. waveform_arguments_dict = {'lmax_nyquist': 1} for SEOBNRv5PHM on
+    # low-mass NSBH events where the ringdown exceeds Nyquist at 4096 Hz).
+    flat = cfg.config_dict.get("config", {})
+    raw_wf_args = flat.get("waveform_arguments_dict") or flat.get("waveform-arguments-dict")
+    if raw_wf_args is not None:
+        extra = _maybe_literal(raw_wf_args)
+        if isinstance(extra, dict):
+            waveform_arguments.update(extra)
     if _is_gwsignal_only_approximant(cfg.waveform_approximant):
         return GWSignalWaveformGenerator(
             duration=cfg.duration,
@@ -872,9 +881,12 @@ def compute_one_sample_fd(
             )
             # pyseobnr (SEOBNRv5PHM via gwsignal) raises "ringdown frequency of
             # (N,N) mode greater than maximum frequency from Nyquist theorem".
-            # Retry with lmax_nyquist=2, which restricts the Nyquist check to
-            # the (2,2) mode only.
+            # First retry with lmax_nyquist=2 (check only (2,2) mode); if that
+            # also fails (e.g. low-mass NSBH where even (2,2) ringdown > Nyquist)
+            # retry with lmax_nyquist=1 which disables the check entirely — this
+            # mirrors the original PE config for such events (e.g. GW230529).
             is_nyquist_ringdown = "nyquist" in msg and "ringdown" in msg
+            curr_lmax = waveform_generator.waveform_arguments.get("lmax_nyquist", 4)
             if is_freq_too_low and not tried_fmin_reduction:
                 tried_fmin_reduction = True
                 LOGGER.warning(
@@ -886,12 +898,21 @@ def compute_one_sample_fd(
                 sample_try = {**sample_try, "minimum_frequency": f_ref_curr}
             elif is_nyquist_ringdown and not tried_lmax_nyquist:
                 tried_lmax_nyquist = True
+                next_lmax = 2 if curr_lmax > 2 else 1
                 LOGGER.warning(
-                    "Ringdown Nyquist error (%s); retrying with lmax_nyquist=2",
+                    "Ringdown Nyquist error (%s); retrying with lmax_nyquist=%d",
+                    exc, next_lmax,
+                )
+                waveform_generator.waveform_arguments["lmax_nyquist"] = next_lmax
+                sample_try = {**sample_try, "lmax_nyquist": next_lmax}
+            elif is_nyquist_ringdown and tried_lmax_nyquist and curr_lmax > 1:
+                # lmax_nyquist=2 also failed; disable check entirely
+                LOGGER.warning(
+                    "Ringdown Nyquist error with lmax_nyquist=2 (%s); retrying with lmax_nyquist=1",
                     exc,
                 )
-                waveform_generator.waveform_arguments["lmax_nyquist"] = 2
-                sample_try = {**sample_try, "lmax_nyquist": 2}
+                waveform_generator.waveform_arguments["lmax_nyquist"] = 1
+                sample_try = {**sample_try, "lmax_nyquist": 1}
             else:
                 raise
 
