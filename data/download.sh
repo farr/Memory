@@ -23,4 +23,9 @@ if [ ! -L NRSur7dq4.h5 ]; then
   ln -s NRSur7dq4_v1.0.h5 NRSur7dq4.h5
 fi
 
+# SEOBNRv4ROM_v3.0.hdf5 is needed for SEOBNRv4_ROM_NRTidalv2_NSBH.
+# Source: /mnt/ceph/users/misi/lscsoft/src/lalsuite-waveform-data/waveform_data/SEOBNRv4ROM_v3.0.hdf5
+# Also available from: https://git.ligo.org/waveforms/software/lalsuite-waveform-data
+# On this system, a symlink data/SEOBNRv4ROM_v3.0.hdf5 -> the ceph copy is used.
+
 echo "Download complete!"
