@@ -850,7 +850,6 @@ def compute_one_sample_fd(
     sample: Dict[str, Any],
 ) -> Dict[str, Dict[str, np.ndarray]]:
     f_ref_orig = waveform_generator.waveform_arguments.get("reference_frequency", 20.0)
-    retry_frefs_down = [f_ref_orig * 0.6, f_ref_orig * 0.4, 5.0]  # for "freq too high"
     tried_fmin_reduction = False  # for "fRef < f_min"
     tried_lmax_nyquist = False    # for "ringdown freq > Nyquist" (SEOBNRv5PHM high-l modes)
     sample_try = sample
@@ -860,8 +859,7 @@ def compute_one_sample_fd(
             break
         except Exception as exc:
             msg = str(exc).lower()
-            f_ref_curr = sample_try.get("reference_frequency", f_ref_orig)
-            is_freq_too_high = "too high" in msg or "initial frequency" in msg
+            f_ref_curr = waveform_generator.waveform_arguments.get("reference_frequency", f_ref_orig)
             # "internal function call failed" without nyquist/ringdown text signals
             # fRef < f_min (IMRPhenomXO4a, NRSur7dq4, etc.).  Fix by lowering
             # minimum_frequency to f_ref — never change f_ref itself, as that
@@ -877,15 +875,7 @@ def compute_one_sample_fd(
             # Retry with lmax_nyquist=2, which restricts the Nyquist check to
             # the (2,2) mode only.
             is_nyquist_ringdown = "nyquist" in msg and "ringdown" in msg
-            if is_freq_too_high and retry_frefs_down:
-                f_try = retry_frefs_down.pop(0)
-                LOGGER.warning(
-                    "reference_frequency=%.4g too high (%s); retrying with %.4g Hz",
-                    f_ref_curr, exc, f_try,
-                )
-                sample_try = {**sample_try, "reference_frequency": f_try}
-                waveform_generator.waveform_arguments["reference_frequency"] = f_try
-            elif is_freq_too_low and not tried_fmin_reduction:
+            if is_freq_too_low and not tried_fmin_reduction:
                 tried_fmin_reduction = True
                 LOGGER.warning(
                     "reference_frequency=%.4g < minimum_frequency (%s); "
