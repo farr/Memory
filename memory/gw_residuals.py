@@ -1159,8 +1159,33 @@ def compute_bbh_residuals_with_spline_calibration(
             td_out[ifo_name] = {"residual": np.empty((len(samples), nt), dtype=np.float64)}
 
     # ---- Main computation loop ----
+    # Save the waveform_arguments keys that compute_one_sample_fd may modify
+    # (minimum_frequency, lmax_nyquist) so we can reset them before each
+    # sample.  Without this, an ISCO retry that lowers minimum_frequency
+    # would bleed into subsequent samples that have no ISCO issue, causing
+    # a mismatch with the make_memories path (which reads config.minimum_frequency
+    # fresh for every sample).
+    _wfargs_orig = {
+        k: wfgen.waveform_arguments[k]
+        for k in ("minimum_frequency", "lmax_nyquist")
+        if k in wfgen.waveform_arguments
+    }
     for i, s in enumerate(samples):
+        # Reset per-sample modifiable waveform arguments to their original state.
+        for k in ("minimum_frequency", "lmax_nyquist"):
+            if k in _wfargs_orig:
+                wfgen.waveform_arguments[k] = _wfargs_orig[k]
+            else:
+                wfgen.waveform_arguments.pop(k, None)
         r = compute_one_sample_fd(ifos, wfgen, s)
+        # Write the effective minimum_frequency used back to the sample dict so
+        # that evaluate_surrogate_with_LAL (make_memories path) can use the same
+        # value instead of always reading from config.
+        eff_fmin = wfgen.waveform_arguments.get("minimum_frequency")
+        if eff_fmin is not None:
+            s["minimum_frequency"] = eff_fmin
+        else:
+            s.pop("minimum_frequency", None)
         for ifo_name, d in r.items():
             fd_out[ifo_name]["model"][i, :] = d["model_fd"]
             fd_out[ifo_name]["residual"][i, :] = d["residual_fd"]

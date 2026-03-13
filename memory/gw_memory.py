@@ -276,7 +276,10 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
     duration = config.duration
     deltaF = 1 / duration
 
-    f_low = config.minimum_frequency[ifos[0].name]
+    # Use the effective minimum_frequency that the bilby residuals path used for
+    # this sample (stored back on the sample dict by compute_one_sample_fd after
+    # any ISCO retry).  Fall back to the config value if not present.
+    f_low = sample.get("minimum_frequency", config.minimum_frequency[ifos[0].name])
     f_max = fs/2
     f_ref = config.reference_frequency
 
