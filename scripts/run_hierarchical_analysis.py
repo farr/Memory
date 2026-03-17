@@ -176,16 +176,20 @@ def _save_provenance(outdir, injection_file, event_files, memory_dir):
         f.write(f"{memory_dir}\n")
 
 
-def _load_event_posteriors(event_files, param_key):
+def _load_event_posteriors(event_files, param_key, per_event_labels=None):
     """Read posterior samples from each HDF5 event file.
 
     Each file is expected to contain at least one HDF5 group with a
-    ``posterior_samples`` dataset.  If *param_key* is given, only groups
-    whose name contains that key are considered; if that leaves exactly
-    one match it is used directly, if it still leaves multiple the best
-    is chosen via the NRSur > SEOB > IMRPhenom, C01 > C00 hierarchy.
-    When *param_key* is None all groups with ``posterior_samples`` are
-    candidates and the same hierarchy is applied.
+    ``posterior_samples`` dataset.
+
+    Selection priority (highest to lowest):
+    1. *per_event_labels* — exact group name keyed by event name
+       (GW\d{6}_\d{6}); used to match PE posteriors to pre-computed memory
+       data that was generated from a specific waveform run.
+    2. *param_key* substring filter, then NRSur > SEOB > IMRPhenom hierarchy
+       if multiple keys match.
+    3. Auto-select via NRSur > SEOB > IMRPhenom, C01 > C00 hierarchy when
+       param_key is None.
 
     Returns
     -------
@@ -193,38 +197,54 @@ def _load_event_posteriors(event_files, param_key):
     kept_files : list of str
         Subset of *event_files* for which posteriors were successfully loaded.
     """
+    import re as _re2
+    per_event_labels = per_event_labels or {}
     posteriors = []
     kept_files = []
     for filename in event_files:
+        basename = os.path.basename(filename)
+        m = _re2.search(r"(GW\d{6}_\d{6})", basename)
+        event_name = m.group(1) if m else None
+
         with h5py.File(filename, "r") as f:
-            if param_key:
-                keys = [
-                    k for k in f.keys()
-                    if (
-                        param_key in k
-                        and isinstance(f[k], h5py.Group)
-                        and "posterior_samples" in f[k]
+            all_ps_keys = [
+                k for k in f.keys()
+                if isinstance(f[k], h5py.Group) and "posterior_samples" in f[k]
+            ]
+            # Prefer exact label from memory data for sample-count consistency
+            if event_name and event_name in per_event_labels:
+                exact = per_event_labels[event_name]
+                if exact in all_ps_keys:
+                    chosen = exact
+                else:
+                    logger.warning(
+                        "%s: memory label '%s' not in PE file (%s); falling back",
+                        basename, exact, all_ps_keys,
                     )
-                ]
+                    chosen = None
             else:
-                keys = [
-                    k for k in f.keys()
-                    if isinstance(f[k], h5py.Group) and "posterior_samples" in f[k]
-                ]
-            if len(keys) == 0:
-                logger.warning(
-                    "Skipping %s: no group with 'posterior_samples' matching"
-                    " param_key=%r", os.path.basename(filename), param_key,
-                )
-                continue
-            if len(keys) == 1:
-                chosen = keys[0]
-            else:
-                chosen = _pick_waveform_label(keys)
-                logger.info(
-                    "%s: selected PE group '%s' from %s",
-                    os.path.basename(filename), chosen, keys,
-                )
+                chosen = None
+
+            if chosen is None:
+                if param_key:
+                    keys = [k for k in all_ps_keys if param_key in k]
+                else:
+                    keys = all_ps_keys
+                if len(keys) == 0:
+                    logger.warning(
+                        "Skipping %s: no group with 'posterior_samples' matching"
+                        " param_key=%r", basename, param_key,
+                    )
+                    continue
+                if len(keys) == 1:
+                    chosen = keys[0]
+                else:
+                    chosen = _pick_waveform_label(keys)
+                    logger.info(
+                        "%s: selected PE group '%s' from %s",
+                        basename, chosen, keys,
+                    )
+
             posteriors.append(f[chosen]["posterior_samples"][()])
             kept_files.append(filename)
     return posteriors, kept_files
@@ -487,14 +507,13 @@ def main():
     if not os.path.exists(injection_file):
         raise FileNotFoundError(f"Injection file not found: {injection_file}")
 
-    all_posteriors, all_event_files = _load_event_posteriors(event_files, args.param_key)
-    logger.info("Loaded posteriors for %d events", len(all_posteriors))
-
     # --- Filter to memory events and load memory data (if needed) ---------
+    # Load memory data BEFORE PE posteriors so we can use the per-event
+    # waveform labels to ensure PE samples match memory samples exactly.
     if need_memory_data:
         waveform_label = args.waveform_label or args.param_key
         mem_files, skipped_files = _filter_to_memory_events(
-            all_event_files, args.memory_dir
+            event_files, args.memory_dir
         )
         logger.info(
             "Found %d events with memory results (%d skipped)",
@@ -504,23 +523,36 @@ def main():
             raise FileNotFoundError(
                 f"No events with memory results found in {args.memory_dir}"
             )
-        # Build memory posteriors list aligned with mem_files
+        memory_data = load_memory_data(mem_files, args.memory_dir, waveform_label)
+        logger.info("Loaded memory data for %d events", len(memory_data))
+        # Build per-event label dict so PE loading uses the same waveform group
+        per_event_labels = {md["event_name"]: md["waveform_label"] for md in memory_data}
+    else:
+        mem_files, memory_data, per_event_labels = [], None, {}
+
+    all_posteriors, all_event_files = _load_event_posteriors(
+        event_files, args.param_key, per_event_labels=per_event_labels,
+    )
+    logger.info("Loaded posteriors for %d events", len(all_posteriors))
+
+    if need_memory_data:
+        # Build memory posteriors list aligned with mem_files (now guaranteed
+        # to use matching waveform groups)
+        import re as _re
         mem_file_set = set(mem_files)
         mem_posteriors = [
             p for p, f in zip(all_posteriors, all_event_files)
             if f in mem_file_set
         ]
-        memory_data = load_memory_data(mem_files, args.memory_dir, waveform_label)
-        # Re-align to posteriors that were actually loaded (param_key filter)
-        import re as _re
+        # Re-align memory_data to files that were actually loaded
         kept_names = {
             _re.search(r"(GW\d{6}_\d{6})", os.path.basename(f)).group(1)
-            for f in mem_files
+            for f in all_event_files
+            if f in mem_file_set
         }
         memory_data = [md for md in memory_data if md["event_name"] in kept_names]
-        logger.info("Loaded memory data for %d events", len(memory_data))
     else:
-        mem_files, mem_posteriors, memory_data = [], [], None
+        mem_files, mem_posteriors = [], []
 
     # --- Provenance -------------------------------------------------------
     _save_provenance(
