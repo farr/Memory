@@ -145,7 +145,10 @@ def read_injection_file(
 
     Sources:
     - https://iopscience.iop.org/article/10.3847/2515-5172/ac2ba7
-    - https://zenodo.org/records/16740117/preview/gwtc-4_o4a_sensitivity-estimates.md
+    - O4a-only injections:
+      https://zenodo.org/records/16740117/preview/gwtc-4_o4a_sensitivity-estimates.md
+    - O3+O4a cumulative injections:
+      https://zenodo.org/records/16740128/preview/gwtc-4_o1234a_sensitivity-estimates.md
 
     Parameters
     ----------
