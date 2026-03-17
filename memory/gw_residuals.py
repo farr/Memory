@@ -140,8 +140,8 @@ def _parse_ifo_freq_dict(value: Any, detectors: Iterable[str], default: float) -
 
         # Try to handle dict-like strings with bare keys, e.g.:
         #   "{H1: 20, L1: 20}"  or  "{H1: 20, L1: 20, waveform: 9.0}"
-        # The "waveform" key is a LALInference convention for a per-approximant
-        # starting frequency that applies to all detectors as a fallback.
+        # The "waveform" key sets the waveform-generation start frequency only;
+        # it is NOT a fallback for per-IFO likelihood-integral lower limits.
         s = value.strip()
         if s.startswith("{") and s.endswith("}"):
             for d in detectors:
@@ -152,13 +152,9 @@ def _parse_ifo_freq_dict(value: Any, detectors: Iterable[str], default: float) -
             try:
                 dct = ast.literal_eval(s)
                 if isinstance(dct, dict):
-                    # "waveform" value is the per-model frequency fallback
-                    waveform_default = dct.get("waveform")
                     for d in detectors:
                         if d in dct:
                             out[d] = float(dct[d])
-                        elif waveform_default is not None:
-                            out[d] = float(waveform_default)
                     return out
             except Exception:
                 return out
