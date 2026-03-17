@@ -87,6 +87,7 @@ from memory.hierarchical import (
     get_samples_df,
     create_plots,
 )
+from memory.hierarchical.data import _pick_waveform_label
 
 
 # ---------------------------------------------------------------------------
@@ -178,9 +179,13 @@ def _save_provenance(outdir, injection_file, event_files, memory_dir):
 def _load_event_posteriors(event_files, param_key):
     """Read posterior samples from each HDF5 event file.
 
-    Each file is expected to contain exactly one HDF5 group with a
+    Each file is expected to contain at least one HDF5 group with a
     ``posterior_samples`` dataset.  If *param_key* is given, only groups
-    whose name contains that key are considered.
+    whose name contains that key are considered; if that leaves exactly
+    one match it is used directly, if it still leaves multiple the best
+    is chosen via the NRSur > SEOB > IMRPhenom, C01 > C00 hierarchy.
+    When *param_key* is None all groups with ``posterior_samples`` are
+    candidates and the same hierarchy is applied.
 
     Returns
     -------
@@ -212,12 +217,15 @@ def _load_event_posteriors(event_files, param_key):
                     " param_key=%r", os.path.basename(filename), param_key,
                 )
                 continue
-            if len(keys) > 1:
-                raise KeyError(
-                    f"Ambiguous: {len(keys)} groups with 'posterior_samples' in "
-                    f"{filename}: {keys}"
+            if len(keys) == 1:
+                chosen = keys[0]
+            else:
+                chosen = _pick_waveform_label(keys)
+                logger.info(
+                    "%s: selected PE group '%s' from %s",
+                    os.path.basename(filename), chosen, keys,
                 )
-            posteriors.append(f[keys[0]]["posterior_samples"][()])
+            posteriors.append(f[chosen]["posterior_samples"][()])
             kept_files.append(filename)
     return posteriors, kept_files
 
