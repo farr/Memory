@@ -91,6 +91,7 @@ from memory.hierarchical.data import (
     MIN_DETECTOR_FRAME_TOTAL_MASS,
     MIN_MASS_RATIO,
     _pick_waveform_label,
+    validate_posterior_prior_consistency,
 )
 
 
@@ -281,7 +282,14 @@ def _load_event_posteriors(event_files, param_key, per_event_labels=None):
                     )
                     continue
 
-            posteriors.append(f[chosen]["posterior_samples"][()])
+            posterior_samples = f[chosen]["posterior_samples"][()]
+            validate_posterior_prior_consistency(
+                f[chosen],
+                posterior_samples,
+                filename=filename,
+                label=chosen,
+            )
+            posteriors.append(posterior_samples)
             kept_files.append(filename)
             if event_name:
                 used_labels[event_name] = chosen

@@ -4,6 +4,8 @@ import logging
 import os
 import re
 
+import astropy.units as u
+from astropy.cosmology import z_at_value
 import numpy as np
 import h5py
 from tqdm import tqdm
@@ -37,6 +39,255 @@ def _pick_waveform_label(keys):
         if "SEOB" in k:
             return k
     return keys_sorted[0]
+
+
+def _decode_hdf5_scalar(value):
+    """Return a Python scalar/string from an HDF5 dataset value."""
+    if hasattr(value, "tolist"):
+        value = value.tolist()
+    if isinstance(value, list) and len(value) == 1:
+        value = value[0]
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="ignore")
+    return value
+
+
+def _get_hdf5_text(group, path):
+    """Return decoded text/scalar for *path* inside *group*, or None."""
+    if path not in group:
+        return None
+    return _decode_hdf5_scalar(group[path][()])
+
+
+def _build_prior_eval_namespace():
+    """Return the namespace needed to evaluate bilby prior repr strings."""
+    import bilby
+    from astropy.cosmology import FlatLambdaCDM, FlatwCDM, LambdaCDM, wCDM
+    from bilby.core.prior import (
+        Constraint,
+        Cosine,
+        DeltaFunction,
+        Gaussian,
+        LogUniform,
+        PowerLaw,
+        Sine,
+        TruncatedGaussian,
+        Uniform,
+    )
+    from bilby.gw.prior import (
+        AlignedSpin,
+        UniformComovingVolume,
+        UniformInComponentsChirpMass,
+        UniformInComponentsMassRatio,
+        UniformSourceFrame,
+    )
+
+    return {
+        "AlignedSpin": AlignedSpin,
+        "bilby": bilby,
+        "Constraint": Constraint,
+        "Cosine": Cosine,
+        "DeltaFunction": DeltaFunction,
+        "FlatLambdaCDM": FlatLambdaCDM,
+        "FlatwCDM": FlatwCDM,
+        "Gaussian": Gaussian,
+        "LambdaCDM": LambdaCDM,
+        "LogUniform": LogUniform,
+        "PowerLaw": PowerLaw,
+        "Sine": Sine,
+        "TruncatedGaussian": TruncatedGaussian,
+        "Uniform": Uniform,
+        "UniformComovingVolume": UniformComovingVolume,
+        "UniformInComponentsChirpMass": UniformInComponentsChirpMass,
+        "UniformInComponentsMassRatio": UniformInComponentsMassRatio,
+        "UniformSourceFrame": UniformSourceFrame,
+        "wCDM": wCDM,
+    }
+
+
+def _evaluate_prior_repr(prior_repr):
+    """Evaluate a bilby prior repr string into a prior object."""
+    namespace = _build_prior_eval_namespace()
+    return eval(prior_repr, namespace, namespace)
+
+
+def _metadata_indicates_cosmology_reweighting(group):
+    """Return True when the group metadata indicates cosmology reweighting."""
+    description = _get_hdf5_text(group, "description")
+    new_metafile = _get_hdf5_text(group, "meta_data/reweighting/new_metafile")
+    metafile = _get_hdf5_text(group, "meta_data/reweighting/metafile")
+    new_cosmology = _get_hdf5_text(group, "meta_data/reweighting/new_cosmology")
+
+    text_fragments = [
+        str(description or "").lower(),
+        str(new_metafile or "").lower(),
+        str(metafile or "").lower(),
+        str(new_cosmology or "").lower(),
+    ]
+    return any(
+        token in fragment
+        for fragment in text_fragments
+        for token in (
+            "reweighted posterior and prior samples",
+            "posterior_samples_cosmo",
+            "new_cosmology",
+        )
+    )
+
+
+def _sample_subset_indices(n_total, max_samples=128):
+    """Return evenly spaced sample indices for validation."""
+    if n_total <= max_samples:
+        return np.arange(n_total, dtype=int)
+    return np.linspace(0, n_total - 1, max_samples, dtype=int)
+
+
+def validate_posterior_prior_consistency(
+    group,
+    posterior_samples,
+    *,
+    filename=None,
+    label=None,
+):
+    """Best-effort validation that stored prior weights match sample metadata.
+
+    This is primarily aimed at public release files that may contain samples
+    reweighted between cosmological conventions. When the metadata indicates a
+    cosmology-sensitive reweighting, the function verifies that:
+
+    1. The posterior samples include an explicit prior column (`log_prior` or
+       `prior`), since the hierarchical model reuses that weight.
+    2. The released `luminosity_distance`, `redshift`, and source-frame masses
+       are internally consistent with the cosmology encoded in the file's
+       analytic prior metadata.
+
+    The release structure does not always permit an exact reconstruction of the
+    full joint `log_prior`, so this function intentionally raises only on
+    inconsistencies we can verify directly from metadata and samples.
+    """
+    prefix = []
+    if filename:
+        prefix.append(os.path.basename(filename))
+    if label:
+        prefix.append(label)
+    prefix = ": ".join(prefix) if prefix else "posterior_samples"
+
+    dtype_names = posterior_samples.dtype.names or ()
+    has_log_prior = "log_prior" in dtype_names
+    has_prior = "prior" in dtype_names
+
+    reweighted = _metadata_indicates_cosmology_reweighting(group)
+    if reweighted and not (has_log_prior or has_prior):
+        raise ValueError(
+            f"{prefix}: metadata indicates cosmology reweighting, but the "
+            "posterior samples do not contain a 'log_prior' or 'prior' field. "
+            "Using these samples in the hierarchical model would risk applying "
+            "the wrong prior weight."
+        )
+
+    prior_repr = _get_hdf5_text(group, "priors/analytic/luminosity_distance")
+    if prior_repr is None:
+        return
+
+    try:
+        distance_prior = _evaluate_prior_repr(prior_repr)
+    except Exception as exc:
+        if reweighted:
+            raise ValueError(
+                f"{prefix}: failed to parse luminosity-distance prior metadata "
+                f"for cosmology validation: {exc}"
+            ) from exc
+        return
+
+    cosmology = getattr(distance_prior, "cosmology", None)
+    if cosmology is None:
+        return
+
+    required = {"luminosity_distance", "redshift"}
+    if not required.issubset(dtype_names):
+        raise ValueError(
+            f"{prefix}: cosmology-aware distance prior is recorded in the "
+            "metadata, but the posterior samples are missing one of the "
+            f"required fields {sorted(required)}."
+        )
+
+    idx = _sample_subset_indices(len(posterior_samples))
+    luminosity_distance = np.asarray(
+        posterior_samples["luminosity_distance"][idx], dtype=float
+    )
+    redshift = np.asarray(posterior_samples["redshift"][idx], dtype=float)
+    finite = np.isfinite(luminosity_distance) & np.isfinite(redshift)
+    if not np.any(finite):
+        raise ValueError(
+            f"{prefix}: no finite luminosity-distance/redshift samples were "
+            "available for cosmology validation."
+        )
+
+    luminosity_distance = luminosity_distance[finite]
+    redshift = redshift[finite]
+
+    z_expected = np.array(
+        [
+            float(
+                z_at_value(
+                    cosmology.luminosity_distance,
+                    float(dl) * u.Mpc,
+                    zmin=0.0,
+                    zmax=max(10.0, 2.0 * float(np.max(redshift)) + 1.0),
+                )
+            )
+            for dl in luminosity_distance
+        ]
+    )
+    z_mismatch = np.max(np.abs(z_expected - redshift))
+    if z_mismatch > 5e-4:
+        raise ValueError(
+            f"{prefix}: sample redshifts are inconsistent with the cosmology "
+            f"encoded in the luminosity-distance prior metadata (max |dz| = "
+            f"{z_mismatch:.3e})."
+        )
+
+    source_mass_pairs = [
+        ("mass_1", "mass_1_source"),
+        ("mass_2", "mass_2_source"),
+    ]
+    for detector_name, source_name in source_mass_pairs:
+        if detector_name not in dtype_names or source_name not in dtype_names:
+            continue
+        detector_mass = np.asarray(posterior_samples[detector_name][idx], dtype=float)[finite]
+        source_mass = np.asarray(posterior_samples[source_name][idx], dtype=float)[finite]
+        source_expected = detector_mass / (1.0 + redshift)
+        denom = np.maximum(np.abs(source_expected), 1e-12)
+        rel_mismatch = np.max(np.abs(source_expected - source_mass) / denom)
+        if rel_mismatch > 5e-4:
+            raise ValueError(
+                f"{prefix}: {source_name} is inconsistent with {detector_name} "
+                "and the cosmology-adjusted redshift samples "
+                f"(max relative mismatch = {rel_mismatch:.3e})."
+            )
+
+    if has_log_prior:
+        prior_values = np.asarray(posterior_samples["log_prior"][idx], dtype=float)
+    elif has_prior:
+        prior_values = np.log(
+            np.clip(np.asarray(posterior_samples["prior"][idx], dtype=float), 1e-300, None)
+        )
+    else:
+        prior_values = None
+
+    if prior_values is not None:
+        prior_values = prior_values[finite]
+        if not np.all(np.isfinite(prior_values)):
+            raise ValueError(
+                f"{prefix}: prior weights contain non-finite values."
+            )
+        # A cosmology-driven reweighting must leave a non-degenerate prior
+        # column behind; a constant column would indicate the update was lost.
+        if reweighted and np.nanstd(prior_values) < 1e-6:
+            raise ValueError(
+                f"{prefix}: metadata indicates cosmology reweighting, but the "
+                "stored prior weights are numerically constant."
+            )
 
 
 def load_memory_data(event_files, memory_dir, waveform_label=None):
