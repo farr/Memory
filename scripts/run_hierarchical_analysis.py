@@ -87,7 +87,11 @@ from memory.hierarchical import (
     get_samples_df,
     create_plots,
 )
-from memory.hierarchical.data import _pick_waveform_label
+from memory.hierarchical.data import (
+    MIN_DETECTOR_FRAME_TOTAL_MASS,
+    MIN_MASS_RATIO,
+    _pick_waveform_label,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +113,11 @@ def _resolve_injection_file(args):
             "data/selection/mixture-real_o3_o4a-cartesian_spins_20250503134659UTC.hdf",
         )
     raise ValueError(f"Unrecognized injection runs: {args.injection_runs}")
+
+
+def _should_apply_nrsur_injection_cuts(param_key):
+    """Return True when *param_key* explicitly restricts to NRSur7dq4."""
+    return param_key is not None and "NRSur7dq4" in param_key
 
 
 def _check_output_files_exist(outdir, analyze, no_plots):
@@ -201,6 +210,7 @@ def _load_event_posteriors(event_files, param_key, per_event_labels=None):
     per_event_labels = per_event_labels or {}
     posteriors = []
     kept_files = []
+    used_labels = {}
     for filename in event_files:
         basename = os.path.basename(filename)
         m = _re2.search(r"(GW\d{6}_\d{6})", basename)
@@ -245,9 +255,37 @@ def _load_event_posteriors(event_files, param_key, per_event_labels=None):
                         basename, chosen, keys,
                     )
 
+            # Fall back to next-best group if the chosen one lacks log_prior/prior
+            ps_fields = f[chosen]["posterior_samples"].dtype.names
+            if "log_prior" not in ps_fields and "prior" not in ps_fields:
+                fallback_keys = [
+                    k for k in all_ps_keys
+                    if k != chosen
+                    and (
+                        "log_prior" in f[k]["posterior_samples"].dtype.names
+                        or "prior" in f[k]["posterior_samples"].dtype.names
+                    )
+                ]
+                if fallback_keys:
+                    fallback = _pick_waveform_label(fallback_keys)
+                    logger.warning(
+                        "%s: chosen group '%s' has no log_prior/prior field; "
+                        "falling back to '%s'",
+                        basename, chosen, fallback,
+                    )
+                    chosen = fallback
+                else:
+                    logger.warning(
+                        "%s: no group with log_prior/prior field found; skipping",
+                        basename,
+                    )
+                    continue
+
             posteriors.append(f[chosen]["posterior_samples"][()])
             kept_files.append(filename)
-    return posteriors, kept_files
+            if event_name:
+                used_labels[event_name] = chosen
+    return posteriors, kept_files, used_labels
 
 
 def _rescale_tgr_posterior(fit, A_scale):
@@ -410,18 +448,6 @@ def _build_parser():
         default=1000,
         help="Inverse false-alarm rate threshold in years (default: 1000)",
     )
-    parser.add_argument(
-        "--min-detector-frame-total-mass",
-        type=float,
-        default=66.0,
-        help="Minimum detector-frame total mass (default: 66)",
-    )
-    parser.add_argument(
-        "--min-mass-ratio",
-        type=float,
-        default=1.0 / 6.0,
-        help="Minimum mass ratio q = m2/m1 (default: 1/6)",
-    )
     # -- Output -------------------------------------------------------------
     parser.add_argument(
         "-o", "--outdir",
@@ -527,10 +553,23 @@ def main():
         logger.info("Loaded memory data for %d events", len(memory_data))
         # Build per-event label dict so PE loading uses the same waveform group
         per_event_labels = {md["event_name"]: md["waveform_label"] for md in memory_data}
+        if args.param_key is not None:
+            mismatched_labels = sorted({
+                label for label in per_event_labels.values()
+                if args.param_key not in label
+            })
+            if mismatched_labels:
+                logger.warning(
+                    "--param-key=%r will not control PE posterior selection for "
+                    "memory/joint events because per-event waveform labels from "
+                    "memory data take precedence. Using labels such as: %s",
+                    args.param_key,
+                    ", ".join(mismatched_labels[:5]),
+                )
     else:
         mem_files, memory_data, per_event_labels = [], None, {}
 
-    all_posteriors, all_event_files = _load_event_posteriors(
+    all_posteriors, all_event_files, used_labels = _load_event_posteriors(
         event_files, args.param_key, per_event_labels=per_event_labels,
     )
     logger.info("Loaded posteriors for %d events", len(all_posteriors))
@@ -551,6 +590,52 @@ def main():
             if f in mem_file_set
         }
         memory_data = [md for md in memory_data if md["event_name"] in kept_names]
+
+        # Reconcile memory_data with actually-used PE groups.  When
+        # _load_event_posteriors fell back to a different waveform (because
+        # the memory-selected group lacks log_prior), reload the memory data
+        # from that fallback group so sample counts always match.
+        fixed_memory_data = []
+        fixed_mem_posteriors = []
+        for md, post in zip(memory_data, mem_posteriors):
+            name = md["event_name"]
+            used = used_labels.get(name)
+            if used is not None and used != md["waveform_label"]:
+                mem_path = os.path.join(args.memory_dir, name, "memory_results.h5")
+                try:
+                    with h5py.File(mem_path, "r") as mf:
+                        if used in mf:
+                            grp = mf[used]
+                            md = {
+                                "A_sample": np.asarray(grp["A_sample"][()].real),
+                                "A_hat": np.asarray(grp["A_hat"][()].real),
+                                "A_sigma": np.asarray(grp["A_sigma"][()].real),
+                                "log_weight": np.asarray(grp["log_weight"][()].real),
+                                "event_name": name,
+                                "waveform_label": used,
+                            }
+                            logger.info(
+                                "%s: reloaded memory using fallback waveform '%s'",
+                                name, used,
+                            )
+                        else:
+                            logger.warning(
+                                "%s: memory file has no group '%s' (fallback); "
+                                "skipping event",
+                                name, used,
+                            )
+                            continue
+                except Exception as exc:
+                    logger.warning(
+                        "%s: failed to reload memory for fallback group '%s': %s; "
+                        "skipping event",
+                        name, used, exc,
+                    )
+                    continue
+            fixed_memory_data.append(md)
+            fixed_mem_posteriors.append(post)
+        memory_data = fixed_memory_data
+        mem_posteriors = fixed_mem_posteriors
     else:
         mem_files, mem_posteriors = [], []
 
@@ -562,11 +647,33 @@ def main():
     )
 
     # --- Build data arrays ------------------------------------------------
+    apply_nrsur_injection_cuts = _should_apply_nrsur_injection_cuts(
+        args.param_key
+    )
+    if apply_nrsur_injection_cuts:
+        logger.info(
+            "Applying NRSur7dq4 injection cuts (Mtot_det >= %.1f, q >= %.3f) "
+            "for explicit NRSur7dq4 run (param_key=%r)",
+            MIN_DETECTOR_FRAME_TOTAL_MASS,
+            MIN_MASS_RATIO,
+            args.param_key,
+        )
+    else:
+        logger.info(
+            "Not applying detector-frame mass or mass-ratio injection cuts "
+            "because --param-key does not restrict the run to NRSur7dq4."
+        )
+
     _gen_kwargs = dict(
         injection_file=injection_file,
         ifar_threshold=args.ifar_threshold,
-        min_detector_frame_total_mass=args.min_detector_frame_total_mass,
-        min_mass_ratio=args.min_mass_ratio,
+        min_detector_frame_total_mass=(
+            MIN_DETECTOR_FRAME_TOTAL_MASS
+            if apply_nrsur_injection_cuts else None
+        ),
+        min_mass_ratio=(
+            MIN_MASS_RATIO if apply_nrsur_injection_cuts else None
+        ),
         N_samples=args.n_samples_per_event,
         prng=seed,
         ignore_memory_weights=args.ignore_memory_weights,

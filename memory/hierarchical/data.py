@@ -137,8 +137,9 @@ def read_injection_file(
 ):
     """Read an HDF5 injection/selection file and extract relevant data.
 
-    Applies IFAR, detector-frame total-mass, and mass-ratio cuts to
-    determine which injections were "found", then extracts source-frame
+    Applies IFAR and, when requested, detector-frame total-mass and
+    mass-ratio cuts to determine which injections were "found", then extracts
+    source-frame
     masses, spins, redshifts, and draw priors. Also computes derived
     spin quantities (chi_eff, chi_p) and converts the analysis time to
     years.
@@ -157,13 +158,14 @@ def read_injection_file(
     ifar_threshold : float
         Inverse false-alarm rate threshold (yr); injections with min FAR
         below 1/ifar_threshold are considered found.
-    min_detector_frame_total_mass : float
+    min_detector_frame_total_mass : float or None
         Minimum detector-frame total mass threshold in solar masses.
         Injections with ``(m1_source + m2_source) * (1 + z)`` below this
-        value are excluded.
-    min_mass_ratio : float
+        value are excluded. If None, this cut is disabled.
+    min_mass_ratio : float or None
         Minimum mass-ratio threshold, where ``q = m2_source / m1_source``.
-        Injections with ``q`` below this value are excluded.
+        Injections with ``q`` below this value are excluded. If None, this
+        cut is disabled.
     Returns
     -------
     dict
@@ -183,9 +185,11 @@ def read_injection_file(
             (events["mass1_source"] + events["mass2_source"])
             * (1 + events["redshift"])
         )
-        found &= detector_frame_total_mass >= min_detector_frame_total_mass
+        if min_detector_frame_total_mass is not None:
+            found &= detector_frame_total_mass >= min_detector_frame_total_mass
         mass_ratio = events["mass2_source"] / events["mass1_source"]
-        found &= mass_ratio >= min_mass_ratio
+        if min_mass_ratio is not None:
+            found &= mass_ratio >= min_mass_ratio
 
         events = events[found]
 
@@ -332,11 +336,12 @@ def generate_data(
         Whether to include the TGR parameter in the KDE.
     ifar_threshold : float
         IFAR threshold passed to `read_injection_file`.
-    min_detector_frame_total_mass : float
+    min_detector_frame_total_mass : float or None
         Minimum detector-frame total mass cut passed to
-        `read_injection_file`.
-    min_mass_ratio : float
-        Minimum mass-ratio cut passed to `read_injection_file`.
+        `read_injection_file`. If None, the cut is disabled.
+    min_mass_ratio : float or None
+        Minimum mass-ratio cut passed to `read_injection_file`. If None,
+        the cut is disabled.
     N_samples : int
         Number of posterior samples to draw per event.
     prng : None, int, or numpy.random.Generator
