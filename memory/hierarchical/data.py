@@ -16,6 +16,29 @@ MIN_DETECTOR_FRAME_TOTAL_MASS = 66.0
 MIN_MASS_RATIO = 1.0 / 6.0
 
 
+def _pick_waveform_label(keys):
+    """Pick the best available waveform label using the priority hierarchy.
+
+    Priority: NRSur > SEOB > IMRPhenom (any remaining label).
+    Within each tier, higher calibration versions win (e.g. C01 > C00).
+    Ties within calibration version are broken alphabetically.
+    """
+    def _sort_key(k):
+        # Extract calibration version number for descending sort (higher = better).
+        m = re.match(r"C(\d+):", k)
+        cal = int(m.group(1)) if m else -1
+        return (-cal, k)
+
+    keys_sorted = sorted(keys, key=_sort_key)
+    for k in keys_sorted:
+        if "NRSur" in k:
+            return k
+    for k in keys_sorted:
+        if "SEOB" in k:
+            return k
+    return keys_sorted[0]
+
+
 def load_memory_data(event_files, memory_dir, waveform_label=None):
     """Load per-event memory results to use as the TGR parameter source.
 
@@ -32,15 +55,16 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
         Directory containing per-event subdirectories with
         ``memory_results.h5`` files.
     waveform_label : str or None
-        HDF5 group name inside each memory file.  If None, the first
-        available group is used.
+        HDF5 group name inside each memory file.  If None, the best
+        available group is selected using the priority hierarchy
+        NRSur > SEOB > IMRPhenom.
 
     Returns
     -------
     list of dict
         One dict per event with keys ``'A_sample'``, ``'A_hat'``,
-        ``'A_sigma'``, ``'log_weight'`` (1-D float arrays), and
-        ``'event_name'`` (str).
+        ``'A_sigma'``, ``'log_weight'`` (1-D float arrays),
+        ``'event_name'`` (str), and ``'waveform_label'`` (str).
 
     Raises
     ------
@@ -49,6 +73,9 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
     KeyError
         If the requested waveform label is not present in the file.
     """
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+
     memory_data = []
     for event_file in event_files:
         basename = os.path.basename(event_file)
@@ -72,13 +99,19 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
                         f"Waveform label '{waveform_label}' not found in "
                         f"{mem_path}; available: {list(f.keys())}"
                     )
-                grp = f[waveform_label]
+                chosen_label = waveform_label
             else:
                 keys = list(f.keys())
                 if not keys:
                     raise KeyError(f"No groups found in {mem_path}")
-                grp = f[keys[0]]
+                chosen_label = _pick_waveform_label(keys)
+                if len(keys) > 1:
+                    _log.info(
+                        "%s: selected waveform '%s' from %s",
+                        event_name, chosen_label, keys,
+                    )
 
+            grp = f[chosen_label]
             a_sample = grp["A_sample"][()].real
             a_hat = grp["A_hat"][()].real
             a_sigma = grp["A_sigma"][()].real
@@ -90,6 +123,7 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
             "A_sigma": np.asarray(a_sigma),
             "log_weight": np.asarray(log_weight),
             "event_name": event_name,
+            "waveform_label": chosen_label,
         })
 
     return memory_data

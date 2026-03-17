@@ -276,11 +276,11 @@ def _build_parser():
     parser.add_argument(
         "--memory-dir",
         type=str,
-        default=None,
+        default="/mnt/home/kmitman/work/memory_pop/analysis",
         help=(
             "Directory with per-event memory results "
             "({dir}/{event_name}/memory_results.h5). "
-            "Required unless --no-tgr is set."
+            "Default: /mnt/home/kmitman/work/memory_pop/analysis"
         ),
     )
     parser.add_argument(
