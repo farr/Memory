@@ -74,6 +74,45 @@ the astro-only run uses `taskfiles/TaskFileMemory_astro`. Always set
 
 Never run production analyses locally; always submit them via `submit.sh`.
 
+### Input PE data conventions
+
+The script accepts multiple glob patterns as positional arguments, so GWTC-3
+and GWTC-4 posteriors can be passed together:
+
+```bash
+scripts/run_hierarchical_analysis.py \
+    "/path/GWTC-4/IGWN-GWTC4p0-*-combined_PEDataRelease.hdf5" \
+    "/path/GWTC-3/IGWN-GWTC3p0-v2-GW*_PEDataRelease_mixed_nocosmo.h5" \
+    ...
+```
+
+**Why `nocosmo` for GWTC-3 (not `cosmo`)?**
+
+The hierarchical model importance-weights PE samples by `p_pop(θ) / p_draw(θ)`,
+where `p_draw` is read from each file's `log_prior` field.  The correct
+computation requires that `log_prior` accurately reflects the distribution the
+samples were drawn from.
+
+- **GWTC-4** files were originally sampled with `bilby.gw.prior.UniformSourceFrame`
+  (uniform in comoving volume per source time), and `log_prior` correctly records
+  that prior.
+- **GWTC-3 `cosmo`** files are produced by PESummary rejection-sampling the
+  original posteriors (which used `PowerLaw(alpha=2)` in luminosity distance) to
+  reweight them toward `UniformSourceFrame`.  Crucially, PESummary does **not**
+  update the `log_prior` field — it still records the original `PowerLaw(alpha=2)`
+  prior.  Using these samples with their stored `log_prior` therefore introduces a
+  spurious per-sample factor of `p_USF(θ) / p_PL2(θ)` ∝ `dV_c/dz / ((1+z) d_L²)`
+  that biases the redshift weighting for every O3 event.
+- **GWTC-3 `nocosmo`** files retain the full original sample set with
+  `log_prior = log p_PL2(θ)` and samples drawn from `L · p_PL2` — internally
+  consistent.  The hierarchical model divides out `p_PL2` correctly for O3 events
+  and `p_USF` correctly for O4a events; mixing PE priors across events is fine
+  because the `Z_pe` normalisation cancels in importance-sampling ratios.
+
+**Injection file:** use `mixture-real_o3_o4a-*` (not `o4a`-only) whenever O3
+events are included, since the selection function must cover the full observing
+baseline.
+
 ### Environment variables
 
 - `TGRPOP_PLATFORM`: `cpu` or `gpu` (auto-detected; test scripts default to `cpu`)
