@@ -12,6 +12,9 @@ wheels/
 *.tmp
 *.claude
 results/
+*_disBatch_*
+slurm-*.out
+slurm-*.err
 
 # Virtual environments
 .venv
