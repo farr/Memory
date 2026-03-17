@@ -958,12 +958,13 @@ def compute_one_sample_fd(
             # mirrors the original PE config for such events (e.g. GW230529).
             is_nyquist_ringdown = "nyquist" in msg and "ringdown" in msg
             curr_lmax = waveform_generator.waveform_arguments.get("lmax_nyquist", 4)
-            curr_fmin = waveform_generator.waveform_arguments.get("minimum_frequency",
-                                                                      f_ref_orig)
+            curr_fmin_explicit = waveform_generator.waveform_arguments.get("minimum_frequency")
             if isco_limit is not None:
                 new_fmin = 0.99 * isco_limit
-                if new_fmin >= curr_fmin or new_fmin < _FMIN_FLOOR:
-                    raise  # no progress or hit floor — give up
+                if new_fmin < _FMIN_FLOOR:
+                    raise  # hit floor — give up
+                if curr_fmin_explicit is not None and new_fmin >= curr_fmin_explicit:
+                    raise  # already tried this or lower, no progress
                 LOGGER.warning(
                     "SEOB initial frequency too high (limit=%.4g Hz); "
                     "retrying with minimum_frequency=%.4g Hz",

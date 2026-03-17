@@ -137,7 +137,7 @@ line; the astro-only run uses `taskfiles/TaskFileMemory_astro`.  Always set
 - Outputs per-event `{output_dir}/{event_name}/memory_results.h5` with datasets: `A_hat` (ML amplitude), `A_sigma` (posterior std), `A_sample` (posterior draws), `log_weight`, `log_likelihood`, grouped by waveform label
 - Only the surrogate (TD modes) waveform path is fully working; FD-only and ROM approximants fail at the SH-mode step
 - Validation run (10 samples, all 176 events): 156 fully complete, 20 partial, 0 total failures
-  - 13 SEOBNRv4PHM failures: ISCO limit < f_ref (~9–10 Hz vs 20 Hz) for high-mass BBH; bilby conditioning enforces fstart = max(fmin, fref) = fref so lowering minimum_frequency does not help
+  - 13 SEOBNRv4PHM failures (prior to guard-bug fix): ISCO limit ~9–10 Hz; a guard-logic bug in `compute_one_sample_fd` fired the no-progress check before any retry was attempted for events where `f_ref < ISCO limit` (e.g. GW190403: f_ref=5 Hz, ISCO=9.9 Hz → new_fmin=9.8 Hz ≥ curr_fmin=5.0 Hz triggered the guard); fixed by only applying the no-progress guard when `minimum_frequency` is already explicitly set in `waveform_arguments`
   - 7 NRTidal/NSBH model failures: no SH mode support (known unfixable)
   - 1 SpinTaylor failure (GW230704): fRef = fmin edge case in IMRPhenomX PN angles
 
@@ -221,8 +221,17 @@ a pipe around each LAL/bilby call, drains and re-emits the captured text, then
 searches both the Python exception and the C stderr for the `"the limit is X"`
 pattern.  When found, `minimum_frequency` is lowered to `0.99 × limit` and the
 call is retried.  This loop repeats (up to 20 times) until either the waveform
-starts successfully, the new limit is no lower than the current f_min (no
-progress), or f_min falls below 1 Hz.
+starts successfully, `f_min` falls below 1 Hz, or no progress can be made (i.e.
+a subsequent ISCO error returns a limit ≥ the already-tried frequency).
+
+**Guard logic**: the no-progress check only compares against
+`waveform_arguments["minimum_frequency"]` when that key is already explicitly
+set (i.e. a prior retry already lowered it).  On the first ISCO failure
+`minimum_frequency` is not yet in `waveform_arguments`, so the guard is skipped
+and the retry always proceeds.  This matters for events where `f_ref < ISCO
+limit` (e.g. GW190403: f_ref=5 Hz, ISCO≈9.9 Hz): using `f_ref` as the fallback
+`curr_fmin` caused the guard to fire immediately since 9.8 Hz ≥ 5 Hz, preventing
+any retry.
 
 The same `_CaptureCStderr`-based retry loop is used in `evaluate_surrogate_with_LAL`
 for direct `SimInspiralChooseTDModes` calls.
