@@ -133,9 +133,13 @@ line; the astro-only run uses `taskfiles/TaskFileMemory_astro`.  Always set
 
 **`scripts/compute_gw_memory_for_GWTC.py`** — Catalog-level GW memory computation for GWTC events.
 - Computes memory waveforms, detector projections, and likelihoods across a catalog
-- Uses multiprocessing for parallel event processing
+- Uses multiprocessing for parallel sample processing (`--multiprocess_samples`)
 - Outputs per-event `{output_dir}/{event_name}/memory_results.h5` with datasets: `A_hat` (ML amplitude), `A_sigma` (posterior std), `A_sample` (posterior draws), `log_weight`, `log_likelihood`, grouped by waveform label
-- Currently only the surrogate waveform path is working
+- Only the surrogate (TD modes) waveform path is fully working; FD-only and ROM approximants fail at the SH-mode step
+- Validation run (10 samples, all 176 events): 156 fully complete, 20 partial, 0 total failures
+  - 13 SEOBNRv4PHM failures: ISCO limit < f_ref (~9–10 Hz vs 20 Hz) for high-mass BBH; bilby conditioning enforces fstart = max(fmin, fref) = fref so lowering minimum_frequency does not help
+  - 7 NRTidal/NSBH model failures: no SH mode support (known unfixable)
+  - 1 SpinTaylor failure (GW230704): fRef = fmin edge case in IMRPhenomX PN angles
 
 ### Data flow
 - **TGR population analysis:** Event posteriors (HDF5) → KDE smoothing → numpyro hierarchical model → NUTS MCMC → ArviZ posterior → NetCDF + plots
@@ -198,6 +202,57 @@ The injection file field `lnpdraw_mass1_source_mass2_source_redshift_spin1x_spin
 - O1+O2+O3 Search Sensitivity Estimates (Zenodo 5636816): *"sampling PDFs are computed in terms of the variates recorded in the summary files"* and *"We define the injected spin distribution over Cartesian spin components."*
 - GWTC-4.0 Cumulative Search Sensitivity Estimates (Zenodo 16740128): provides both Cartesian and polar spin versions of the same injection files, confirming they are *"completely equivalent and only differ in the spin variables over which the draw probabilities are defined."*
 - O3 Search Sensitivity Estimates (Zenodo 5546676)
+
+### Waveform starting-frequency handling (`gw_residuals.py` + `gw_memory.py`)
+
+The bilby residuals path (`compute_one_sample_fd`) and the memory waveform path
+(`evaluate_surrogate_with_LAL`) must use the **same starting frequency** for each
+posterior sample.  Several mechanisms co-operate to achieve this:
+
+#### ISCO frequency retry
+SEOBNRv4PHM (and related SEOB models) raise "Initial frequency is too high, the
+limit is X Hz" when `minimum_frequency` exceeds the spin-dependent ISCO for a
+given sample's mass/spin parameters.  This error text is written to **C-level
+stderr** (fd 2), not to the Python exception string — bilby and the LAL SWIG
+bindings surface only `"Internal function call failed: Input domain error"`.
+
+Fix: `_CaptureCStderr` context manager (in `gw_residuals.py`) redirects fd 2 to
+a pipe around each LAL/bilby call, drains and re-emits the captured text, then
+searches both the Python exception and the C stderr for the `"the limit is X"`
+pattern.  When found, `minimum_frequency` is lowered to `0.99 × limit` and the
+call is retried.  This loop repeats (up to 20 times) until either the waveform
+starts successfully, the new limit is no lower than the current f_min (no
+progress), or f_min falls below 1 Hz.
+
+The same `_CaptureCStderr`-based retry loop is used in `evaluate_surrogate_with_LAL`
+for direct `SimInspiralChooseTDModes` calls.
+
+#### Per-sample f_min synchronisation
+`minimum_frequency` starts as `config.minimum_frequency[ifo]` (e.g. 20 Hz).
+After each sample's ISCO retry resolves to a lower value, the effective f_min is
+written back to the sample dict (`s["minimum_frequency"] = eff_fmin`).
+`evaluate_surrogate_with_LAL` reads `sample.get("minimum_frequency", config.minimum_frequency[...])`,
+so the memory waveform starts at exactly the same frequency the bilby residuals
+used — no independent retry needed.
+
+Before each sample, the main loop in `compute_gw_residuals_for_BBH_posterior`
+resets the shared waveform generator's `minimum_frequency` (and `lmax_nyquist`)
+to their original values, preventing state from one sample's retry from bleeding
+into the next.
+
+#### `lmax_nyquist` retry (SEOBNRv5PHM / pyseobnr)
+pyseobnr raises "ringdown frequency of (N,N) mode greater than maximum frequency
+from Nyquist theorem" for high-ℓ modes.  The bilby path retries with
+`lmax_nyquist=2` (check only ℓ=2), then `lmax_nyquist=1` (disable entirely,
+used by PE for low-mass NSBH events like GW230529).  The value is read from
+`waveform_arguments_dict` in the PE config if present.
+
+#### `waveform_arguments_dict` propagation
+Extra PE waveform flags (e.g. `{'lmax_nyquist': 1}`, SpinTaylor PN flags
+`PhenomXPrecVersion=320`) are read from the `[config]` section and merged into
+the bilby `WaveformGenerator.waveform_arguments`.  For the LAL path, a
+`_build_lal_dict_from_waveform_args` helper maps dict keys to
+`SimInspiralWaveformParamsInsert{Key}` functions to build a LALDict.
 
 ### Key patterns
 - HDF5 parameter key lookup uses multiple naming conventions with fallbacks
