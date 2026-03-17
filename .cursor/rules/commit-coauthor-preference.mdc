@@ -1,0 +1,16 @@
+---
+description: Always include a co-author trailer on requested commits
+alwaysApply: true
+---
+
+# Commit Co-Author Preference
+
+When the user explicitly asks the agent to create a git commit in this
+repository, include a `Co-authored-by:` trailer in the commit message by
+default.
+
+Use:
+
+`Co-authored-by: OpenAI <noreply@openai.com>`
+
+Only omit the trailer if the user explicitly asks not to include it.
