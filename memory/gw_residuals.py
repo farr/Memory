@@ -910,6 +910,7 @@ def compute_one_sample_fd(
     tried_lmax_nyquist = False            # for "ringdown freq > Nyquist" (SEOBNRv5PHM via lmax_nyquist)
     tried_eob_nyquist_check = False       # for "ringdown freq > Nyquist" (LAL SEOBNRv4PHM via EOBEllMaxForNyquistCheck)
     _FMIN_FLOOR = 1.0             # Hz — never go below this for ISCO retries
+    _seen_isco_limit = None       # track the highest ISCO limit we've encountered
     sample_try = sample
     while True:
         _stderr_cap = _CaptureCStderr()
@@ -974,6 +975,7 @@ def compute_one_sample_fd(
                     raise  # hit floor — give up
                 if curr_fmin_explicit is not None and new_fmin >= curr_fmin_explicit:
                     raise  # already tried this or lower, no progress
+                _seen_isco_limit = max(_seen_isco_limit or 0.0, isco_limit)
                 LOGGER.warning(
                     "SEOB initial frequency too high (limit=%.4g Hz); "
                     "retrying with minimum_frequency=%.4g Hz",
@@ -981,7 +983,12 @@ def compute_one_sample_fd(
                 )
                 waveform_generator.waveform_arguments["minimum_frequency"] = new_fmin
                 sample_try = {**sample_try, "minimum_frequency": new_fmin}
-            elif is_freq_too_low and not tried_fmin_reduction:
+            elif is_freq_too_low and not tried_fmin_reduction and (
+                _seen_isco_limit is None or f_ref_curr >= _seen_isco_limit
+            ):
+                # Don't lower f_min below a previously-seen ISCO limit: doing so
+                # would immediately re-trigger the ISCO error, creating a deadlock
+                # (e.g. GW200308 SEOBNRv4PHM: f_ref=3 Hz, ISCO=9.7 Hz).
                 tried_fmin_reduction = True
                 LOGGER.warning(
                     "reference_frequency=%.4g < minimum_frequency (%s); "
@@ -1182,6 +1189,15 @@ def compute_bbh_residuals_with_spline_calibration(
 
         calibration_info = {"enabled": False, "reason": "No calibration keys found in posterior samples."}
         LOGGER.info("Calibration disabled: no calibration keys found in posterior samples.")
+
+    # ---- Ensure geocent_time is present in every sample ----
+    # Some old LALInference posteriors omit this column (or use "time").  bilby
+    # requires it, so inject from cfg.trigger_time when missing.
+    _geocent_time_aliases = ("geocent_time", "time", "tc")
+    for s in samples:
+        if "geocent_time" not in s:
+            found = next((s[k] for k in _geocent_time_aliases if k in s), None)
+            s["geocent_time"] = found if found is not None else cfg.trigger_time
 
     # ---- Pre-allocate output arrays ----
     first = compute_one_sample_fd(ifos, wfgen, samples[0])

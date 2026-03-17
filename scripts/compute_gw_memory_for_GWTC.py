@@ -398,27 +398,15 @@ def process_event(filepath, event, args, event_dir, multiprocess):
             continue
 
         try:
-            try:
-                res = compute_bbh_residuals_with_spline_calibration(
-                    str(filepath),
-                    event=event,
-                    max_samples=args.max_samples,
-                    label=label,
-                    thin=args.thin,
-                    frame_dir=args.frame_dir,
-                    glitch_channel_format=args.glitch_channel_format,
-                )
-            except Exception:
-                # Some PESummary files use e.g. "GW150914" rather than "GW150914_XXXXXX"
-                res = compute_bbh_residuals_with_spline_calibration(
-                    str(filepath),
-                    event=event.split("_")[0],
-                    max_samples=args.max_samples,
-                    label=label,
-                    thin=args.thin,
-                    frame_dir=args.frame_dir,
-                    glitch_channel_format=args.glitch_channel_format,
-                )
+            res = compute_bbh_residuals_with_spline_calibration(
+                str(filepath),
+                event=event,
+                max_samples=args.max_samples,
+                label=label,
+                thin=args.thin,
+                frame_dir=args.frame_dir,
+                glitch_channel_format=args.glitch_channel_format,
+            )
 
             print(f"[{event}] making memories!", flush=True)
 
