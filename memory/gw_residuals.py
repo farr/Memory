@@ -906,8 +906,9 @@ def compute_one_sample_fd(
     sample: Dict[str, Any],
 ) -> Dict[str, Dict[str, np.ndarray]]:
     f_ref_orig = waveform_generator.waveform_arguments.get("reference_frequency", 20.0)
-    tried_fmin_reduction = False  # for "fRef < f_min"
-    tried_lmax_nyquist = False    # for "ringdown freq > Nyquist" (SEOBNRv5PHM high-l modes)
+    tried_fmin_reduction = False          # for "fRef < f_min"
+    tried_lmax_nyquist = False            # for "ringdown freq > Nyquist" (SEOBNRv5PHM via lmax_nyquist)
+    tried_eob_nyquist_check = False       # for "ringdown freq > Nyquist" (LAL SEOBNRv4PHM via EOBEllMaxForNyquistCheck)
     _FMIN_FLOOR = 1.0             # Hz — never go below this for ISCO retries
     sample_try = sample
     while True:
@@ -951,12 +952,20 @@ def compute_one_sample_fd(
                 and f_ref_curr < 21.0
             )
             # pyseobnr (SEOBNRv5PHM via gwsignal) raises "ringdown frequency of
-            # (N,N) mode greater than maximum frequency from Nyquist theorem".
-            # First retry with lmax_nyquist=2 (check only (2,2) mode); if that
-            # also fails (e.g. low-mass NSBH where even (2,2) ringdown > Nyquist)
-            # retry with lmax_nyquist=1 which disables the check entirely — this
-            # mirrors the original PE config for such events (e.g. GW230529).
+            # (N,N) mode greater than maximum frequency from Nyquist theorem"
+            # as a Python exception — detectable in `msg`.
+            # LAL SEOBNRv4PHM raises "XLALEOBCheckNyquistFrequency: Ringdown
+            # frequency > Nyquist frequency!" only to C-level stderr — detectable
+            # in `_combined_lower` but NOT in `msg`.
+            # For pyseobnr: retry with lmax_nyquist=2 then lmax_nyquist=1.
+            # For LAL: retry with mode_array=[[2,2],[2,-2]] (dominant mode only)
+            # to avoid the higher-mode Nyquist check entirely.
             is_nyquist_ringdown = "nyquist" in msg and "ringdown" in msg
+            is_nyquist_ringdown_lal = (
+                not is_nyquist_ringdown
+                and "nyquist" in _combined_lower
+                and "ringdown" in _combined_lower
+            )
             curr_lmax = waveform_generator.waveform_arguments.get("lmax_nyquist", 4)
             curr_fmin_explicit = waveform_generator.waveform_arguments.get("minimum_frequency")
             if isco_limit is not None:
@@ -998,6 +1007,37 @@ def compute_one_sample_fd(
                 )
                 waveform_generator.waveform_arguments["lmax_nyquist"] = 1
                 sample_try = {**sample_try, "lmax_nyquist": 1}
+            elif is_nyquist_ringdown_lal and not tried_eob_nyquist_check:
+                # LAL SEOBNRv4PHM: "Ringdown frequency > Nyquist frequency!"
+                # written to C-level stderr.  EOBEllMaxForNyquistCheck is a
+                # LALDict key (SimInspiralWaveformParamsInsertEOBEllMaxForNyquistCheck)
+                # that limits which modes are tested — same idea as lmax_nyquist=2
+                # for pyseobnr.  First try ell≤2 check, then ell≤1 (disable).
+                tried_eob_nyquist_check = True
+                curr_eob = waveform_generator.waveform_arguments.get(
+                    "EOBEllMaxForNyquistCheck", 5
+                )
+                next_eob = 2 if curr_eob > 2 else 1
+                LOGGER.warning(
+                    "LAL Nyquist ringdown error (C-stderr); retrying with "
+                    "EOBEllMaxForNyquistCheck=%d",
+                    next_eob,
+                )
+                waveform_generator.waveform_arguments["EOBEllMaxForNyquistCheck"] = next_eob
+                sample_try = {**sample_try, "EOBEllMaxForNyquistCheck": next_eob}
+            elif is_nyquist_ringdown_lal and tried_eob_nyquist_check:
+                curr_eob = waveform_generator.waveform_arguments.get(
+                    "EOBEllMaxForNyquistCheck", 5
+                )
+                if curr_eob > 1:
+                    LOGGER.warning(
+                        "LAL Nyquist error with EOBEllMaxForNyquistCheck=2; "
+                        "retrying with EOBEllMaxForNyquistCheck=1 (disable check)",
+                    )
+                    waveform_generator.waveform_arguments["EOBEllMaxForNyquistCheck"] = 1
+                    sample_try = {**sample_try, "EOBEllMaxForNyquistCheck": 1}
+                else:
+                    raise  # check already disabled, still failing — give up
             else:
                 raise
 
@@ -1168,12 +1208,12 @@ def compute_bbh_residuals_with_spline_calibration(
     # fresh for every sample).
     _wfargs_orig = {
         k: wfgen.waveform_arguments[k]
-        for k in ("minimum_frequency", "lmax_nyquist")
+        for k in ("minimum_frequency", "lmax_nyquist", "EOBEllMaxForNyquistCheck")
         if k in wfgen.waveform_arguments
     }
     for i, s in enumerate(samples):
         # Reset per-sample modifiable waveform arguments to their original state.
-        for k in ("minimum_frequency", "lmax_nyquist"):
+        for k in ("minimum_frequency", "lmax_nyquist", "EOBEllMaxForNyquistCheck"):
             if k in _wfargs_orig:
                 wfgen.waveform_arguments[k] = _wfargs_orig[k]
             else:

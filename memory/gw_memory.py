@@ -349,8 +349,10 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
         import logging as _logging
         _log = _logging.getLogger("gw_memory")
         f_low_try = f_low
+        ell_max_try = ell_max
         _FMIN_FLOOR = 1.0  # Hz — never go below this
         _MAX_ISCO_RETRIES = 20
+        _tried_ell_max_reduction = False
         for _attempt in range(_MAX_ISCO_RETRIES + 1):
             _stderr_cap = _CaptureCStderr()
             try:
@@ -370,7 +372,7 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
                         f_ref,
                         distance,
                         lal_dict,
-                        ell_max,
+                        ell_max_try,
                         approximant,
                     )
                 break
@@ -380,9 +382,10 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
                 # Search both sources and keep lowering f_low until the
                 # waveform starts successfully or we hit the floor.
                 _combined = str(exc) + _stderr_cap.captured
+                _combined_lower = _combined.lower()
                 m = _re.search(r"the limit is ([\d.]+)", _combined, _re.IGNORECASE)
-                if m and ("initial frequency is too high" in _combined.lower()
-                          or "intitial frequency is too high" in _combined.lower()):
+                if m and ("initial frequency is too high" in _combined_lower
+                          or "intitial frequency is too high" in _combined_lower):
                     new_f_low = 0.99 * float(m.group(1))
                     if new_f_low >= f_low_try:
                         raise  # no progress — give up
@@ -395,11 +398,49 @@ def evaluate_surrogate_with_LAL(sample, config, ifos, approximant=lalsim.NRSur7d
                     )
                     f_low_try = new_f_low
                     continue
+                # LAL SEOBNRv4PHM: "Ringdown frequency > Nyquist frequency!"
+                # written to C-level stderr.  Use EOBEllMaxForNyquistCheck to
+                # limit which modes are tested, analogous to lmax_nyquist for
+                # pyseobnr.  First try ell≤2, then ell≤1 (disable entirely).
+                if "nyquist" in _combined_lower and "ringdown" in _combined_lower:
+                    if not _tried_ell_max_reduction:
+                        _tried_ell_max_reduction = True
+                        curr_eob = lalsim.SimInspiralWaveformParamsLookupEOBEllMaxForNyquistCheck(
+                            lal_dict
+                        ) if lal_dict is not None else 5
+                        next_eob = 2 if curr_eob > 2 else 1
+                        _log.warning(
+                            "LAL Nyquist ringdown error (C-stderr); retrying with "
+                            "EOBEllMaxForNyquistCheck=%d (attempt %d)",
+                            next_eob, _attempt + 1,
+                        )
+                        if lal_dict is None:
+                            import lal as _lal
+                            lal_dict = _lal.CreateDict()
+                        lalsim.SimInspiralWaveformParamsInsertEOBEllMaxForNyquistCheck(
+                            lal_dict, next_eob
+                        )
+                        continue
+                    else:
+                        # Already tried ell≤2 — now try ell≤1 (disable check)
+                        curr_eob = lalsim.SimInspiralWaveformParamsLookupEOBEllMaxForNyquistCheck(
+                            lal_dict
+                        )
+                        if curr_eob > 1:
+                            _log.warning(
+                                "LAL Nyquist error with EOBEllMaxForNyquistCheck=2; "
+                                "retrying with EOBEllMaxForNyquistCheck=1 (attempt %d)",
+                                _attempt + 1,
+                            )
+                            lalsim.SimInspiralWaveformParamsInsertEOBEllMaxForNyquistCheck(
+                                lal_dict, 1
+                            )
+                            continue
                 raise
 
         h_modes = {}
-    
-        for L in range(2, ell_max + 1):
+
+        for L in range(2, ell_max_try + 1):
             for M in range(-L, L + 1):
                 h_modes[(L, M)] = lalsim.SphHarmTimeSeriesGetMode(
                     h_modes_lal, L, M
