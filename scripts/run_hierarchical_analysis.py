@@ -91,6 +91,7 @@ from memory.hierarchical.data import (
     MIN_DETECTOR_FRAME_TOTAL_MASS,
     MIN_MASS_RATIO,
     _pick_waveform_label,
+    _resolve_waveform_label,
     validate_posterior_prior_consistency,
 )
 
@@ -116,9 +117,17 @@ def _resolve_injection_file(args):
     raise ValueError(f"Unrecognized injection runs: {args.injection_runs}")
 
 
-def _should_apply_nrsur_injection_cuts(param_key):
-    """Return True when *param_key* explicitly restricts to NRSur7dq4."""
-    return param_key is not None and "NRSur7dq4" in param_key
+def _normalize_waveform_arg(waveform):
+    """Return None for auto-selection, otherwise the requested waveform."""
+    if waveform is None:
+        return None
+    normalized = waveform.strip()
+    return None if normalized.lower() == "auto" else normalized
+
+
+def _should_apply_nrsur_injection_cuts(waveform):
+    """Return True when *waveform* explicitly restricts to NRSur7dq4."""
+    return waveform is not None and "NRSur7dq4" in waveform
 
 
 def _check_output_files_exist(outdir, analyze, no_plots):
@@ -186,7 +195,7 @@ def _save_provenance(outdir, injection_file, event_files, memory_dir):
         f.write(f"{memory_dir}\n")
 
 
-def _load_event_posteriors(event_files, param_key, per_event_labels=None):
+def _load_event_posteriors(event_files, waveform, per_event_labels=None):
     """Read posterior samples from each HDF5 event file.
 
     Each file is expected to contain at least one HDF5 group with a
@@ -196,10 +205,10 @@ def _load_event_posteriors(event_files, param_key, per_event_labels=None):
     1. *per_event_labels* — exact group name keyed by event name
        (GW\d{6}_\d{6}); used to match PE posteriors to pre-computed memory
        data that was generated from a specific waveform run.
-    2. *param_key* substring filter, then NRSur > SEOB > IMRPhenom hierarchy
-       if multiple keys match.
+    2. *waveform* — resolve the highest available ``CXX:<waveform>`` label
+       in each file.
     3. Auto-select via NRSur > SEOB > IMRPhenom, C01 > C00 hierarchy when
-       param_key is None.
+       waveform is None.
 
     Returns
     -------
@@ -237,23 +246,25 @@ def _load_event_posteriors(event_files, param_key, per_event_labels=None):
                 chosen = None
 
             if chosen is None:
-                if param_key:
-                    keys = [k for k in all_ps_keys if param_key in k]
-                else:
-                    keys = all_ps_keys
-                if len(keys) == 0:
+                try:
+                    chosen = _resolve_waveform_label(all_ps_keys, waveform)
+                except KeyError:
                     logger.warning(
                         "Skipping %s: no group with 'posterior_samples' matching"
-                        " param_key=%r", basename, param_key,
+                        " waveform=%r", basename, waveform,
                     )
                     continue
-                if len(keys) == 1:
-                    chosen = keys[0]
-                else:
-                    chosen = _pick_waveform_label(keys)
+                matching_keys = all_ps_keys
+                if waveform is not None:
+                    requested = waveform.split(":", 1)[-1]
+                    matching_keys = [
+                        key for key in all_ps_keys
+                        if key.split(":", 1)[-1] == requested
+                    ]
+                if len(matching_keys) > 1:
                     logger.info(
                         "%s: selected PE group '%s' from %s",
-                        basename, chosen, keys,
+                        basename, chosen, matching_keys,
                     )
 
             # Fall back to next-best group if the chosen one lacks log_prior/prior
@@ -268,7 +279,10 @@ def _load_event_posteriors(event_files, param_key, per_event_labels=None):
                     )
                 ]
                 if fallback_keys:
-                    fallback = _pick_waveform_label(fallback_keys)
+                    try:
+                        fallback = _resolve_waveform_label(fallback_keys, waveform)
+                    except KeyError:
+                        fallback = _pick_waveform_label(fallback_keys)
                     logger.warning(
                         "%s: chosen group '%s' has no log_prior/prior field; "
                         "falling back to '%s'",
@@ -343,11 +357,6 @@ def _build_parser():
 
     # -- Data selection -----------------------------------------------------
     parser.add_argument(
-        "--param-key",
-        type=str,
-        help="HDF5 group name filter for posterior samples (default: auto)",
-    )
-    parser.add_argument(
         "--memory-dir",
         type=str,
         default="/mnt/home/kmitman/work/memory_pop/analysis",
@@ -358,12 +367,14 @@ def _build_parser():
         ),
     )
     parser.add_argument(
-        "--waveform-label",
+        "--waveform",
         type=str,
-        default=None,
+        default="auto",
         help=(
-            "HDF5 group inside memory results files "
-            "(falls back to --param-key, then first available group)"
+            "Waveform family to use for both PE and memory data. "
+            "Use 'auto' to pick the best available label, or pass a bare "
+            "waveform name like 'NRSur7dq4' to select the highest available "
+            "'CXX:<waveform>' label per event."
         ),
     )
     parser.add_argument(
@@ -503,6 +514,7 @@ def main():
     run_astro  = "astro"  in analyze
     run_joint  = "joint"  in analyze
     need_memory_data = run_memory or run_joint
+    waveform = _normalize_waveform_arg(args.waveform)
 
     if need_memory_data and args.memory_dir is None:
         raise ValueError(
@@ -545,7 +557,6 @@ def main():
     # Load memory data BEFORE PE posteriors so we can use the per-event
     # waveform labels to ensure PE samples match memory samples exactly.
     if need_memory_data:
-        waveform_label = args.waveform_label or args.param_key
         mem_files, skipped_files = _filter_to_memory_events(
             event_files, args.memory_dir
         )
@@ -557,28 +568,15 @@ def main():
             raise FileNotFoundError(
                 f"No events with memory results found in {args.memory_dir}"
             )
-        memory_data = load_memory_data(mem_files, args.memory_dir, waveform_label)
+        memory_data = load_memory_data(mem_files, args.memory_dir, waveform)
         logger.info("Loaded memory data for %d events", len(memory_data))
         # Build per-event label dict so PE loading uses the same waveform group
         per_event_labels = {md["event_name"]: md["waveform_label"] for md in memory_data}
-        if args.param_key is not None:
-            mismatched_labels = sorted({
-                label for label in per_event_labels.values()
-                if args.param_key not in label
-            })
-            if mismatched_labels:
-                logger.warning(
-                    "--param-key=%r will not control PE posterior selection for "
-                    "memory/joint events because per-event waveform labels from "
-                    "memory data take precedence. Using labels such as: %s",
-                    args.param_key,
-                    ", ".join(mismatched_labels[:5]),
-                )
     else:
         mem_files, memory_data, per_event_labels = [], None, {}
 
     all_posteriors, all_event_files, used_labels = _load_event_posteriors(
-        event_files, args.param_key, per_event_labels=per_event_labels,
+        event_files, waveform, per_event_labels=per_event_labels,
     )
     logger.info("Loaded posteriors for %d events", len(all_posteriors))
 
@@ -656,20 +654,21 @@ def main():
 
     # --- Build data arrays ------------------------------------------------
     apply_nrsur_injection_cuts = _should_apply_nrsur_injection_cuts(
-        args.param_key
+        waveform
     )
     if apply_nrsur_injection_cuts:
         logger.info(
             "Applying NRSur7dq4 injection cuts (Mtot_det >= %.1f, q >= %.3f) "
-            "for explicit NRSur7dq4 run (param_key=%r)",
+            "for explicit NRSur7dq4 run (waveform=%r)",
             MIN_DETECTOR_FRAME_TOTAL_MASS,
             MIN_MASS_RATIO,
-            args.param_key,
+            waveform,
         )
     else:
         logger.info(
             "Not applying detector-frame mass or mass-ratio injection cuts "
-            "because --param-key does not restrict the run to NRSur7dq4."
+            "because --waveform does not explicitly restrict the run to "
+            "NRSur7dq4."
         )
 
     _gen_kwargs = dict(

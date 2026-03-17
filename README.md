@@ -32,7 +32,8 @@ uv run python scripts/run_hierarchical_analysis.py \
 ```
 
 Key args: `--analyze {astro,memory,joint}` (default: all three),
-`--memory-dir`, `--scale-tgr`, `--use-tilts`, `--no-plots`, `--force`.
+`--memory-dir`, `--waveform`, `--scale-tgr`, `--use-tilts`, `--no-plots`,
+`--force`.
 
 - `astro` — astrophysical population only; no `--memory-dir` required
 - `memory` — TGR hyperparameters only; requires `--memory-dir`
@@ -45,7 +46,7 @@ Key args: `--analyze {astro,memory,joint}` (default: all three),
 ./tests/test_run_analysis_e2e.sh --num-events 2
 
 # With memory results available:
-./tests/test_run_analysis_e2e.sh --analyze "memory joint" --memory-dir /path/to/memory
+./tests/test_run_analysis_e2e.sh --analyze "memory joint" --memory-dir /path/to/memory --waveform NRSur7dq4
 ```
 
 Results go to `data/test_e2e/results_astro/`. The test script auto-downloads

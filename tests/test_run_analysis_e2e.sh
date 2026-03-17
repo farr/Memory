@@ -29,7 +29,7 @@ N_CHAINS="${N_CHAINS:-1}"
 N_SAMPLES_PER_EVENT="${N_SAMPLES_PER_EVENT:-200}"
 
 MEMORY_DIR=""
-PARAM_KEY=""
+WAVEFORM=""
 
 usage() {
     echo "Usage: $0 [options]"
@@ -37,7 +37,7 @@ usage() {
     echo "Options:"
     echo "  --data-root PATH              Data root (default: ${DATA_ROOT})"
     echo "  --analyze ANALYSIS...         Analyses to run: astro, memory, joint (default: ${ANALYZE})"
-    echo "  --param-key KEY               HDF5 group name filter for posteriors"
+    echo "  --waveform NAME               Waveform family (default: auto)"
     echo "  --memory-dir PATH             Directory with per-event memory results"
     echo "                                (required for --analyze memory or joint)"
     echo "  --num-events N                Number of posterior files if downloading (default: ${NUM_EVENTS})"
@@ -60,8 +60,8 @@ while [[ $# -gt 0 ]]; do
             ANALYZE="$2"
             shift 2
             ;;
-        --param-key)
-            PARAM_KEY="$2"
+        --waveform)
+            WAVEFORM="$2"
             shift 2
             ;;
         --memory-dir)
@@ -170,8 +170,8 @@ export TGRPOP_PLATFORM="${TGRPOP_PLATFORM:-cpu}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 
 EXTRA_ARGS=()
-if [[ -n "${PARAM_KEY}" ]]; then
-    EXTRA_ARGS+=(--param-key "${PARAM_KEY}")
+if [[ -n "${WAVEFORM}" ]]; then
+    EXTRA_ARGS+=(--waveform "${WAVEFORM}")
 fi
 if [[ -n "${MEMORY_DIR}" ]]; then
     EXTRA_ARGS+=(--memory-dir "${MEMORY_DIR}")

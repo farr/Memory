@@ -18,6 +18,13 @@ MIN_DETECTOR_FRAME_TOTAL_MASS = 66.0
 MIN_MASS_RATIO = 1.0 / 6.0
 
 
+def _waveform_sort_key(label):
+    """Sort waveform labels by descending calibration, then alphabetically."""
+    match = re.match(r"C(\d+):", label)
+    calibration = int(match.group(1)) if match else -1
+    return (-calibration, label)
+
+
 def _pick_waveform_label(keys):
     """Pick the best available waveform label using the priority hierarchy.
 
@@ -25,13 +32,7 @@ def _pick_waveform_label(keys):
     Within each tier, higher calibration versions win (e.g. C01 > C00).
     Ties within calibration version are broken alphabetically.
     """
-    def _sort_key(k):
-        # Extract calibration version number for descending sort (higher = better).
-        m = re.match(r"C(\d+):", k)
-        cal = int(m.group(1)) if m else -1
-        return (-cal, k)
-
-    keys_sorted = sorted(keys, key=_sort_key)
+    keys_sorted = sorted(keys, key=_waveform_sort_key)
     for k in keys_sorted:
         if "NRSur" in k:
             return k
@@ -39,6 +40,35 @@ def _pick_waveform_label(keys):
         if "SEOB" in k:
             return k
     return keys_sorted[0]
+
+
+def _resolve_waveform_label(keys, waveform=None):
+    """Resolve *waveform* to the best matching label in *keys*.
+
+    ``None`` or ``"auto"`` uses the default NRSur > SEOB > IMRPhenom
+    hierarchy. A bare waveform name like ``"NRSur7dq4"`` selects the
+    highest available ``CXX:NRSur7dq4`` label for that file.
+    """
+    if not keys:
+        raise KeyError("No waveform labels available")
+
+    if waveform is None or waveform == "auto":
+        return _pick_waveform_label(keys)
+
+    if waveform in keys:
+        return waveform
+
+    requested = waveform
+    if re.match(r"C\d+:", requested):
+        requested = requested.split(":", 1)[1]
+
+    matches = [key for key in keys if key.split(":", 1)[-1] == requested]
+    if matches:
+        return sorted(matches, key=_waveform_sort_key)[0]
+
+    raise KeyError(
+        f"Waveform '{waveform}' not found; available labels: {list(keys)}"
+    )
 
 
 def _decode_hdf5_scalar(value):
@@ -306,9 +336,11 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
         Directory containing per-event subdirectories with
         ``memory_results.h5`` files.
     waveform_label : str or None
-        HDF5 group name inside each memory file.  If None, the best
+        Requested waveform inside each memory file. If None, the best
         available group is selected using the priority hierarchy
-        NRSur > SEOB > IMRPhenom.
+        NRSur > SEOB > IMRPhenom. If a bare waveform name is provided,
+        the highest available ``CXX:<waveform>`` label is selected
+        separately for each event.
 
     Returns
     -------
@@ -344,23 +376,15 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
             )
 
         with h5py.File(mem_path, "r") as f:
-            if waveform_label is not None:
-                if waveform_label not in f:
-                    raise KeyError(
-                        f"Waveform label '{waveform_label}' not found in "
-                        f"{mem_path}; available: {list(f.keys())}"
-                    )
-                chosen_label = waveform_label
-            else:
-                keys = list(f.keys())
-                if not keys:
-                    raise KeyError(f"No groups found in {mem_path}")
-                chosen_label = _pick_waveform_label(keys)
-                if len(keys) > 1:
-                    _log.info(
-                        "%s: selected waveform '%s' from %s",
-                        event_name, chosen_label, keys,
-                    )
+            keys = list(f.keys())
+            if not keys:
+                raise KeyError(f"No groups found in {mem_path}")
+            chosen_label = _resolve_waveform_label(keys, waveform_label)
+            if len(keys) > 1:
+                _log.info(
+                    "%s: selected waveform '%s' from %s",
+                    event_name, chosen_label, keys,
+                )
 
             grp = f[chosen_label]
             a_sample = grp["A_sample"][()].real
