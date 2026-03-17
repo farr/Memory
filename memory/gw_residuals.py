@@ -64,6 +64,11 @@ class AnalysisConfig:
     waveform_approximant: str
     config_dict: Dict[str, Dict[str, Any]]
     """Complete config.ini settings as section -> key -> value dict."""
+    waveform_minimum_frequency: Optional[float] = None
+    """Waveform-generation starting frequency (the 'waveform' key in
+    bilby_pipe's per-IFO minimum-frequency dict).  When present this is the
+    frequency passed to the WaveformGenerator, which may differ from the IFO
+    noise-floor minimum (e.g. GW230704 SpinTaylor: IFO=20 Hz, waveform=9 Hz)."""
 
 
 # ----------------------------
@@ -133,17 +138,27 @@ def _parse_ifo_freq_dict(value: Any, detectors: Iterable[str], default: float) -
         if f is not None:
             return {d: float(f) for d in detectors}
 
-        # Try to handle dict-like strings with bare keys
+        # Try to handle dict-like strings with bare keys, e.g.:
+        #   "{H1: 20, L1: 20}"  or  "{H1: 20, L1: 20, waveform: 9.0}"
+        # The "waveform" key is a LALInference convention for a per-approximant
+        # starting frequency that applies to all detectors as a fallback.
         s = value.strip()
         if s.startswith("{") and s.endswith("}"):
             for d in detectors:
                 s = s.replace(f"{d}:", f"'{d}':")
+            # Quote any remaining bare word keys (e.g. "waveform:") so
+            # ast.literal_eval doesn't choke on them.
+            s = re.sub(r"(?<!['\"])\b([a-zA-Z_]\w*)\s*:", r"'\1':", s)
             try:
                 dct = ast.literal_eval(s)
                 if isinstance(dct, dict):
+                    # "waveform" value is the per-model frequency fallback
+                    waveform_default = dct.get("waveform")
                     for d in detectors:
                         if d in dct:
                             out[d] = float(dct[d])
+                        elif waveform_default is not None:
+                            out[d] = float(waveform_default)
                     return out
             except Exception:
                 return out
@@ -157,6 +172,34 @@ def _parse_ifo_freq_dict(value: Any, detectors: Iterable[str], default: float) -
         return out
 
     return out
+
+
+def _parse_waveform_fmin(value: Any) -> Optional[float]:
+    """Extract the 'waveform' key from a bilby_pipe minimum-frequency string.
+
+    bilby_pipe allows ``minimum-frequency = "{H1:20, L1:20, waveform:9.0}"``
+    where ``waveform`` sets the starting frequency for waveform generation
+    independently of the per-IFO noise-floor minimum.  Returns that value,
+    or None if the key is absent or the value is not a dict-like string.
+    """
+    if value is None:
+        return None
+    value = _maybe_literal(value)
+    if isinstance(value, dict):
+        v = value.get("waveform")
+        return float(v) if v is not None else None
+    if not isinstance(value, str):
+        return None
+    s = value.strip()
+    if not (s.startswith("{") and s.endswith("}")):
+        return None
+    s = re.sub(r"(?<!['\"])\b([a-zA-Z_]\w*)\s*:", r"'\1':", s)
+    try:
+        dct = ast.literal_eval(s)
+        v = dct.get("waveform") if isinstance(dct, dict) else None
+        return float(v) if v is not None else None
+    except Exception:
+        return None
 
 
 def _choose_label(data, label: Optional[str]) -> str:
@@ -455,6 +498,11 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
     if min_freq_raw is None:
         min_freq_raw = _warn_default("minimum-frequency", 20.0)
     min_freq = _parse_ifo_freq_dict(min_freq_raw, detectors, default=20.0)
+    # Extract the optional "waveform:" key from the minimum-frequency dict.
+    # bilby_pipe uses this to set a lower waveform-generation start frequency
+    # that differs from the per-IFO noise-floor minimum (e.g. GW230704 SpinTaylor:
+    # IFO noise floor = 20 Hz, waveform generation starts at 9 Hz = f_ref).
+    waveform_fmin = _parse_waveform_fmin(min_freq_raw)
     max_freq_raw = _first(_flat("maximum-frequency"), lalinf.get("fhigh"))
     max_freq = (
         _parse_ifo_freq_dict(max_freq_raw, detectors, default=sampling_frequency / 2.0)
@@ -485,6 +533,7 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
         maximum_frequency=max_freq,
         reference_frequency=float(reference_frequency),
         waveform_approximant=waveform_approximant,
+        waveform_minimum_frequency=waveform_fmin,
         config_dict=cfg,
     )
 
@@ -616,6 +665,13 @@ def _build_waveform_generator_bbh(cfg: AnalysisConfig) -> WaveformGenerator:
         waveform_approximant=cfg.waveform_approximant,
         reference_frequency=cfg.reference_frequency,
     )
+    # If the PE config specifies a separate waveform-generation minimum frequency
+    # (the "waveform:" key in bilby_pipe's per-IFO minimum-frequency dict), pass
+    # it explicitly so the WaveformGenerator uses it rather than bilby's 20 Hz
+    # default.  This matters when f_ref < IFO noise-floor minimum (e.g. GW230704
+    # SpinTaylor: IFO=20 Hz, waveform=f_ref=9 Hz).
+    if cfg.waveform_minimum_frequency is not None:
+        waveform_arguments["minimum_frequency"] = cfg.waveform_minimum_frequency
     # Merge any extra waveform arguments from the PE config
     # (e.g. waveform_arguments_dict = {'lmax_nyquist': 1} for SEOBNRv5PHM on
     # low-mass NSBH events where the ringdown exceeds Nyquist at 4096 Hz).
