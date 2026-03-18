@@ -568,7 +568,24 @@ def main():
             raise FileNotFoundError(
                 f"No events with memory results found in {args.memory_dir}"
             )
+        requested_mem_files = list(mem_files)
         memory_data = load_memory_data(mem_files, args.memory_dir, waveform)
+        import re as _re
+        loaded_memory_names = {md["event_name"] for md in memory_data}
+        mem_files = [
+            path for path in mem_files
+            if _re.search(r"(GW\d{6}_\d{6})", os.path.basename(path)).group(1)
+            in loaded_memory_names
+        ]
+        skipped_waveform_files = [
+            path for path in requested_mem_files if path not in mem_files
+        ]
+        for path in skipped_waveform_files:
+            logger.warning(
+                "Skipping %s: requested waveform %r not found in memory results",
+                os.path.basename(path),
+                waveform,
+            )
         logger.info("Loaded memory data for %d events", len(memory_data))
         # Build per-event label dict so PE loading uses the same waveform group
         per_event_labels = {md["event_name"]: md["waveform_label"] for md in memory_data}

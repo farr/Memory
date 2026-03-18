@@ -354,7 +354,7 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
     FileNotFoundError
         If a memory results file cannot be found for an event.
     KeyError
-        If the requested waveform label is not present in the file.
+        If no groups are present, or if auto-selection fails.
     """
     import logging as _logging
     _log = _logging.getLogger(__name__)
@@ -379,7 +379,16 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
             keys = list(f.keys())
             if not keys:
                 raise KeyError(f"No groups found in {mem_path}")
-            chosen_label = _resolve_waveform_label(keys, waveform_label)
+            try:
+                chosen_label = _resolve_waveform_label(keys, waveform_label)
+            except KeyError:
+                if waveform_label is None:
+                    raise
+                _log.info(
+                    "%s: skipping event because waveform '%s' is not present in %s",
+                    event_name, waveform_label, keys,
+                )
+                continue
             if len(keys) > 1:
                 _log.info(
                     "%s: selected waveform '%s' from %s",
