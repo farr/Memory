@@ -17,6 +17,26 @@ N_SAMPLES_PER_EVENT = 10000
 MIN_DETECTOR_FRAME_TOTAL_MASS = 66.0
 MIN_MASS_RATIO = 1.0 / 6.0
 
+# Events excluded from the memory analysis because they are confirmed NSBH
+# mergers.  The memory computation uses a BBH memory template, so the
+# oscillatory-signal residual for these events contains NS tidal contributions
+# that produce non-physical A_hat / A_sigma ratios and grossly inflated
+# log_weight values.
+_NSBH_EVENTS = frozenset({
+    "GW200105_162426",  # NSBH, O3b
+    "GW200115_042309",  # NSBH, O3b
+    "GW230529_181500",  # NSBH, O4a
+})
+
+# Per-sample sanity threshold: individual samples with |A_hat / A_sigma|
+# exceeding this value are removed before use.  For well-behaved events the
+# memory SNR per sample is << 1; a value of 10 gives ample margin.
+_MAX_SAMPLE_SNR = 10.0
+
+# Event-level sanity threshold: after sample filtering, if the *median*
+# |A_hat / A_sigma| still exceeds this value the entire event is skipped.
+_MAX_EVENT_MEDIAN_SNR = 5.0
+
 
 def _waveform_sort_key(label):
     """Sort waveform labels by descending calibration, then alphabetically."""
@@ -557,6 +577,13 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
             )
         event_name = match.group(1)
 
+        if event_name in _NSBH_EVENTS:
+            _log.warning(
+                "%s: skipping known NSBH event (BBH memory template not applicable)",
+                event_name,
+            )
+            continue
+
         mem_path = os.path.join(memory_dir, event_name, "memory_results.h5")
         if not os.path.exists(mem_path):
             raise FileNotFoundError(
@@ -588,6 +615,36 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
             a_hat = grp["A_hat"][()].real
             a_sigma = grp["A_sigma"][()].real
             log_weight = grp["log_weight"][()].real
+
+        # --- Sample-level filter -------------------------------------------------
+        # Bad samples are zeroed out in-place (log_weight -> -inf) rather than
+        # removed, so the arrays stay the same length as the PE posterior.
+        # generate_data indexes memory and posterior arrays with the same idxs,
+        # so shortening the memory arrays would break that alignment.
+        snr = np.abs(a_hat / a_sigma)
+        bad = snr > _MAX_SAMPLE_SNR
+        if bad.any():
+            _log.warning(
+                "%s: nullifying %d/%d samples with |A_hat/A_sigma| > %.1f "
+                "(setting log_weight=-inf to exclude from importance sums)",
+                event_name, int(bad.sum()), len(a_hat), _MAX_SAMPLE_SNR,
+            )
+            a_hat[bad] = 0.0
+            a_sigma[bad] = 1.0
+            log_weight[bad] = -np.inf
+            a_sample[bad] = 0.0
+            snr[bad] = 0.0
+
+        # --- Event-level filter --------------------------------------------------
+        finite_snr = snr[np.isfinite(snr)]
+        median_snr = float(np.median(finite_snr)) if len(finite_snr) > 0 else 0.0
+        if median_snr > _MAX_EVENT_MEDIAN_SNR:
+            _log.warning(
+                "%s: skipping event with median |A_hat/A_sigma| = %.2f > %.1f "
+                "(waveform '%s')",
+                event_name, median_snr, _MAX_EVENT_MEDIAN_SNR, chosen_label,
+            )
+            continue
 
         memory_data.append({
             "A_sample": np.asarray(a_sample),
@@ -929,6 +986,17 @@ def generate_data(
             a_hat_i, a_sig_i, lw_i = _sample_memory_event(
                 memory_data[i_event], idxs, A_scale
             )
+            if np.all(np.isnan(a_hat_i)):
+                logger.warning(
+                    "Skipping event %s: all A_hat samples are NaN "
+                    "(broken memory results for waveform '%s')",
+                    event_label, memory_data[i_event]["waveform_label"],
+                )
+                m1s.pop()
+                qs.pop()
+                a1s.pop()
+                a2s.pop()
+                continue
             if ignore_memory_weights:
                 lw_i = np.zeros(N_samples)
         else:
@@ -1083,6 +1151,13 @@ def generate_tgr_only_data(event_posteriors, memory_data,
     for md in memory_data:
         idxs = prng.choice(len(md["A_hat"]), size=N_samples, replace=True)
         a_hat_i, a_sig_i, lw_i = _sample_memory_event(md, idxs, A_scale)
+        if np.all(np.isnan(a_hat_i)):
+            logger.warning(
+                "Skipping event %s: all A_hat samples are NaN "
+                "(broken memory results for waveform '%s')",
+                md["event_name"], md["waveform_label"],
+            )
+            continue
         if ignore_memory_weights:
             lw_i = np.zeros(N_samples)
         A_hats.append(a_hat_i)
@@ -1093,4 +1168,4 @@ def generate_tgr_only_data(event_posteriors, memory_data,
     A_sigmas = np.array(A_sigmas)
     log_weights = np.array(log_weights)
 
-    return A_hats, A_sigmas, log_weights, Nobs, A_scale
+    return A_hats, A_sigmas, log_weights, len(A_hats), A_scale
