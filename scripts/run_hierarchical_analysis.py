@@ -93,6 +93,7 @@ from memory.hierarchical.data import (
     _pick_waveform_label,
     _resolve_waveform_label,
     validate_posterior_prior_consistency,
+    compute_log_prior_from_config,
 )
 
 
@@ -268,36 +269,59 @@ def _load_event_posteriors(event_files, waveform, per_event_labels=None):
                     f" (available: {matching_keys})" if len(matching_keys) > 1 else "",
                 )
 
-            # Fall back to next-best group if the chosen one lacks log_prior/prior
+            # Ensure the chosen group has log_prior/prior, or compute it
             ps_fields = f[chosen]["posterior_samples"].dtype.names
+            computed_log_prior = None
             if "log_prior" not in ps_fields and "prior" not in ps_fields:
-                fallback_keys = [
-                    k for k in all_ps_keys
-                    if k != chosen
-                    and (
-                        "log_prior" in f[k]["posterior_samples"].dtype.names
-                        or "prior" in f[k]["posterior_samples"].dtype.names
+                # Try to reconstruct log_prior from the stored config
+                _tmp_ps = f[chosen]["posterior_samples"][()]
+                computed_log_prior, params_used = compute_log_prior_from_config(
+                    f[chosen], _tmp_ps
+                )
+                if computed_log_prior is not None:
+                    logger.info(
+                        "%s: '%s' has no log_prior; reconstructed from config "
+                        "(params: %s)",
+                        basename, chosen, ", ".join(params_used[:6]),
                     )
-                ]
-                if fallback_keys:
-                    try:
-                        fallback = _resolve_waveform_label(fallback_keys, waveform)
-                    except KeyError:
-                        fallback = _pick_waveform_label(fallback_keys)
-                    logger.warning(
-                        "%s: chosen group '%s' has no log_prior/prior field; "
-                        "falling back to '%s'",
-                        basename, chosen, fallback,
-                    )
-                    chosen = fallback
                 else:
-                    logger.warning(
-                        "%s: no group with log_prior/prior field found; skipping",
-                        basename,
-                    )
-                    continue
+                    # Fall back to next-best group that already has log_prior/prior
+                    fallback_keys = [
+                        k for k in all_ps_keys
+                        if k != chosen
+                        and (
+                            "log_prior" in f[k]["posterior_samples"].dtype.names
+                            or "prior" in f[k]["posterior_samples"].dtype.names
+                        )
+                    ]
+                    if fallback_keys:
+                        try:
+                            fallback = _resolve_waveform_label(fallback_keys, waveform)
+                        except KeyError:
+                            fallback = _pick_waveform_label(fallback_keys)
+                        logger.warning(
+                            "%s: chosen group '%s' has no log_prior/prior field; "
+                            "falling back to '%s'",
+                            basename, chosen, fallback,
+                        )
+                        chosen = fallback
+                    else:
+                        logger.warning(
+                            "%s: no group with log_prior/prior field found; skipping",
+                            basename,
+                        )
+                        continue
 
-            posterior_samples = f[chosen]["posterior_samples"][()]
+            if computed_log_prior is not None:
+                # Reuse the samples we already read for prior computation
+                posterior_samples = _tmp_ps
+                import numpy.lib.recfunctions as _rfn
+                posterior_samples = _rfn.append_fields(
+                    posterior_samples, "log_prior",
+                    computed_log_prior, dtypes=float, usemask=False,
+                )
+            else:
+                posterior_samples = f[chosen]["posterior_samples"][()]
             validate_posterior_prior_consistency(
                 f[chosen],
                 posterior_samples,

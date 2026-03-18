@@ -320,6 +320,194 @@ def validate_posterior_prior_consistency(
             )
 
 
+def _get_config_type(group):
+    """Return 'lalinference', 'bilby', or None based on config_file structure."""
+    if "config_file" not in group:
+        return None
+    cfg = group["config_file"]
+    if "engine" in cfg:      # LALInference has an [engine] section
+        return "lalinference"
+    if "config" in cfg:      # bilby stores the full ini under 'config'
+        return "bilby"
+    return None
+
+
+def _compute_log_prior_lalinference(group, posterior_samples):
+    """Reconstruct log_prior for a LALInference run from its config file.
+
+    Reads prior bounds from the ``[engine]`` section of the stored INI config
+    and evaluates the standard O3 LALInference prior at each sample.
+
+    Returns
+    -------
+    log_prior : ndarray of shape (n_samples,)
+    params_used : list of str
+    """
+    from bilby.core.prior import Cosine, PowerLaw, Sine, Uniform
+
+    eng = group["config_file"]["engine"]
+
+    def _get_float(key, default):
+        if key not in eng:
+            return default
+        v = eng[key][()]
+        if hasattr(v, "tolist"):
+            v = v.tolist()
+        if isinstance(v, list):
+            v = v[0]
+        if isinstance(v, bytes):
+            v = v.decode()
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            return default
+
+    mc_min = _get_float("chirpmass-min", 5.0)
+    mc_max = _get_float("chirpmass-max", 100.0)
+    q_min = _get_float("q-min", 0.05)
+    a1_max = _get_float("a_spin1-max", 0.99)
+    a2_max = _get_float("a_spin2-max", 0.99)
+    d_min = _get_float("distance-min", 10.0)
+    d_max = _get_float("distance-max", 10000.0)
+
+    # symmetric mass ratio range corresponding to q_min
+    eta_min = q_min / (1.0 + q_min) ** 2
+
+    # Prior contributions for importance weighting.
+    #
+    # Only non-constant terms need to be evaluated: constant (flat-prior)
+    # parameters cancel in the importance weight ratio p_pop / p_PE within
+    # each event and can safely be omitted.
+    #
+    # Non-constant terms in the standard O3 LALInference prior:
+    #   - luminosity_distance: p(d) ∝ d^2  (PowerLaw alpha=2)
+    #   - tilt_1, tilt_2: isotropic spin orientations → p(tilt) ∝ sin(tilt)
+    #   - theta_jn: isotropic inclination → p(theta_jn) ∝ sin(theta_jn)
+    #   - dec: isotropic sky → p(dec) ∝ cos(dec)
+    #
+    # Flat-prior parameters (chirp_mass, symmetric_mass_ratio, a_1, a_2,
+    # ra, psi, phase, phi_12, phi_jl, geocent_time) are deliberately omitted
+    # to avoid -inf from samples that slightly exceed the config bounds due to
+    # derived-parameter rounding or post-processing conventions.
+    priors = {
+        "tilt_1": Sine(),          # p(tilt) = sin(tilt)/2
+        "tilt_2": Sine(),
+        "theta_jn": Sine(),        # inclination-like angle
+        "dec": Cosine(),           # p(dec) = cos(dec)/2, range [-pi/2, pi/2]
+        "luminosity_distance": PowerLaw(alpha=2, minimum=d_min, maximum=d_max),
+    }
+
+    dtype_names = set(posterior_samples.dtype.names)
+    log_prior = np.zeros(len(posterior_samples))
+    params_used = []
+
+    for param, prior in priors.items():
+        if param not in dtype_names:
+            continue
+        values = np.asarray(posterior_samples[param], dtype=float)
+        lp = prior.ln_prob(values)
+        log_prior += np.where(np.isfinite(lp), lp, -np.inf)
+        params_used.append(param)
+
+    return log_prior, params_used
+
+
+def _compute_log_prior_bilby_analytic(group, posterior_samples):
+    """Compute log_prior from a bilby run's stored ``priors/analytic`` entries.
+
+    Evaluates each stored prior repr at the matching column in
+    *posterior_samples* and sums the log-probabilities.
+
+    Returns
+    -------
+    log_prior : ndarray of shape (n_samples,) or None
+    params_used : list of str
+    """
+    if "priors" not in group or "analytic" not in group["priors"]:
+        return None, []
+
+    analytic_grp = group["priors"]["analytic"]
+    keys = list(analytic_grp.keys())
+    if not keys:
+        return None, []
+
+    dtype_names = set(posterior_samples.dtype.names)
+    log_prior = np.zeros(len(posterior_samples))
+    params_used = []
+
+    for param in keys:
+        if param not in dtype_names:
+            continue
+        raw = analytic_grp[param][()]
+        # HDF5 stores these as bytes or byte-array scalars/lists
+        if isinstance(raw, (bytes, np.bytes_)):
+            prior_repr = raw.decode()
+        elif hasattr(raw, "tolist"):
+            raw = raw.tolist()
+            if isinstance(raw, list):
+                raw = raw[0]
+            prior_repr = raw.decode() if isinstance(raw, bytes) else str(raw)
+        else:
+            prior_repr = str(raw)
+
+        try:
+            prior = _evaluate_prior_repr(prior_repr)
+            values = np.asarray(posterior_samples[param], dtype=float)
+            lp = prior.ln_prob(values)
+            log_prior += np.where(np.isfinite(lp), lp, -np.inf)
+            params_used.append(param)
+        except Exception:
+            continue
+
+    if not params_used:
+        return None, []
+    return log_prior, params_used
+
+
+def compute_log_prior_from_config(group, posterior_samples):
+    """Attempt to reconstruct ``log_prior`` from stored config metadata.
+
+    Tries in order:
+    1. LALInference: parse the ``[engine]`` section of the stored INI for
+       prior bounds and evaluate the standard O3 prior.
+    2. bilby: evaluate the ``priors/analytic`` repr strings stored in the
+       group.
+
+    Parameters
+    ----------
+    group : h5py.Group
+        The waveform group inside the PE HDF5 file.
+    posterior_samples : structured ndarray
+        The posterior samples array for *group*.
+
+    Returns
+    -------
+    log_prior : ndarray of shape (n_samples,) or None
+        ``None`` when computation is not possible.
+    params_used : list of str
+        Names of the parameters whose log-prior contributions were summed.
+    """
+    cfg_type = _get_config_type(group)
+
+    if cfg_type == "lalinference":
+        try:
+            return _compute_log_prior_lalinference(group, posterior_samples)
+        except Exception as exc:
+            logger.debug(
+                "LALInference prior reconstruction failed: %s", exc
+            )
+            return None, []
+
+    if cfg_type == "bilby":
+        result, params = _compute_log_prior_bilby_analytic(
+            group, posterior_samples
+        )
+        if result is not None:
+            return result, params
+
+    return None, []
+
+
 def load_memory_data(event_files, memory_dir, waveform_label=None):
     """Load per-event memory results to use as the TGR parameter source.
 
