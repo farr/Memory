@@ -254,18 +254,19 @@ def _load_event_posteriors(event_files, waveform, per_event_labels=None):
                         " waveform=%r", basename, waveform,
                     )
                     continue
-                matching_keys = all_ps_keys
                 if waveform is not None:
                     requested = waveform.split(":", 1)[-1]
                     matching_keys = [
                         key for key in all_ps_keys
                         if key.split(":", 1)[-1] == requested
                     ]
-                if len(matching_keys) > 1:
-                    logger.info(
-                        "%s: selected PE group '%s' from %s",
-                        basename, chosen, matching_keys,
-                    )
+                else:
+                    matching_keys = all_ps_keys
+                logger.info(
+                    "%s: selected PE group '%s'%s",
+                    basename, chosen,
+                    f" (available: {matching_keys})" if len(matching_keys) > 1 else "",
+                )
 
             # Fall back to next-best group if the chosen one lacks log_prior/prior
             ps_fields = f[chosen]["posterior_samples"].dtype.names

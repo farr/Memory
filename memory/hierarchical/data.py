@@ -389,11 +389,11 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
                     event_name, waveform_label, keys,
                 )
                 continue
-            if len(keys) > 1:
-                _log.info(
-                    "%s: selected waveform '%s' from %s",
-                    event_name, chosen_label, keys,
-                )
+            _log.info(
+                "%s: selected memory waveform '%s'%s",
+                event_name, chosen_label,
+                f" (available: {keys})" if len(keys) > 1 else "",
+            )
 
             grp = f[chosen_label]
             a_sample = grp["A_sample"][()].real
