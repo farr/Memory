@@ -655,6 +655,9 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
     _log = _logging.getLogger(__name__)
 
     memory_data = []
+    n_excluded = 0
+    n_missing_waveform = 0
+    n_high_snr = 0
     for event_file in event_files:
         basename = os.path.basename(event_file)
         match = re.search(r"(GW\d{6}_\d{6})", basename)
@@ -669,6 +672,7 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
                 "%s: skipping explicitly excluded event",
                 event_name,
             )
+            n_excluded += 1
             continue
 
         mem_path = os.path.join(memory_dir, event_name, "memory_results.h5")
@@ -686,10 +690,12 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
             except KeyError:
                 if waveform_label is None:
                     raise
-                _log.info(
-                    "%s: skipping event because waveform '%s' is not present in %s",
+                _log.warning(
+                    "%s: skipping event — requested waveform '%s' not present "
+                    "(available: %s)",
                     event_name, waveform_label, keys,
                 )
+                n_missing_waveform += 1
                 continue
             _log.info(
                 "%s: selected memory waveform '%s'%s",
@@ -731,6 +737,7 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
                 "(waveform '%s')",
                 event_name, median_snr, _MAX_EVENT_MEDIAN_SNR, chosen_label,
             )
+            n_high_snr += 1
             continue
 
         memory_data.append({
@@ -741,6 +748,28 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
             "event_name": event_name,
             "waveform_label": chosen_label,
         })
+
+    n_total = len(event_files)
+    n_loaded = len(memory_data)
+    n_skipped = n_excluded + n_missing_waveform + n_high_snr
+    skip_parts = []
+    if n_excluded:
+        skip_parts.append(f"{n_excluded} explicitly excluded")
+    if n_missing_waveform:
+        skip_parts.append(f"{n_missing_waveform} missing waveform")
+    if n_high_snr:
+        skip_parts.append(f"{n_high_snr} high memory SNR")
+    skip_summary = f" ({', '.join(skip_parts)})" if skip_parts else ""
+    if n_skipped:
+        _log.warning(
+            "load_memory_data: loaded %d/%d events; skipped %d%s",
+            n_loaded, n_total, n_skipped, skip_summary,
+        )
+    else:
+        _log.info(
+            "load_memory_data: loaded %d/%d events",
+            n_loaded, n_total,
+        )
 
     return memory_data
 
@@ -1115,9 +1144,22 @@ def generate_data(
                 if use_tgr:
                     filtered_memory.append(memory_data[i])
 
+        n_before = len(event_posteriors)
         event_posteriors = filtered_posteriors
         if use_tgr:
             memory_data = filtered_memory
+        n_after = len(event_posteriors)
+        if n_before != n_after:
+            logger.warning(
+                "generate_data: %d/%d observed events retained after "
+                "IFAR / mass cuts (%d excluded)",
+                n_after, n_before, n_before - n_after,
+            )
+        else:
+            logger.info(
+                "generate_data: all %d observed events passed IFAR / mass cuts",
+                n_after,
+            )
 
     A_scale = _compute_A_scale(memory_data, scale_tgr and use_tgr)
 
@@ -1262,6 +1304,14 @@ def generate_data(
     BW_matrices_sel = np.array(BW_matrices_sel)
 
     Nobs = len(m1s)
+    n_dropped_in_loop = len(event_posteriors) - Nobs
+    if n_dropped_in_loop:
+        logger.warning(
+            "generate_data: %d/%d events dropped during sample assembly "
+            "(low ESS, all-NaN A_hat, or singular covariance)",
+            n_dropped_in_loop, len(event_posteriors),
+        )
+    logger.info("generate_data: %d events entering the likelihood", Nobs)
 
     event_data_array = np.array(
         [m1s, qs, cost1s, cost2s, a1s, a2s, A_hats, A_sigmas, zs, log_pdraw, log_weights]
