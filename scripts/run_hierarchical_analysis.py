@@ -42,6 +42,7 @@ Environment variables:
 """
 
 import logging
+import re
 import sys
 import os
 import argparse
@@ -52,13 +53,13 @@ REPO_DIR = Path(__file__).resolve().parent.parent
 
 os.environ["OMP_NUM_THREADS"] = "1"
 
-import numpy as np
-import h5py
-import jax
-import numpyro
-from numpyro.diagnostics import gelman_rubin, effective_sample_size
-from numpyro.infer import MCMC, NUTS, init_to_value, init_to_feasible
-import arviz as az
+import numpy as np  # noqa: E402
+import h5py  # noqa: E402
+import jax  # noqa: E402
+import numpyro  # noqa: E402
+from numpyro.diagnostics import gelman_rubin, effective_sample_size  # noqa: E402
+from numpyro.infer import MCMC, NUTS, init_to_value, init_to_feasible  # noqa: E402
+import arviz as az  # noqa: E402
 
 # --- JAX / numpyro platform configuration (must precede library imports) ---
 device_count = int(os.environ.get("TGRPOP_DEVICE_COUNT", 1))
@@ -78,7 +79,7 @@ logger = logging.getLogger(__name__)
 
 logger.info("Using %d devices on %s", device_count, platform)
 
-from memory.hierarchical import (
+from memory.hierarchical import (  # noqa: E402
     generate_data,
     generate_tgr_only_data,
     load_memory_data,
@@ -87,9 +88,9 @@ from memory.hierarchical import (
     get_samples_df,
     create_plots,
 )
-from memory.hierarchical.data import (
-    MIN_DETECTOR_FRAME_TOTAL_MASS,
-    MIN_MASS_RATIO,
+from memory.hierarchical.data import (  # noqa: E402
+    NRSUR_MIN_DETECTOR_FRAME_TOTAL_MASS,
+    NRSUR_MIN_MASS_RATIO,
     _pick_waveform_label,
     _resolve_waveform_label,
     validate_posterior_prior_consistency,
@@ -702,8 +703,8 @@ def main():
         logger.info(
             "Applying NRSur7dq4 injection cuts (Mtot_det >= %.1f, q >= %.3f) "
             "for explicit NRSur7dq4 run (waveform=%r)",
-            MIN_DETECTOR_FRAME_TOTAL_MASS,
-            MIN_MASS_RATIO,
+            NRSUR_MIN_DETECTOR_FRAME_TOTAL_MASS,
+            NRSUR_MIN_MASS_RATIO,
             waveform,
         )
     else:
@@ -724,11 +725,11 @@ def main():
         injection_file=injection_file,
         ifar_threshold=args.ifar_threshold,
         min_detector_frame_total_mass=(
-            MIN_DETECTOR_FRAME_TOTAL_MASS
+            NRSUR_MIN_DETECTOR_FRAME_TOTAL_MASS
             if apply_nrsur_injection_cuts else None
         ),
         min_mass_ratio=(
-            MIN_MASS_RATIO if apply_nrsur_injection_cuts else None
+            NRSUR_MIN_MASS_RATIO if apply_nrsur_injection_cuts else None
         ),
         N_samples=args.n_samples_per_event,
         prng=seed,

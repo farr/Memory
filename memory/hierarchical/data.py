@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 IFAR_THRESHOLD = 1
 N_SAMPLES_PER_EVENT = 10000
-MIN_DETECTOR_FRAME_TOTAL_MASS = 66.0
-MIN_MASS_RATIO = 1.0 / 6.0
+NRSUR_MIN_DETECTOR_FRAME_TOTAL_MASS = 66.0
+NRSUR_MIN_MASS_RATIO = 1.0 / 6.0
 MIN_MASS_2_SOURCE = 3.0
 
 # Events explicitly excluded from the memory analysis (outside the population
@@ -777,8 +777,8 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
 def read_injection_file(
     vt_file,
     ifar_threshold=IFAR_THRESHOLD,
-    min_detector_frame_total_mass=MIN_DETECTOR_FRAME_TOTAL_MASS,
-    min_mass_ratio=MIN_MASS_RATIO,
+    min_detector_frame_total_mass=None,
+    min_mass_ratio=None,
     min_mass_2_source=MIN_MASS_2_SOURCE,
 ):
     """Read an HDF5 injection/selection file and extract relevant data.
@@ -960,8 +960,8 @@ def generate_data(
     memory_data=None,
     use_tgr=True,
     ifar_threshold=IFAR_THRESHOLD,
-    min_detector_frame_total_mass=MIN_DETECTOR_FRAME_TOTAL_MASS,
-    min_mass_ratio=MIN_MASS_RATIO,
+    min_detector_frame_total_mass=None,
+    min_mass_ratio=None,
     min_mass_2_source=MIN_MASS_2_SOURCE,
     N_samples=N_SAMPLES_PER_EVENT,
     prng=None,
