@@ -18,13 +18,13 @@ MIN_DETECTOR_FRAME_TOTAL_MASS = 66.0
 MIN_MASS_RATIO = 1.0 / 6.0
 MIN_MASS_2_SOURCE = 3.0
 
-# Events excluded from the memory analysis because they are confirmed NSBH
-# mergers.
-_NSBH_EVENTS = frozenset({
-    "GW200105_162426",  # NSBH, O3b
-    "GW200115_042309",  # NSBH, O3b
-    "GW230518_125908",  # NSBH, O4a
-    "GW230529_181500",  # NSBH, O4a
+# Events explicitly excluded from the memory analysis (outside the population
+# model's scope; also caught by the min_mass_2_source cut).
+_EXCLUDED_EVENTS = frozenset({
+    "GW200105_162426",  # NSBH O3b
+    "GW200115_042309",  # NSBH O3b
+    "GW230518_125908",  # NSBH O4a
+    "GW230529_181500",  # NSBH O4a
 })
 
 # Per-sample sanity threshold: individual samples with |A_hat / A_sigma|
@@ -527,13 +527,14 @@ def compute_log_prior_from_config(group, posterior_samples):
     return None, []
 
 
-def load_event_ifars(event_names, cache_file):
+def load_event_ifars(event_names, cache_file=None):
     """Return a dict mapping event name to IFAR (years) for *event_names*.
 
-    If *cache_file* exists it is read directly (one ``event_name IFAR`` pair
-    per line, whitespace-separated).  Otherwise the GWOSC event API is queried
-    for each event, the results are written to *cache_file*, and the dict is
-    returned.
+    If *cache_file* is given and the file exists it is read directly (one
+    ``event_name IFAR`` pair per line, whitespace-separated).  Otherwise the
+    GWOSC event API is queried for each event.  When *cache_file* is provided
+    and the file does not yet exist, the fetched results are written there for
+    future use.
 
     IFAR is computed as ``1 / FAR`` where FAR is reported by GWOSC in units of
     yr^-1.  Events whose FAR is zero or missing are assigned ``inf``.
@@ -542,15 +543,16 @@ def load_event_ifars(event_names, cache_file):
     ----------
     event_names : list of str
         GW event names, e.g. ``["GW150914_095045", ...]``.
-    cache_file : str
-        Path to the plain-text cache file.
+    cache_file : str or None
+        Path to the plain-text cache file.  If None the GWOSC API is always
+        queried directly (results are not cached).
 
     Returns
     -------
     dict[str, float]
         Map from event name to IFAR in years.
     """
-    if os.path.exists(cache_file):
+    if cache_file is not None and os.path.exists(cache_file):
         logger.info("Loading event IFARs from cache: %s", cache_file)
         ifars = {}
         with open(cache_file) as fh:
@@ -566,10 +568,16 @@ def load_event_ifars(event_names, cache_file):
                 ifars[parts[0]] = float(parts[1])
         return ifars
 
-    logger.info(
-        "Fetching IFARs from GWOSC for %d events; will cache to %s",
-        len(event_names), cache_file,
-    )
+    if cache_file is not None:
+        logger.info(
+            "Fetching IFARs from GWOSC for %d events; will cache to %s",
+            len(event_names), cache_file,
+        )
+    else:
+        logger.info(
+            "Fetching IFARs from GWOSC for %d events (no cache file)",
+            len(event_names),
+        )
     try:
         from gwosc import api as _gwosc_api
     except ImportError as exc:
@@ -596,12 +604,13 @@ def load_event_ifars(event_names, cache_file):
         ifars[ev] = ifar
         logger.debug("%s: IFAR = %.3g yr", ev, ifar)
 
-    os.makedirs(os.path.dirname(os.path.abspath(cache_file)), exist_ok=True)
-    with open(cache_file, "w") as fh:
-        fh.write("# event_name IFAR_yr\n")
-        for ev, ifar in ifars.items():
-            fh.write(f"{ev} {ifar}\n")
-    logger.info("Saved IFAR cache to %s", cache_file)
+    if cache_file is not None:
+        os.makedirs(os.path.dirname(os.path.abspath(cache_file)), exist_ok=True)
+        with open(cache_file, "w") as fh:
+            fh.write("# event_name IFAR_yr\n")
+            for ev, ifar in ifars.items():
+                fh.write(f"{ev} {ifar}\n")
+        logger.info("Saved IFAR cache to %s", cache_file)
 
     return ifars
 
@@ -655,9 +664,9 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
             )
         event_name = match.group(1)
 
-        if event_name in _NSBH_EVENTS:
+        if event_name in _EXCLUDED_EVENTS:
             _log.warning(
-                "%s: skipping known NSBH event (BBH memory template not applicable)",
+                "%s: skipping explicitly excluded event",
                 event_name,
             )
             continue
@@ -979,10 +988,11 @@ def generate_data(
         IFAR cut when ``use_tgr=False``; inferred from *memory_data* when
         ``use_tgr=True``.
     ifar_cache_file : str or None
-        Path passed to `load_event_ifars`.  When provided, events whose
-        IFAR (from GWOSC) falls below *ifar_threshold* are excluded, in
-        addition to the injection-file cut on the selection function.
-        When None the per-event IFAR cut is skipped.
+        Path passed to `load_event_ifars` as the cache file.  IFARs are
+        always fetched (from the cache if it exists, otherwise from GWOSC)
+        and events whose IFAR falls below *ifar_threshold* are excluded,
+        in addition to the injection-file cut on the selection function.
+        When None, IFARs are fetched directly from GWOSC without caching.
 
     Returns
     -------
@@ -1023,22 +1033,18 @@ def generate_data(
     # Apply event-level cuts to mirror those applied to injections in
     # read_injection_file, so numerator and denominator use the same boundary.
 
-    # Pre-fetch IFARs for all events if a cache file is given.
-    _event_ifars = None
-    if ifar_cache_file is not None:
-        if use_tgr:
-            _ifar_names = [memory_data[i]["event_name"]
-                           for i in range(len(event_posteriors))]
-        elif event_names is not None:
-            _ifar_names = list(event_names)
-        else:
-            logger.warning(
-                "ifar_cache_file provided but event_names not given and "
-                "use_tgr=False; skipping IFAR cut on observed events"
-            )
-            _ifar_names = None
-        if _ifar_names is not None:
-            _event_ifars = load_event_ifars(_ifar_names, ifar_cache_file)
+    # Pre-fetch IFARs for all events (always applied, mirroring the injection cut).
+    if use_tgr:
+        _ifar_names = [memory_data[i]["event_name"]
+                       for i in range(len(event_posteriors))]
+    elif event_names is not None:
+        _ifar_names = list(event_names)
+    else:
+        raise ValueError(
+            "use_tgr=False and event_names is None: cannot apply IFAR cut "
+            "on observed events. Pass event_names explicitly."
+        )
+    _event_ifars = load_event_ifars(_ifar_names, ifar_cache_file)
 
     if (
         min_detector_frame_total_mass is not None
@@ -1319,12 +1325,12 @@ def generate_tgr_only_data(event_posteriors, memory_data,
         If True, divide TGR parameter values by their pooled standard
         deviation across all events.
     ifar_threshold : float
-        Minimum IFAR (years) for an event to be included.  Applied only
-        when *ifar_cache_file* is provided.
+        Minimum IFAR (years) for an event to be included.  Always applied.
     ifar_cache_file : str or None
-        Path passed to `load_event_ifars`.  When provided, events whose
-        IFAR falls below *ifar_threshold* are excluded before building
-        the data arrays.
+        Path passed to `load_event_ifars` as the cache file.  IFARs are
+        always fetched (from the cache if it exists, otherwise from GWOSC)
+        and events whose IFAR falls below *ifar_threshold* are excluded.
+        When None, IFARs are fetched directly from GWOSC without caching.
 
     Returns
     -------
@@ -1334,26 +1340,25 @@ def generate_tgr_only_data(event_posteriors, memory_data,
         log_weights are the per-sample memory log-likelihood ratios to be
         included as additive terms in the model's log probability.
     """
-    # Apply IFAR cut if requested, filtering both memory_data and
-    # event_posteriors in lockstep.
-    if ifar_cache_file is not None:
-        names = [md["event_name"] for md in memory_data]
-        event_ifars = load_event_ifars(names, ifar_cache_file)
-        kept_memory = []
-        kept_posteriors = []
-        for md, ep in zip(memory_data, event_posteriors):
-            ev_ifar = event_ifars.get(md["event_name"], float("inf"))
-            if ev_ifar < ifar_threshold:
-                logger.warning(
-                    "Excluding observed event %s: IFAR %.3g yr is below "
-                    "threshold %.3g yr",
-                    md["event_name"], ev_ifar, ifar_threshold,
-                )
-            else:
-                kept_memory.append(md)
-                kept_posteriors.append(ep)
-        memory_data = kept_memory
-        event_posteriors = kept_posteriors
+    # Apply IFAR cut, filtering both memory_data and event_posteriors in
+    # lockstep (always applied, mirroring the injection cut).
+    names = [md["event_name"] for md in memory_data]
+    event_ifars = load_event_ifars(names, ifar_cache_file)
+    kept_memory = []
+    kept_posteriors = []
+    for md, ep in zip(memory_data, event_posteriors):
+        ev_ifar = event_ifars.get(md["event_name"], float("inf"))
+        if ev_ifar < ifar_threshold:
+            logger.warning(
+                "Excluding observed event %s: IFAR %.3g yr is below "
+                "threshold %.3g yr",
+                md["event_name"], ev_ifar, ifar_threshold,
+            )
+        else:
+            kept_memory.append(md)
+            kept_posteriors.append(ep)
+    memory_data = kept_memory
+    event_posteriors = kept_posteriors
 
     Nobs = len(event_posteriors)
 
