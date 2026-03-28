@@ -92,23 +92,27 @@ def create_plots(fit_astro, fit_joint, fit_memory, outdir):
     # --- Astrophysical corner plot ----------------------------------------
     astro_fits = [(n, f) for n, f in available if n in ("astro", "joint")]
     if astro_fits:
-        fig = None
-        for i, (name, fit) in enumerate(astro_fits):
-            fig = corner(
-                fit,
-                var_names=_ASTRO_VARS,
-                figsize=(16, 16),
-                plot_density=False,
-                plot_contours=True,
-                color=f"C{i}",
-                fig=fig,
-                labels=_ASTRO_VARS,
+        try:
+            fig = None
+            for i, (name, fit) in enumerate(astro_fits):
+                fig = corner(
+                    fit,
+                    var_names=_ASTRO_VARS,
+                    figsize=(16, 16),
+                    plot_density=False,
+                    plot_contours=True,
+                    color=f"C{i}",
+                    fig=fig,
+                    labels=_ASTRO_VARS,
+                )
+            plt.savefig(
+                f"{outdir}/astro_corner.png", dpi=150, bbox_inches="tight"
             )
-        plt.savefig(
-            f"{outdir}/astro_corner.png", dpi=150, bbox_inches="tight"
-        )
-        plt.close()
-        logger.info("Saved astro_corner.png")
+            plt.close()
+            logger.info("Saved astro_corner.png")
+        except (ValueError, RuntimeError) as e:
+            logger.warning("Skipping astro_corner.png: %s", e)
+            plt.close()
 
     # --- TGR plots (only when at least one fit has TGR params) -----------
     tgr_fits = [(n, f) for n, f in available if _has_tgr(f)]
@@ -155,40 +159,48 @@ def create_plots(fit_astro, fit_joint, fit_memory, outdir):
         plt.close()
 
         # TGR corner plot
-        fig = None
-        for i, (name, fit) in enumerate(tgr_fits):
-            fig = corner(
-                fit,
-                var_names=["mu_tgr", "sigma_tgr"],
-                figsize=(8, 8),
-                plot_density=False,
-                plot_contours=True,
-                color=f"C{i}",
-                truths=[1, 0],
-                truth_color="k",
-                fig=fig,
+        try:
+            fig = None
+            for i, (name, fit) in enumerate(tgr_fits):
+                fig = corner(
+                    fit,
+                    var_names=["mu_tgr", "sigma_tgr"],
+                    figsize=(8, 8),
+                    plot_density=False,
+                    plot_contours=True,
+                    color=f"C{i}",
+                    truths=[1, 0],
+                    truth_color="k",
+                    fig=fig,
+                )
+            plt.savefig(
+                f"{outdir}/tgr_comparison_corner.png", dpi=300, bbox_inches="tight"
             )
-        plt.savefig(
-            f"{outdir}/tgr_comparison_corner.png", dpi=300, bbox_inches="tight"
-        )
-        plt.close()
-        logger.info("Saved TGR plots")
+            plt.close()
+            logger.info("Saved TGR plots")
+        except (ValueError, RuntimeError) as e:
+            logger.warning("Skipping tgr_comparison_corner.png: %s", e)
+            plt.close()
 
     # --- Full joint corner plot ------------------------------------------
     if fit_joint is not None:
-        joint_vars = _ASTRO_VARS + (
-            ["mu_tgr", "sigma_tgr"] if _has_tgr(fit_joint) else []
-        )
-        corner(
-            fit_joint,
-            var_names=joint_vars,
-            figsize=(16, 16),
-            color="C1",
-        )
-        plt.savefig(
-            f"{outdir}/joint_model_corner.png", dpi=150, bbox_inches="tight"
-        )
-        plt.close()
-        logger.info("Saved joint_model_corner.png")
+        try:
+            joint_vars = _ASTRO_VARS + (
+                ["mu_tgr", "sigma_tgr"] if _has_tgr(fit_joint) else []
+            )
+            corner(
+                fit_joint,
+                var_names=joint_vars,
+                figsize=(16, 16),
+                color="C1",
+            )
+            plt.savefig(
+                f"{outdir}/joint_model_corner.png", dpi=150, bbox_inches="tight"
+            )
+            plt.close()
+            logger.info("Saved joint_model_corner.png")
+        except (ValueError, RuntimeError) as e:
+            logger.warning("Skipping joint_model_corner.png: %s", e)
+            plt.close()
 
     logger.info("Plots saved to %s", outdir)

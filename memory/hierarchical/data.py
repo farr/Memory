@@ -16,21 +16,20 @@ IFAR_THRESHOLD = 1
 N_SAMPLES_PER_EVENT = 10000
 MIN_DETECTOR_FRAME_TOTAL_MASS = 66.0
 MIN_MASS_RATIO = 1.0 / 6.0
+MIN_MASS_2_SOURCE = 3.0
 
 # Events excluded from the memory analysis because they are confirmed NSBH
-# mergers.  The memory computation uses a BBH memory template, so the
-# oscillatory-signal residual for these events contains NS tidal contributions
-# that produce non-physical A_hat / A_sigma ratios and grossly inflated
-# log_weight values.
+# mergers.
 _NSBH_EVENTS = frozenset({
     "GW200105_162426",  # NSBH, O3b
     "GW200115_042309",  # NSBH, O3b
+    "GW230518_125908",  # NSBH, O4a
     "GW230529_181500",  # NSBH, O4a
 })
 
 # Per-sample sanity threshold: individual samples with |A_hat / A_sigma|
 # exceeding this value are removed before use.  For well-behaved events the
-# memory SNR per sample is << 1; a value of 10 gives ample margin.
+# memory SNR per sample is << 1
 _MAX_SAMPLE_SNR = 10.0
 
 # Event-level sanity threshold: after sample filtering, if the *median*
@@ -528,6 +527,85 @@ def compute_log_prior_from_config(group, posterior_samples):
     return None, []
 
 
+def load_event_ifars(event_names, cache_file):
+    """Return a dict mapping event name to IFAR (years) for *event_names*.
+
+    If *cache_file* exists it is read directly (one ``event_name IFAR`` pair
+    per line, whitespace-separated).  Otherwise the GWOSC event API is queried
+    for each event, the results are written to *cache_file*, and the dict is
+    returned.
+
+    IFAR is computed as ``1 / FAR`` where FAR is reported by GWOSC in units of
+    yr^-1.  Events whose FAR is zero or missing are assigned ``inf``.
+
+    Parameters
+    ----------
+    event_names : list of str
+        GW event names, e.g. ``["GW150914_095045", ...]``.
+    cache_file : str
+        Path to the plain-text cache file.
+
+    Returns
+    -------
+    dict[str, float]
+        Map from event name to IFAR in years.
+    """
+    if os.path.exists(cache_file):
+        logger.info("Loading event IFARs from cache: %s", cache_file)
+        ifars = {}
+        with open(cache_file) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split()
+                if len(parts) != 2:
+                    raise ValueError(
+                        f"Malformed line in IFAR cache {cache_file!r}: {line!r}"
+                    )
+                ifars[parts[0]] = float(parts[1])
+        return ifars
+
+    logger.info(
+        "Fetching IFARs from GWOSC for %d events; will cache to %s",
+        len(event_names), cache_file,
+    )
+    try:
+        from gwosc import api as _gwosc_api
+    except ImportError as exc:
+        raise ImportError(
+            "gwosc is required to fetch IFARs; install it or provide a cache file"
+        ) from exc
+
+    ifars = {}
+    for ev in event_names:
+        # O1/O2 events are registered without the time suffix (e.g. "GW150914")
+        candidates = [ev, re.sub(r"_\d{6}$", "", ev)]
+        ifar = float("inf")
+        for name in candidates:
+            try:
+                result = _gwosc_api.fetch_event_json(name)
+                evdata = list(result["events"].values())[0]
+                far = evdata.get("far")  # units: yr^-1
+                ifar = 1.0 / far if far and far > 0 else float("inf")
+                break
+            except Exception as exc:
+                last_exc = exc
+        else:
+            logger.warning("Could not fetch IFAR for %s from GWOSC: %s", ev, last_exc)
+        ifars[ev] = ifar
+        logger.debug("%s: IFAR = %.3g yr", ev, ifar)
+
+    os.makedirs(os.path.dirname(os.path.abspath(cache_file)), exist_ok=True)
+    with open(cache_file, "w") as fh:
+        fh.write("# event_name IFAR_yr\n")
+        for ev, ifar in ifars.items():
+            fh.write(f"{ev} {ifar}\n")
+    logger.info("Saved IFAR cache to %s", cache_file)
+
+    return ifars
+
+
 def load_memory_data(event_files, memory_dir, waveform_label=None):
     """Load per-event memory results to use as the TGR parameter source.
 
@@ -663,15 +741,15 @@ def read_injection_file(
     ifar_threshold=IFAR_THRESHOLD,
     min_detector_frame_total_mass=MIN_DETECTOR_FRAME_TOTAL_MASS,
     min_mass_ratio=MIN_MASS_RATIO,
+    min_mass_2_source=MIN_MASS_2_SOURCE,
 ):
     """Read an HDF5 injection/selection file and extract relevant data.
 
-    Applies IFAR and, when requested, detector-frame total-mass and
-    mass-ratio cuts to determine which injections were "found", then extracts
-    source-frame
-    masses, spins, redshifts, and draw priors. Also computes derived
-    spin quantities (chi_eff, chi_p) and converts the analysis time to
-    years.
+    Applies IFAR and, when requested, detector-frame total-mass,
+    mass-ratio, and minimum secondary mass cuts to determine which
+    injections were "found", then extracts source-frame masses, spins,
+    redshifts, and draw priors. Also computes derived spin quantities
+    (chi_eff, chi_p) and converts the analysis time to years.
 
     Sources:
     - https://iopscience.iop.org/article/10.3847/2515-5172/ac2ba7
@@ -695,6 +773,10 @@ def read_injection_file(
         Minimum mass-ratio threshold, where ``q = m2_source / m1_source``.
         Injections with ``q`` below this value are excluded. If None, this
         cut is disabled.
+    min_mass_2_source : float or None
+        Minimum source-frame secondary mass threshold in solar masses.
+        Injections with ``m2_source`` below this value are excluded.
+        If None, this cut is disabled.
     Returns
     -------
     dict
@@ -719,6 +801,8 @@ def read_injection_file(
         mass_ratio = events["mass2_source"] / events["mass1_source"]
         if min_mass_ratio is not None:
             found &= mass_ratio >= min_mass_ratio
+        if min_mass_2_source is not None:
+            found &= events["mass2_source"] >= min_mass_2_source
 
         events = events[found]
 
@@ -840,10 +924,13 @@ def generate_data(
     ifar_threshold=IFAR_THRESHOLD,
     min_detector_frame_total_mass=MIN_DETECTOR_FRAME_TOTAL_MASS,
     min_mass_ratio=MIN_MASS_RATIO,
+    min_mass_2_source=MIN_MASS_2_SOURCE,
     N_samples=N_SAMPLES_PER_EVENT,
     prng=None,
     scale_tgr=False,
     ignore_memory_weights=False,
+    event_names=None,
+    ifar_cache_file=None,
 ):
     """Build per-event data arrays for the joint population model.
 
@@ -871,6 +958,11 @@ def generate_data(
     min_mass_ratio : float or None
         Minimum mass-ratio cut passed to `read_injection_file`. If None,
         the cut is disabled.
+    min_mass_2_source : float or None
+        Minimum source-frame secondary mass (solar masses) applied to both
+        injections and observed events. Events whose median posterior
+        ``m2_source = m1_source * mass_ratio`` falls below this threshold
+        are excluded with a warning. If None, the cut is disabled.
     N_samples : int
         Number of posterior samples to draw per event.
     prng : None, int, or numpy.random.Generator
@@ -882,6 +974,15 @@ def generate_data(
         If True, set all log_weights to zero (i.e. do not use the
         memory likelihood ratios as importance weights in the model).
         Useful for diagnosing the effect of the memory weights.
+    event_names : list of str or None
+        GW event names parallel to *event_posteriors*.  Required for the
+        IFAR cut when ``use_tgr=False``; inferred from *memory_data* when
+        ``use_tgr=True``.
+    ifar_cache_file : str or None
+        Path passed to `load_event_ifars`.  When provided, events whose
+        IFAR (from GWOSC) falls below *ifar_threshold* are excluded, in
+        addition to the injection-file cut on the selection function.
+        When None the per-event IFAR cut is skipped.
 
     Returns
     -------
@@ -918,6 +1019,99 @@ def generate_data(
         prng = np.random.default_rng(np.random.randint(1 << 32))
     elif isinstance(prng, int):
         prng = np.random.default_rng(prng)
+
+    # Apply event-level cuts to mirror those applied to injections in
+    # read_injection_file, so numerator and denominator use the same boundary.
+
+    # Pre-fetch IFARs for all events if a cache file is given.
+    _event_ifars = None
+    if ifar_cache_file is not None:
+        if use_tgr:
+            _ifar_names = [memory_data[i]["event_name"]
+                           for i in range(len(event_posteriors))]
+        elif event_names is not None:
+            _ifar_names = list(event_names)
+        else:
+            logger.warning(
+                "ifar_cache_file provided but event_names not given and "
+                "use_tgr=False; skipping IFAR cut on observed events"
+            )
+            _ifar_names = None
+        if _ifar_names is not None:
+            _event_ifars = load_event_ifars(_ifar_names, ifar_cache_file)
+
+    if (
+        min_detector_frame_total_mass is not None
+        or min_mass_ratio is not None
+        or min_mass_2_source is not None
+        or _event_ifars is not None
+    ):
+        filtered_posteriors = []
+        filtered_memory = [] if use_tgr else None
+        for i, ep in enumerate(event_posteriors):
+            if use_tgr:
+                event_label_pre = memory_data[i]["event_name"]
+            elif event_names is not None:
+                event_label_pre = event_names[i]
+            else:
+                event_label_pre = f"event {i}"
+            excluded = False
+
+            if not excluded and _event_ifars is not None:
+                ev_ifar = _event_ifars.get(event_label_pre, float("inf"))
+                if ev_ifar < ifar_threshold:
+                    logger.warning(
+                        "Excluding observed event %s: IFAR %.3g yr is below "
+                        "threshold %.3g yr",
+                        event_label_pre, ev_ifar, ifar_threshold,
+                    )
+                    excluded = True
+
+            if min_mass_ratio is not None:
+                median_q = float(np.median(ep["mass_ratio"]))
+                if median_q < min_mass_ratio:
+                    logger.warning(
+                        "Excluding observed event %s: median mass ratio %.4f "
+                        "is below the threshold %.4f",
+                        event_label_pre, median_q, min_mass_ratio,
+                    )
+                    excluded = True
+
+            if not excluded and min_mass_2_source is not None:
+                m1 = np.asarray(ep["mass_1_source"], dtype=float)
+                q = np.asarray(ep["mass_ratio"], dtype=float)
+                median_m2 = float(np.median(m1 * q))
+                if median_m2 < min_mass_2_source:
+                    logger.warning(
+                        "Excluding observed event %s: median source-frame "
+                        "secondary mass %.2f Msun is below the threshold "
+                        "%.2f Msun",
+                        event_label_pre, median_m2, min_mass_2_source,
+                    )
+                    excluded = True
+
+            if not excluded and min_detector_frame_total_mass is not None:
+                m1 = np.asarray(ep["mass_1_source"], dtype=float)
+                q = np.asarray(ep["mass_ratio"], dtype=float)
+                z = np.asarray(ep["redshift"], dtype=float)
+                median_m_det = float(np.median(m1 * (1.0 + q) * (1.0 + z)))
+                if median_m_det < min_detector_frame_total_mass:
+                    logger.warning(
+                        "Excluding observed event %s: median detector-frame "
+                        "total mass %.2f Msun is below the threshold %.2f Msun",
+                        event_label_pre, median_m_det,
+                        min_detector_frame_total_mass,
+                    )
+                    excluded = True
+
+            if not excluded:
+                filtered_posteriors.append(ep)
+                if use_tgr:
+                    filtered_memory.append(memory_data[i])
+
+        event_posteriors = filtered_posteriors
+        if use_tgr:
+            memory_data = filtered_memory
 
     A_scale = _compute_A_scale(memory_data, scale_tgr and use_tgr)
 
@@ -1072,6 +1266,7 @@ def generate_data(
         ifar_threshold=ifar_threshold,
         min_detector_frame_total_mass=min_detector_frame_total_mass,
         min_mass_ratio=min_mass_ratio,
+        min_mass_2_source=min_mass_2_source,
     )
     Ndraw = int(injection_data["total_generated"])
 
@@ -1101,7 +1296,8 @@ def generate_data(
 
 def generate_tgr_only_data(event_posteriors, memory_data,
                            N_samples=N_SAMPLES_PER_EVENT, prng=None, scale_tgr=False,
-                           ignore_memory_weights=False):
+                           ignore_memory_weights=False,
+                           ifar_threshold=IFAR_THRESHOLD, ifar_cache_file=None):
     """Build simplified data arrays for the TGR-only model.
 
     Resamples posterior indices using memory importance weights and extracts
@@ -1122,6 +1318,13 @@ def generate_tgr_only_data(event_posteriors, memory_data,
     scale_tgr : bool
         If True, divide TGR parameter values by their pooled standard
         deviation across all events.
+    ifar_threshold : float
+        Minimum IFAR (years) for an event to be included.  Applied only
+        when *ifar_cache_file* is provided.
+    ifar_cache_file : str or None
+        Path passed to `load_event_ifars`.  When provided, events whose
+        IFAR falls below *ifar_threshold* are excluded before building
+        the data arrays.
 
     Returns
     -------
@@ -1131,6 +1334,27 @@ def generate_tgr_only_data(event_posteriors, memory_data,
         log_weights are the per-sample memory log-likelihood ratios to be
         included as additive terms in the model's log probability.
     """
+    # Apply IFAR cut if requested, filtering both memory_data and
+    # event_posteriors in lockstep.
+    if ifar_cache_file is not None:
+        names = [md["event_name"] for md in memory_data]
+        event_ifars = load_event_ifars(names, ifar_cache_file)
+        kept_memory = []
+        kept_posteriors = []
+        for md, ep in zip(memory_data, event_posteriors):
+            ev_ifar = event_ifars.get(md["event_name"], float("inf"))
+            if ev_ifar < ifar_threshold:
+                logger.warning(
+                    "Excluding observed event %s: IFAR %.3g yr is below "
+                    "threshold %.3g yr",
+                    md["event_name"], ev_ifar, ifar_threshold,
+                )
+            else:
+                kept_memory.append(md)
+                kept_posteriors.append(ep)
+        memory_data = kept_memory
+        event_posteriors = kept_posteriors
+
     Nobs = len(event_posteriors)
 
     logger.info("Using %d events", Nobs)

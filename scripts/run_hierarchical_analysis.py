@@ -713,6 +713,13 @@ def main():
             "NRSur7dq4."
         )
 
+    # Extract event names from file paths for IFAR lookup.
+    _all_event_names = []
+    for _f in all_event_files:
+        _m = re.search(r"(GW\d{6}_\d{6})", os.path.basename(_f))
+        _all_event_names.append(_m.group(1) if _m else os.path.basename(_f))
+    _ifar_cache_file = os.path.join(outdir, "event_ifars.txt")
+
     _gen_kwargs = dict(
         injection_file=injection_file,
         ifar_threshold=args.ifar_threshold,
@@ -726,6 +733,7 @@ def main():
         N_samples=args.n_samples_per_event,
         prng=seed,
         ignore_memory_weights=args.ignore_memory_weights,
+        ifar_cache_file=_ifar_cache_file,
     )
 
     # astro: all events, uniform weights (no memory reweighting)
@@ -733,10 +741,11 @@ def main():
         (event_data_astro, inj_data_astro, BW_astro, BW_sel_astro,
          Nobs_astro, Ndraw_astro, _) = generate_data(
             all_posteriors, memory_data=None, use_tgr=False,
-            scale_tgr=False, **_gen_kwargs,
+            scale_tgr=False, event_names=_all_event_names, **_gen_kwargs,
         )
 
     # joint: memory-filtered events, memory-reweighted samples
+    # (use_tgr=True so event names are taken from memory_data)
     if run_joint:
         (event_data_joint, inj_data_joint, BW_joint, BW_sel_joint,
          Nobs_joint, Ndraw_joint, A_scale_joint) = generate_data(
@@ -751,6 +760,8 @@ def main():
             N_samples=args.n_samples_per_event, prng=seed,
             scale_tgr=args.scale_tgr,
             ignore_memory_weights=args.ignore_memory_weights,
+            ifar_threshold=args.ifar_threshold,
+            ifar_cache_file=_ifar_cache_file,
         )
 
     # --- MCMC -------------------------------------------------------------
