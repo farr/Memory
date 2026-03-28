@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Time-domain and spectrogram comparison for GW230606_004305.
 
-Uses the same segment and conditioning as plot_gw230606_fd_comparison.py:
+Uses the same segment and conditioning as scripts/gw230606/plot_gw230606_fd_comparison.py:
   - segment duration and boundaries from the PESummary analysis config
   - Tukey window (roll_off=0.2 s) shown on top of the raw strain
 
@@ -10,7 +10,7 @@ Plot (1): time-domain — same 4-second analysis segment, GWOSC vs frame,
 Plot (2): Q-transform spectrogram computed from a longer (128 s) segment
           so the PSD estimate is stable, zoomed to ±2 s around the merger.
 
-Requires: frames already downloaded by plot_gw230606_data_comparison.py.
+Requires: frames already downloaded by scripts/gw230606/plot_gw230606_data_comparison.py.
 
 Outputs:
   results/gw230606_td_comparison.png
@@ -25,7 +25,7 @@ matplotlib.rcParams["text.usetex"] = False
 import matplotlib.pyplot as plt
 from scipy.signal.windows import tukey
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from memory.gw_residuals import (
     _parse_analysis_config,
     _download_gwosc_strain,
@@ -54,7 +54,7 @@ QPLOT_DT       = 2.0     # seconds either side of merger shown in spectrogram
 QRANGE         = (4, 64)
 FRANGE         = (20, 1000)
 
-REPO_DIR  = os.path.join(os.path.dirname(__file__), "..")
+REPO_DIR  = os.path.join(os.path.dirname(__file__), "..", "..")
 FRAME_DIR = os.path.join(REPO_DIR, "data", "frames")
 OUTFILE_TD      = os.path.join(REPO_DIR, "results", "gw230606_td_comparison.png")
 OUTFILE_SPEC    = os.path.join(REPO_DIR, "results", "gw230606_spectrogram.png")

@@ -15,11 +15,11 @@ matplotlib.rcParams["text.usetex"] = False
 import matplotlib.pyplot as plt
 
 RESULTS_H5 = os.path.join(
-    os.path.dirname(__file__), "..",
+    os.path.dirname(__file__), "..", "..",
     "results", "memory_tukey05", "GW230606_004305", "memory_results.h5",
 )
 OUTFILE = os.path.join(
-    os.path.dirname(__file__), "..",
+    os.path.dirname(__file__), "..", "..",
     "results", "gw230606_memory_weights_tukey05.png",
 )
 

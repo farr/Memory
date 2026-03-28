@@ -42,7 +42,7 @@ L1_FRAME_URL   = (
     f"https://gwosc.org/archive/data/O4a_4KHZ_R1/1369440256/{L1_FRAME_FNAME}"
 )
 
-REPO_DIR   = os.path.join(os.path.dirname(__file__), "..")
+REPO_DIR   = os.path.join(os.path.dirname(__file__), "..", "..")
 FRAME_DIR  = os.path.join(REPO_DIR, "data", "frames")
 OUTFILE    = os.path.join(REPO_DIR, "results", "gw230606_data_comparison.png")
 

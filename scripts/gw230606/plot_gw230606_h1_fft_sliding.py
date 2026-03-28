@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
-"""Sliding 4-second FFT of L1 strain around the GW230606_004305 analysis segment.
+"""Sliding 4-second FFT of H1 BayesWave-cleaned strain around GW230606_004305.
 
-Applies the same Tukey-window + rfft/fs conditioning as bilby/gw_residuals.py,
-sliding a 4-second window across the L1 data in steps of 3.75 s (overlap
-= 0.25 s).  Plots |h(f)| for each segment as a grid of panels so that the
-appearance and disappearance of the pronounced low-frequency oscillations can
-be timed.
+Same conditioning and layout as scripts/gw230606/plot_gw230606_l1_fft_sliding.py but uses the
+H1 BayesWave glitch-subtracted frame from data/frames/ instead of GWOSC.
 
-Outputs: results/gw230606_l1_fft_sliding.png
+Outputs: results/gw230606_h1_fft_sliding.png
 """
 
-import argparse
 import os
 import sys
 import numpy as np
@@ -19,11 +15,13 @@ matplotlib.rcParams["text.usetex"] = False
 import matplotlib.pyplot as plt
 from scipy.signal.windows import tukey
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from memory.gw_residuals import (
     _parse_analysis_config,
-    _download_gwosc_strain,
+    _find_frame_file,
+    _read_frame_strain,
     _choose_label,
+    GLITCH_SUBTRACTED_CHANNEL_FORMAT,
 )
 from pesummary.io import read as pesummary_read
 
@@ -37,32 +35,29 @@ PESUMMARY_H5 = (
     "IGWN-GWTC4p0-1a206db3d_721-GW230606_004305-combined_PEDataRelease.hdf5"
 )
 PARAM_KEY = "C00:NRSur7dq4"
-ROLL_OFF  = 0.2          # bilby default
+ROLL_OFF  = 0.2
 
-SEGMENT_DURATION = 4.0   # seconds — match analysis window
-OVERLAP          = 0.25  # seconds overlap between consecutive segments
+SEGMENT_DURATION = 4.0
+OVERLAP          = 0.25
 STEP             = SEGMENT_DURATION - OVERLAP   # 3.75 s
 
-SEARCH_PAD = 30.0        # seconds to extend before/after the analysis segment
+SEARCH_PAD = 30.0        # seconds before analysis segment (start unchanged)
 
-# Show this frequency range to reveal the sub-90 Hz oscillations clearly.
-# Linear x-axis so oscillation periodicity in frequency is easy to read.
 FMIN_PLOT = 10.0
 FMAX_PLOT = 200.0
 
-REPO_DIR = os.path.join(os.path.dirname(__file__), "..")
-OUTFILE  = os.path.join(REPO_DIR, "results", "gw230606_l1_fft_sliding.png")
+REPO_DIR  = os.path.join(os.path.dirname(__file__), "..", "..")
+FRAME_DIR = os.path.join(REPO_DIR, "data", "frames")
+OUTFILE   = os.path.join(REPO_DIR, "results", "gw230606_h1_fft_sliding.png")
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def bilby_fft(strain_array, duration, sampling_frequency, tukey_alpha=None):
-    """Tukey window + rfft/fs, identical to bilby frequency_domain_strain."""
-    if tukey_alpha is None:
-        tukey_alpha = 2 * ROLL_OFF / duration
-    window  = tukey(len(strain_array), alpha=tukey_alpha)
+def bilby_fft(strain_array, duration, sampling_frequency):
+    alpha   = 2 * ROLL_OFF / duration
+    window  = tukey(len(strain_array), alpha=alpha)
     h_tilde = np.fft.rfft(strain_array * window) / sampling_frequency
     freq    = np.linspace(0, sampling_frequency / 2, len(h_tilde))
     return freq, np.abs(h_tilde)
@@ -73,17 +68,8 @@ def bilby_fft(strain_array, duration, sampling_frequency, tukey_alpha=None):
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--tukey-alpha", type=float, default=None,
-                        help="Tukey window alpha (default: 2*ROLL_OFF/duration = 0.1)")
-    args = parser.parse_args()
-    tukey_alpha = args.tukey_alpha if args.tukey_alpha is not None else 2 * ROLL_OFF / SEGMENT_DURATION
+    os.makedirs(os.path.dirname(OUTFILE), exist_ok=True)
 
-    alpha_tag = f"_alpha{tukey_alpha:.2f}".replace(".", "p")
-    outfile = OUTFILE.replace(".png", f"{alpha_tag}.png") if args.tukey_alpha is not None else OUTFILE
-    os.makedirs(os.path.dirname(outfile), exist_ok=True)
-
-    # --- Parse analysis config from PESummary ---
     print("Reading PESummary config ...")
     data  = pesummary_read(PESUMMARY_H5)
     label = _choose_label(data, PARAM_KEY)
@@ -91,23 +77,34 @@ def main():
     gps   = cfg.trigger_time
     print(f"  analysis segment: [{cfg.start_time:.2f}, {cfg.end_time:.2f}]")
 
-    # --- Load L1 GWOSC data for the full search range ---
     t_load_start = cfg.start_time - SEARCH_PAD
-    t_load_end   = cfg.end_time   + SEARCH_PAD + 3 * STEP   # +3 panels to fill last row
-    print(f"Loading L1 GWOSC [{t_load_start:.1f}, {t_load_end:.1f}] "
+    t_load_end   = cfg.end_time   + SEARCH_PAD + 3 * STEP   # +3 to fill last row
+
+    # --- Find and read H1 BayesWave frame ---
+    print("Looking for H1 BayesWave frame ...")
+    gwf = _find_frame_file(FRAME_DIR, "H1", t_load_start, t_load_end)
+    if gwf is None:
+        raise FileNotFoundError(
+            f"No H1 BayesWave frame found in {FRAME_DIR} covering "
+            f"[{t_load_start:.0f}, {t_load_end:.0f}]. "
+            "Run data/download_glitch_frames.sh first."
+        )
+    print(f"  Using: {os.path.basename(gwf)}")
+    print(f"Loading H1 [{t_load_start:.1f}, {t_load_end:.1f}] "
           f"({t_load_end - t_load_start:.0f} s) ...")
-    ts = _download_gwosc_strain(
-        ["L1"], t_load_start, t_load_end, fs=4096.0, frame_dir=None,
-    )["L1"]
-    fs = ts.sample_rate.value
+    ts = _read_frame_strain(gwf, "H1", t_load_start, t_load_end,
+                            channel_format=GLITCH_SUBTRACTED_CHANNEL_FORMAT)
+
+    # BayesWave frames may be at 16384 Hz — resample to 4096 Hz to match L1
+    if ts.sample_rate.value != 4096.0:
+        print(f"  Resampling {ts.sample_rate} -> 4096 Hz ...")
+        ts = ts.resample(4096.0)
+
+    fs    = ts.sample_rate.value
     n_seg = int(round(SEGMENT_DURATION * fs))
 
-    # --- Build list of segment start times ---
-    t0_arr = np.arange(
-        t_load_start,
-        t_load_end - SEGMENT_DURATION + 1e-6,
-        STEP,
-    )
+    # --- Build segment start times ---
+    t0_arr = np.arange(t_load_start, t_load_end - SEGMENT_DURATION + 1e-6, STEP)
     print(f"  {len(t0_arr)} segments of {SEGMENT_DURATION} s, "
           f"step={STEP} s, overlap={OVERLAP} s")
 
@@ -118,12 +115,12 @@ def main():
         seg   = ts.crop(t_start, t_end)
         if len(seg) < n_seg * 0.95:
             continue
-        freq, asd = bilby_fft(seg.value[:n_seg], SEGMENT_DURATION, fs, tukey_alpha)
+        freq, asd = bilby_fft(seg.value[:n_seg], SEGMENT_DURATION, fs)
         segments.append({
-            "t_start": t_start,
-            "t_end":   t_end,
-            "freq":    freq,
-            "asd":     asd,
+            "t_start":     t_start,
+            "t_end":       t_end,
+            "freq":        freq,
+            "asd":         asd,
             "is_analysis": abs(t_start - cfg.start_time) < 0.05,
         })
 
@@ -138,7 +135,6 @@ def main():
     plt.rcParams["text.usetex"] = False
     axes_flat = axes.flatten()
 
-    # Compute a common y range from the data in the plot frequency band
     all_asd_inband = []
     for s in segments:
         mask = (s["freq"] >= FMIN_PLOT) & (s["freq"] <= FMAX_PLOT)
@@ -148,16 +144,16 @@ def main():
     ymax = np.percentile(all_asd_cat, 99) * 3.0
 
     for i, s in enumerate(segments):
-        ax = axes_flat[i]
+        ax    = axes_flat[i]
         color = "C1" if s["is_analysis"] else "C0"
         lw    = 1.0  if s["is_analysis"] else 0.7
         mask  = (s["freq"] >= FMIN_PLOT) & (s["freq"] <= FMAX_PLOT)
         ax.semilogy(s["freq"][mask], s["asd"][mask], lw=lw, color=color)
-        ax.axvline(90, color="k", lw=0.6, ls=":", alpha=0.5)   # 90 Hz marker
+        ax.axvline(90, color="k", lw=0.6, ls=":", alpha=0.5)
         ax.set_xlim(FMIN_PLOT, FMAX_PLOT)
         ax.set_ylim(ymin, ymax)
-        dt_start = s["t_start"] - gps
-        dt_end   = s["t_end"]   - gps
+        dt_start  = s["t_start"] - gps
+        dt_end    = s["t_end"]   - gps
         label_str = f"[{dt_start:+.2f}, {dt_end:+.2f}] s"
         if s["is_analysis"]:
             label_str += "  *"
@@ -173,15 +169,15 @@ def main():
         axes_flat[j].set_visible(False)
 
     fig.suptitle(
-        f"{EVENT}  —  L1  |  sliding {SEGMENT_DURATION:.0f}-s Tukey FFT (alpha={tukey_alpha:.2f}), "
-        f"step={STEP} s (overlap={OVERLAP} s)\n"
-        f"search: {SEARCH_PAD:.0f} s before/after analysis segment  "
+        f"{EVENT}  —  H1 BayesWave ({GLITCH_SUBTRACTED_CHANNEL_FORMAT.format(ifo='H1')})"
+        f"  |  sliding {SEGMENT_DURATION:.0f}-s Tukey FFT, step={STEP} s (overlap={OVERLAP} s)\n"
+        f"search: {SEARCH_PAD:.0f} s before / {SEARCH_PAD + 3*STEP:.1f} s after analysis segment  "
         f"(*  = analysis segment, orange)  |  dashed line at 90 Hz",
         fontsize=9,
     )
 
-    fig.savefig(outfile, dpi=150, bbox_inches="tight")
-    print(f"Saved: {outfile}")
+    fig.savefig(OUTFILE, dpi=150, bbox_inches="tight")
+    print(f"Saved: {OUTFILE}")
     plt.close(fig)
 
 

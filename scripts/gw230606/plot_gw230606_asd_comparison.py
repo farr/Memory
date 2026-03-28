@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ASD comparison of GWOSC and frame-based strain for GW230606_004305.
 
-Uses the same cached frame files as plot_gw230606_data_comparison.py
+Uses the same cached frame files as scripts/gw230606/plot_gw230606_data_comparison.py
 (run that script first to download the frames).  Computes ASDs from a
 ~64-second segment around the merger and plots them in log-log scale.
 
@@ -35,7 +35,7 @@ L1_FRAME_FNAME = f"L-L1_GWOSC_O4a_4KHZ_R1-{FRAME_GPS_START}-{FRAME_DURATION}.gwf
 H1_CHAN = "H1:GDS-CALIB_STRAIN_CLEAN"
 L1_CHAN = "L1:GWOSC-4KHZ_R1_STRAIN"
 
-REPO_DIR  = os.path.join(os.path.dirname(__file__), "..")
+REPO_DIR  = os.path.join(os.path.dirname(__file__), "..", "..")
 FRAME_DIR = os.path.join(REPO_DIR, "data", "frames")
 OUTFILE   = os.path.join(REPO_DIR, "results", "gw230606_asd_comparison.png")
 
@@ -54,7 +54,7 @@ def main():
         if not os.path.exists(p):
             raise FileNotFoundError(
                 f"{os.path.basename(p)} not found in {FRAME_DIR}. "
-                "Run plot_gw230606_data_comparison.py first to download the frames."
+                "Run scripts/gw230606/plot_gw230606_data_comparison.py first to download the frames."
             )
 
     t_start = GPS - ASD_DT

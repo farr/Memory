@@ -19,7 +19,7 @@ import matplotlib
 matplotlib.rcParams["text.usetex"] = False
 import matplotlib.pyplot as plt
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from memory.gw_residuals import (
     _parse_analysis_config,
     _download_gwosc_strain,
@@ -48,7 +48,7 @@ QTRANSFORM_PAD = 64.0   # same as spectrogram — 128 s total
 FFTLENGTH = 4.0    # seconds — matches analysis segment, df = 0.25 Hz
 OVERLAP   = 2.0    # 50 % overlap
 
-REPO_DIR  = os.path.join(os.path.dirname(__file__), "..")
+REPO_DIR  = os.path.join(os.path.dirname(__file__), "..", "..")
 FRAME_DIR = os.path.join(REPO_DIR, "data", "frames")
 OUTFILE   = os.path.join(REPO_DIR, "results", "gw230606_whitened_td.png")
 

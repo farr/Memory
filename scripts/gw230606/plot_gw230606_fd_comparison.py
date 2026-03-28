@@ -9,7 +9,7 @@ Applies exactly the same conditioning as gw_residuals.py / bilby:
 The ASD shown is simply |h(f)| — the Fourier norm of the single windowed
 FFT, with no Welch averaging.
 
-Requires: frames already downloaded by plot_gw230606_data_comparison.py.
+Requires: frames already downloaded by scripts/gw230606/plot_gw230606_data_comparison.py.
 
 Outputs: results/gw230606_fd_comparison.png
 """
@@ -22,7 +22,7 @@ matplotlib.rcParams["text.usetex"] = False
 import matplotlib.pyplot as plt
 from scipy.signal.windows import tukey
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from memory.gw_residuals import (
     _parse_analysis_config,
     _download_gwosc_strain,
@@ -44,7 +44,7 @@ PESUMMARY_H5 = (
 )
 PARAM_KEY    = "C00:NRSur7dq4"
 
-REPO_DIR  = os.path.join(os.path.dirname(__file__), "..")
+REPO_DIR  = os.path.join(os.path.dirname(__file__), "..", "..")
 FRAME_DIR = os.path.join(REPO_DIR, "data", "frames")
 OUTFILE   = os.path.join(REPO_DIR, "results", "gw230606_fd_comparison.png")
 

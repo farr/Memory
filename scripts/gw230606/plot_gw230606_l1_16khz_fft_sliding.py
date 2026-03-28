@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Sliding 4-second FFT of L1 strain from the GWOSC 16 KHz frame.
 
-Same conditioning and layout as plot_gw230606_l1_fft_sliding.py (which uses
+Same conditioning and layout as scripts/gw230606/plot_gw230606_l1_fft_sliding.py (which uses
 fetch_open_data at 4096 Hz) but reads from the GWOSC 16 KHz frame
 (L-L1_GWOSC_O4a_16KHZ_R1-...) and resamples to 4096 Hz before the FFT.
 Sanity check: if the low-frequency oscillations are present here too they are
@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 from scipy.signal.windows import tukey
 from gwpy.timeseries import TimeSeries
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from memory.gw_residuals import (
     _parse_analysis_config,
     _choose_label,
@@ -55,7 +55,7 @@ L1_16KHZ_URL    = (
 )
 L1_16KHZ_CHAN   = "L1:GWOSC-16KHZ_R1_STRAIN"
 
-REPO_DIR  = os.path.join(os.path.dirname(__file__), "..")
+REPO_DIR  = os.path.join(os.path.dirname(__file__), "..", "..")
 FRAME_DIR = os.path.join(REPO_DIR, "data", "frames")
 OUTFILE   = os.path.join(REPO_DIR, "results", "gw230606_l1_16khz_fft_sliding.png")
 
