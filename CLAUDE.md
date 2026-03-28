@@ -7,6 +7,7 @@ Human-facing setup, architecture, and scientific background live in `README.md`.
 
 - **Python 3.11 only** (pinned in `.python-version`).
 - Use **`uv`** for dependency management and execution.
+- Load system packages via `module load` commands.
 - See `README.md` for setup, smoke tests, architecture, memory-likelihood math,
   and waveform implementation notes.
 - The `memory` package is installed in dev mode via `uv sync`.
