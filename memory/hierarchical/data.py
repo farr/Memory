@@ -954,6 +954,23 @@ def _sample_memory_event(md, idxs, A_scale):
     )
 
 
+def _write_analyzed_events(ifar_cache_file, event_names):
+    """Write *event_names* to ``analyzed_events.txt`` beside *ifar_cache_file*."""
+    if ifar_cache_file is None:
+        return
+    path = os.path.join(
+        os.path.dirname(os.path.abspath(ifar_cache_file)),
+        "analyzed_events.txt",
+    )
+    with open(path, "w") as fh:
+        fh.write(
+            "# Final set of events used in hierarchical analysis"
+            " (post IFAR/mass cuts)\n"
+        )
+        fh.writelines(name + "\n" for name in event_names)
+    logger.info("Wrote analyzed event list to %s", path)
+
+
 def generate_data(
     event_posteriors,
     injection_file,
@@ -1082,6 +1099,7 @@ def generate_data(
         or _event_ifars is not None
     ):
         filtered_posteriors = []
+        filtered_names = []
         filtered_memory = [] if use_tgr else None
         for i, ep in enumerate(event_posteriors):
             if use_tgr:
@@ -1141,6 +1159,7 @@ def generate_data(
 
             if not excluded:
                 filtered_posteriors.append(ep)
+                filtered_names.append(event_label_pre)
                 if use_tgr:
                     filtered_memory.append(memory_data[i])
 
@@ -1160,6 +1179,12 @@ def generate_data(
                 "generate_data: all %d observed events passed IFAR / mass cuts",
                 n_after,
             )
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(
+                "generate_data: final event list (%d): %s",
+                len(filtered_names), ", ".join(filtered_names),
+            )
+        _write_analyzed_events(ifar_cache_file, filtered_names)
 
     A_scale = _compute_A_scale(memory_data, scale_tgr and use_tgr)
 
@@ -1413,6 +1438,13 @@ def generate_tgr_only_data(event_posteriors, memory_data,
     Nobs = len(event_posteriors)
 
     logger.info("Using %d events", Nobs)
+    kept_names = [md["event_name"] for md in memory_data]
+    if logger.isEnabledFor(logging.INFO):
+        logger.info(
+            "generate_tgr_only_data: final event list (%d): %s",
+            Nobs, ", ".join(kept_names),
+        )
+    _write_analyzed_events(ifar_cache_file, kept_names)
 
     if prng is None:
         prng = np.random.default_rng(np.random.randint(1 << 32))

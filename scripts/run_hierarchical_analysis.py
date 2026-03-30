@@ -490,8 +490,8 @@ def _build_parser():
     parser.add_argument(
         "--ifar-threshold",
         type=float,
-        default=1000,
-        help="Inverse false-alarm rate threshold in years (default: 1000)",
+        default=1,
+        help="Inverse false-alarm rate threshold in years (default: 1)",
     )
     # -- Output -------------------------------------------------------------
     parser.add_argument(
