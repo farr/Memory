@@ -518,6 +518,25 @@ def main():
         "--n-ppd", type=int, default=None,
         help="Max posterior samples to use (default: all); reduces memory",
     )
+    parser.add_argument(
+        "--n-m1-grid", type=int, default=600,
+        help=(
+            "Number of primary-mass grid cells used for the PPD integral "
+            "(default: 600). Higher values reduce visible stair-step "
+            "artifacts in the mass-ratio panel."
+        ),
+    )
+    parser.add_argument(
+        "--n-q-grid", type=int, default=450,
+        help=(
+            "Number of mass-ratio grid points used for plotting "
+            "(default: 450). Higher values make the q PPD look smoother."
+        ),
+    )
+    parser.add_argument(
+        "--n-a-grid", type=int, default=200,
+        help="Number of spin-magnitude grid points used for plotting (default: 200).",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--injection-file", default=None,
@@ -562,9 +581,13 @@ def main():
     # m1_grid excludes MMIN exactly: at m1=MMIN the q-distribution is a Dirac delta
     # at q=1 and its normalisation diverges, causing float64 overflow in the integral.
     # Dropping that single measure-zero point has no effect on the integral value.
-    m1_grid = np.linspace(MMIN, MMAX, 201)[1:]   # 200 pts, first at ~3.49 M☉
-    q_grid  = np.linspace(0.01, 1.0, 150)
-    a_grid  = np.linspace(0.0,  1.0, 200)
+    #
+    # Use a relatively fine default grid for q and the m1 marginalisation:
+    # the hard q >= MMIN / m1 support boundary otherwise shows up as visible
+    # stair-step artifacts in the plotted mass-ratio PPD.
+    m1_grid = np.linspace(MMIN, MMAX, args.n_m1_grid + 1)[1:]
+    q_grid  = np.linspace(0.01, 1.0, args.n_q_grid)
+    a_grid  = np.linspace(0.0,  1.0, args.n_a_grid)
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
     ax_m1, ax_q, ax_a = axes
