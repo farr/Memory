@@ -27,7 +27,7 @@ PRIOR = {
     "mu_peak_2":    (15,    75),
     "sigma_peak_2": (0.5,    8),
     "mu_spin":      (0,    0.7),
-    "sigma_spin":   (0.01, 0.5),
+    "sigma_spin":   (0.01,   1),
     "lamb":         (-30,   30),
 }
 
