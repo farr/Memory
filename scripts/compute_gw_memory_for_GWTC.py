@@ -376,8 +376,11 @@ def process_event(filepath, event, args, event_dir, multiprocess):
           * append/replace that label into memory_results.h5
           * write that label's histogram plot
     """
-    labels = get_waveform_labels_from_hdf5(filepath)
-
+    if event != "GW250114_082203":
+        labels = get_waveform_labels_from_hdf5(filepath)
+    else:
+        labels = ["bilby-NRSur7dq4_prod-reweighted"]
+        
     results = {}
     h5_path = Path(event_dir) / "memory_results.h5"
 
@@ -385,8 +388,11 @@ def process_event(filepath, event, args, event_dir, multiprocess):
         if "Mixed" in label:
             continue
 
-        approximant_name = parse_approximant_from_label(label)
-    
+        if event != "GW250114_082203":
+            approximant_name = parse_approximant_from_label(label)
+        else:
+            approximant_name = "NRSur7dq4"
+            
         if (not args.overwrite) and label_is_finished(Path(event_dir), label):
             print(f"[{event}] skipping finished model {approximant_name}.", flush=True)
             continue
@@ -485,6 +491,9 @@ def main():
             
             tasks.append((str(filepath), event, vars(args)))
 
+    if "GW250114_082203" in args.events:
+        tasks.append(("/mnt/home/kmitman/work/memory_pop/data/posterior_samples_NRSur7dq4.h5", "GW250114_082203", vars(args)))
+            
     nproc = min(mp.cpu_count() - 1, len(tasks))
 
     if args.multiprocess_events:
