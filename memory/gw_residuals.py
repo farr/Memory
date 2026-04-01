@@ -1126,13 +1126,15 @@ def compute_one_sample_fd(
 # Sample iteration helpers
 # ----------------------------
 
-def _iter_samples_as_dicts(data, label: str, max_samples: Optional[int], thin: int) -> Iterator[Dict[str, Any]]:
+def _iter_samples_as_dicts(data, label: str, max_samples: Optional[int], thin: int, load_specific_sample: Optional[int]) -> Iterator[Dict[str, Any]]:
     """Iterate over posterior samples as dictionaries."""
     df = data.samples_dict[label].to_pandas()
     if thin and thin > 1:
         df = df.iloc[::thin]
     if max_samples is not None:
         df = df.iloc[:max_samples]
+    if load_specific_sample is not None:
+        df = df.iloc[load_specific_sample:load_specific_sample + 1]
     for _, row in df.iterrows():
         yield row.to_dict()
 
@@ -1161,6 +1163,7 @@ def compute_bbh_residuals_with_spline_calibration(
     loglevel: str = "INFO",
     frame_dir: Optional[str] = None,
     glitch_channel_format: str = GLITCH_SUBTRACTED_CHANNEL_FORMAT,
+    load_specific_sample = None,
 ) -> Dict[str, Any]:
     """
     Compute data-model residuals for BBH posterior samples with spline calibration.
@@ -1194,7 +1197,7 @@ def compute_bbh_residuals_with_spline_calibration(
     wfgen = _build_waveform_generator_bbh(cfg)
 
     # ---- Load samples early so we can decide whether calibration is available ----
-    samples: List[Dict[str, Any]] = list(_iter_samples_as_dicts(data, use_label, max_samples, thin))
+    samples: List[Dict[str, Any]] = list(_iter_samples_as_dicts(data, use_label, max_samples, thin, load_specific_sample))
     if len(samples) == 0:
         raise RuntimeError("No posterior samples selected (check max_samples/thin).")
 
