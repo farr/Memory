@@ -116,7 +116,7 @@ def _cfg_first_match(cfg: Dict[str, Dict[str, Any]], section: str, keys: List[st
 
 
 def _parse_ifo_freq_dict(value: Any, detectors: Iterable[str], default: float) -> Dict[str, float]:
-    """
+    """fres
     Parse a frequency specification that might be:
       - a float / int
       - a numeric string
@@ -1179,11 +1179,17 @@ def compute_bbh_residuals_with_spline_calibration(
     use_label = _choose_label(data, label)
     cfg = _parse_analysis_config(data, use_label, event)
 
-    ifos = _build_ifos_with_psd_and_strain(
+    raw_ifos = _build_ifos_with_psd_and_strain(
         data, cfg,
         frame_dir=frame_dir,
         glitch_channel_format=glitch_channel_format,
     )
+    # Note: added to skip Virgo when NaNs are present
+    ifos = []
+    for ifo in raw_ifos:
+        if not np.any(np.isnan(ifo.strain_data.frequency_domain_strain)):
+            ifos.append(ifo)
+            
     used_detectors = tuple(ifo.name for ifo in ifos)
     wfgen = _build_waveform_generator_bbh(cfg)
 
