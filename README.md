@@ -32,7 +32,7 @@ uv run python scripts/run_hierarchical_analysis.py \
 ```
 
 Key args: `--analyze {astro,memory,joint}` (default: all three),
-`--memory-dir`, `--waveform`, `--scale-tgr`, `--use-tilts`, `--no-plots`,
+`--memory-dir`, `--waveform`, `--scale-tgr`, `--no-plots`,
 `--force`.
 
 - `astro` — astrophysical population only; no `--memory-dir` required
@@ -176,7 +176,7 @@ baseline.
 - Uses multiprocessing for parallel sample processing (`--multiprocess_samples`)
 - Outputs per-event `{output_dir}/{event_name}/memory_results.h5` with datasets: `A_hat` (ML amplitude), `A_sigma` (posterior std), `A_sample` (posterior draws), `log_weight`, `log_likelihood`, grouped by waveform label
 - Only the surrogate (TD modes) waveform path is fully working; FD-only and ROM approximants fail at the SH-mode step
-- Validation run (10 samples, all 176 events): 156 fully complete, 20 partial, 0 total failures
+- Validation run (10 samples, all 176 events): 165 fully complete, 11 partial, 0 total failures
   - 13 SEOBNRv4PHM failures (prior to guard-bug fix): ISCO limit ~9–10 Hz; a guard-logic bug in `compute_one_sample_fd` fired the no-progress check before any retry was attempted for events where `f_ref < ISCO limit` (e.g. GW190403: f_ref=5 Hz, ISCO=9.9 Hz → new_fmin=9.8 Hz ≥ curr_fmin=5.0 Hz triggered the guard); fixed by only applying the no-progress guard when `minimum_frequency` is already explicitly set in `waveform_arguments`
   - 7 NRTidal/NSBH model failures: no SH mode support (known unfixable)
   - 1 SpinTaylor failure (GW230704): fRef = fmin edge case in IMRPhenomX PN angles
@@ -227,7 +227,7 @@ The same `_CaptureCStderr`-based retry loop is used in
 `sample.get("minimum_frequency", config.minimum_frequency[...])`, so the memory
 waveform starts at exactly the same frequency the bilby residuals used.
 
-Before each sample, the main loop in `compute_gw_residuals_for_BBH_posterior`
+Before each sample, the main loop in `compute_bbh_residuals_with_spline_calibration`
 resets the shared waveform generator's `minimum_frequency` and
 `lmax_nyquist` to their original values, preventing state from one sample's
 retry from bleeding into the next.
@@ -398,7 +398,7 @@ log p_draw(m1, q, z, a1, a2) = lnpdraw
 
 ## Hierarchical population model
 
-The pipeline provides two numpyro models (selected via `--model {joint,tgr,both}`):
+The pipeline provides two numpyro models (selected via `--analyze {astro,memory,joint}`):
 
 - **Joint model** (`make_joint_model`): fits astrophysical population parameters
   and TGR parameters simultaneously.
@@ -418,8 +418,8 @@ p(m1, q, z, a1, a2, cos_t1, cos_t2, A) =
     p(m1) * p(q | m1) * p(z) * p(a1, a2) * [p(cos_t1, cos_t2)] * [p(A)]
 ```
 
-where brackets denote optional components (spin tilts via `--use-tilts`, TGR
-amplitude via `--model joint` or `--model both`).
+where brackets denote optional components (TGR amplitude, included when running
+`--analyze memory` or `--analyze joint`). Spin tilts are always included.
 
 #### Primary mass: broken power law + two Gaussian peaks
 
@@ -451,7 +451,7 @@ Two Gaussian components capture features not well described by a power law.
 Their mean priors are non-overlapping to reduce degeneracies:
 
 - **Peak 1** (low-mass): `mu_peak_1 ~ U(3, 15)`
-- **Peak 2** (high-mass): `mu_peak_2 ~ U(20, 50)`
+- **Peak 2** (high-mass): `mu_peak_2 ~ U(15, 75)`
 
 Full mixture:
 
@@ -571,7 +571,7 @@ All prior bounds and the `MMIN`/`MMAX` constants are defined in
 | `lamb`          | U(-30, 30)       | Redshift        | Power-law index on (1+z)          |
 | `mu_spin`       | U(0, 0.7)        | Spin magnitudes | Shared mean of (a1, a2)           |
 | `sigma_spin`    | U(0.01, 0.5)     | Spin magnitudes | Shared std of (a1, a2)            |
-| `f_iso`         | U(0, 1)          | Spin tilts      | Isotropic fraction (if enabled)   |
-| `sigma_tilt`    | U(0.05, 10)      | Spin tilts      | Tilt peak width (if enabled)      |
+| `f_iso`         | U(0, 1)          | Spin tilts      | Isotropic fraction                |
+| `sigma_tilt`    | U(0.05, 10)      | Spin tilts      | Tilt peak width                   |
 | `mu_tgr`        | U(-s, s)         | TGR             | Population mean of A (auto-scaled)|
 | `sigma_tgr`     | U(0, s)          | TGR             | Population std of A (auto-scaled) |
