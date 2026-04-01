@@ -697,17 +697,16 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
                 )
                 n_missing_waveform += 1
                 continue
-            _log.info(
-                "%s: selected memory waveform '%s'%s",
-                event_name, chosen_label,
-                f" (available: {keys})" if len(keys) > 1 else "",
-            )
-
             grp = f[chosen_label]
             a_sample = grp["A_sample"][()].real
             a_hat = grp["A_hat"][()].real
             a_sigma = grp["A_sigma"][()].real
             log_weight = grp["log_weight"][()].real
+            _log.info(
+                "%s: selected memory waveform '%s' (nsamp = %d)%s",
+                event_name, chosen_label, len(a_sample),
+                f" (available: {keys})" if len(keys) > 1 else "",
+            )
 
         # --- Sample-level filter -------------------------------------------------
         # Bad samples are zeroed out in-place (log_weight -> -inf) rather than

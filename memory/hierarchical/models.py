@@ -110,7 +110,7 @@ def make_joint_model(
     Combines a broken power law + two Gaussian peaks primary mass function,
     power-law mass ratio, power-law-in-(1+z) redshift distribution, Beta-like spin
     magnitude distribution (via multivariate normal in KDE space), and
-    optional spin tilt mixture model, with Gaussian TGR hyperparameters
+    spin tilt mixture model, with Gaussian TGR hyperparameters
     (mu_tgr, sigma_tgr). The TGR dimension uses analytic Gaussian
     convolution rather than KDE smoothing. Includes selection-effect
     correction via importance-weighted injection sums and
@@ -189,10 +189,7 @@ def make_joint_model(
     sigma_peak_2 = numpyro.sample("sigma_peak_2", dist.Uniform(*PRIOR["sigma_peak_2"]))
 
     # Spin magnitude distribution parameters.
-    # sigma_spin prior is restricted to [0.01, 0.5]: the posterior sits at
-    # ~0.13, which was only 0.9% through the old [0.05, 10] range, mapping
-    # to logit ≈ -4.65 in the unconstrained NUTS space and collapsing the
-    # step size.  With [0.01, 0.5] the same posterior is at ~27% (logit ≈ -1).
+    # sigma_spin prior is restricted to [0.01, 1]
     mu_spin = numpyro.sample("mu_spin", dist.Uniform(*PRIOR["mu_spin"]))
     sigma_spin = numpyro.sample("sigma_spin", dist.Uniform(*PRIOR["sigma_spin"]))
 
