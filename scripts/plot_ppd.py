@@ -795,7 +795,7 @@ def main():
 
     # Formatting
     ax_m1.set_yscale("log")
-    ax_m1.set_ylim(bottom=1e-5)
+    ax_m1.set_ylim(bottom=1e-3)
     ax_m1.set_xlabel(r"$m_1\ [M_\odot]$")
     if inj_data is not None:
         ax_m1.set_ylabel(
@@ -806,7 +806,7 @@ def main():
     else:
         ax_m1.set_ylabel(r"$p(m_1)\ [M_\odot^{-1}]$")
         ax_m1.set_title("Primary mass")
-    ax_m1.set_xlim(MMIN, MMAX)  # show full range even though grid starts at 5.48
+    ax_m1.set_xlim(MMIN, 100)  # display mass panel up to 100 Msun
 
     ax_q.set_xlabel(r"$q = m_2/m_1$")
     ax_q.set_ylabel(r"$p(q)$")
