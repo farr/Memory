@@ -28,10 +28,12 @@ where:
         beta(Lambda) = (1/N_draw) * sum_{found} p_pop(theta | Lambda) / p_draw(theta)  (2)
 
   - N_draw  is the total number of injections attempted (found + missed)
-  - theta   denotes the parameters (m1, q, z, a1, a2) of each found injection
+  - theta   denotes the parameters (m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2)
+            of each found injection
   - p_pop   is the population model evaluated at theta (same parameterisation as
             the MCMC model; normalised so that the z integral gives Gpc^3)
-  - p_draw  is the injection draw density in (m1, q, z, a1, a2) space
+  - p_draw  is the injection draw density in
+            (m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2) space
 
 Equation (2) is evaluated once per posterior sample, producing R_samples.
 The PPD is evaluated at z = 0.2 (the LVK populations paper convention):
@@ -49,17 +51,18 @@ Draw prior Jacobian
 ~~~~~~~~~~~~~~~~~~~
 The injection HDF5 file stores the draw prior as a log-density in Cartesian
 spin coordinates: lnpdraw(m1, m2, z, sx, sy, sz).  The population model uses
-(m1, q, z, a1, a2), so a coordinate change is needed:
+(m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2), so a coordinate change is needed:
 
   * m2 -> q = m2/m1    with |dm2/dq| = m1         => factor m1
-  * (sx, sy, sz) -> a  marginalised over direction => factor 4*pi*a^2  (per spin)
+  * (sx, sy, sz) -> (a, cos_tilt), marginalising over azimuth => factor 2*pi*a^2
+    (per spin)
 
 Combined:
 
-    log p_draw(m1, q, z, a1, a2) = lnpdraw
+    log p_draw(m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2) = lnpdraw
         + log(m1)
-        + log(4*pi*a1^2)
-        + log(4*pi*a2^2)
+        + log(2*pi*a1^2)
+        + log(2*pi*a2^2)
         + log(weights)   # per-injection sensitivity weight
 
 The `weights` field accounts for the varying network sensitivity over the run
@@ -74,6 +77,7 @@ Usage:
 """
 
 import argparse
+import multiprocessing as mp
 import os
 
 import h5py
@@ -84,6 +88,35 @@ from scipy.stats import norm as scipy_norm
 import arviz as az
 
 from memory.hierarchical.models import MMIN, MMAX, zinterp, dVdzdt_interp
+
+
+LOG_2PI = np.log(2.0 * np.pi)
+RATE_PARAM_KEYS = (
+    "alpha_1",
+    "alpha_2",
+    "b",
+    "frac_bpl",
+    "frac_peak_1",
+    "frac_peak_2",
+    "mu_peak_1",
+    "sigma_peak_1",
+    "mu_peak_2",
+    "sigma_peak_2",
+    "beta",
+    "lamb",
+    "mu_spin",
+    "sigma_spin",
+    "f_iso",
+    "mu_tilt",
+    "sigma_tilt",
+)
+_RATE_WORKER_INJ_DATA = None
+
+
+def _default_rate_workers():
+    """Choose a conservative default number of CPU workers."""
+    cpu_count = mp.cpu_count() or 1
+    return min(4, cpu_count)
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +133,11 @@ def _load_params(nc_file, n_ppd, seed):
         if "neff" not in k and v.values.ndim == 1
     }
     N = len(next(iter(params.values())))
+    # Backward compatibility: some archived runs fixed mu_tilt = 1 and did not
+    # write it to the NetCDF posterior. Reconstruct that constant here so the
+    # tilt selection term can still be evaluated during post-processing.
+    if "mu_tilt" not in params and ("f_iso" in params or "sigma_tilt" in params):
+        params["mu_tilt"] = np.ones(N)
     if n_ppd is not None and n_ppd < N:
         rng = np.random.default_rng(seed)
         idx = rng.choice(N, size=n_ppd, replace=False)
@@ -107,20 +145,27 @@ def _load_params(nc_file, n_ppd, seed):
     return params
 
 
+def _slice_rate_params(params, start, end):
+    """Return the subset of posterior hyperparameters needed for rate mode."""
+    return {k: np.asarray(params[k][start:end]) for k in RATE_PARAM_KEYS}
+
+
 def _load_injection_data(inj_file, ifar_threshold=1000, snr_inspiral_cut=6):
     """Load found injections from an HDF5 sensitivity-estimate file.
 
     Applies the same IFAR + inspiral-SNR selection as data.py, then converts
-    the raw Cartesian draw prior to the (m1, q, z, a1, a2) parameterisation
-    used by the population model.
+    the raw Cartesian draw prior to the
+    (m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2) parameterisation used by the
+    population model.
 
     The injection HDF5 file stores lnpdraw in Cartesian spin coordinates
     (m1, m2, z, sx, sy, sz).  Two Jacobian factors convert this to the
-    model's (m1, q, z, a1, a2) coordinates:
+    model's (m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2) coordinates:
 
       (i)  m2 -> q = m2/m1, so |dm2/dq| = m1
-      (ii) (sx, sy, sz) -> a, marginalising over isotropic direction:
-               p(a) da = p_cart * 4*pi*a^2 da  =>  factor 4*pi*a^2 per spin
+      (ii) (sx, sy, sz) -> (a, cos_tilt), marginalising over azimuth:
+               p(a, cos_tilt) da dcos_tilt = p_cart * 2*pi*a^2 da dcos_tilt
+               => factor 2*pi*a^2 per spin
 
     An additional `weights` factor in the file records the network sensitivity
     at the time of each injection (e.g. duty-cycle fractions per detector).
@@ -128,8 +173,10 @@ def _load_injection_data(inj_file, ifar_threshold=1000, snr_inspiral_cut=6):
     are downweighted in the importance sum (see compute_R_samples).
 
     The full conversion is:
-        log p_draw(m1, q, z, a1, a2)
-            = lnpdraw + log(m1) + log(4*pi*a1^2) + log(4*pi*a2^2) + log(weights)
+        log p_draw(m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2)
+            = lnpdraw + log(m1)
+            + log(2*pi*a1^2) + log(2*pi*a2^2)
+            + log(weights)
 
     Parameters
     ----------
@@ -143,8 +190,10 @@ def _load_injection_data(inj_file, ifar_threshold=1000, snr_inspiral_cut=6):
     Returns
     -------
     dict with keys:
-        m1, q, z, a1, a2  : parameter arrays for found injections
-        log_p_draw         : log draw prior in (m1, q, z, a1, a2) space
+        m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2
+                           : parameter arrays for found injections
+        log_p_draw         : log draw prior in
+                             (m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2) space
         Ndraw              : total injections attempted (found + missed)
         T_obs_yr           : live observing time in years
     """
@@ -179,20 +228,23 @@ def _load_injection_data(inj_file, ifar_threshold=1000, snr_inspiral_cut=6):
 
     a1_all = np.sqrt(s1x**2 + s1y**2 + s1z**2)
     a2_all = np.sqrt(s2x**2 + s2y**2 + s2z**2)
+    cost1_all = np.clip(s1z / np.maximum(a1_all, 1e-300), -1.0, 1.0)
+    cost2_all = np.clip(s2z / np.maximum(a2_all, 1e-300), -1.0, 1.0)
 
-    # Compute log p_draw(m1, q, z, a1, a2) from raw Cartesian density.
+    # Compute log p_draw(m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2) from the
+    # raw Cartesian density.
     #
     # For isotropic spin direction (injection convention):
-    #   p_draw(m1, q, z, a1, a2)
+    #   p_draw(m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2)
     #     = p_draw_cart(m1, m2, z, sx, sy, sz) × |J|
-    # where the Jacobian |J| converts (m2 → q) and (sx,sy,sz → a, marginalised
-    # over solid angle) for each spin:
-    #   |J| = m1 × (4π × a1²) × (4π × a2²)
+    # where the Jacobian |J| converts (m2 → q) and (sx,sy,sz → a, cos_tilt,
+    # phi), then marginalises over phi for each spin:
+    #   |J| = m1 × (2π × a1²) × (2π × a2²)
     log_p_draw = (
         lnp_all
         + np.log(np.maximum(m1_all, 1e-300))
-        + 2.0 * np.log(np.maximum(a1_all, 1e-300)) + np.log(4.0 * np.pi)
-        + 2.0 * np.log(np.maximum(a2_all, 1e-300)) + np.log(4.0 * np.pi)
+        + 2.0 * np.log(np.maximum(a1_all, 1e-300)) + np.log(2.0 * np.pi)
+        + 2.0 * np.log(np.maximum(a2_all, 1e-300)) + np.log(2.0 * np.pi)
         + np.log(np.maximum(wgt_all, 1e-300))  # sensitivity weight
     )
 
@@ -202,6 +254,8 @@ def _load_injection_data(inj_file, ifar_threshold=1000, snr_inspiral_cut=6):
         "z":        z_all[found],
         "a1":       a1_all[found],
         "a2":       a2_all[found],
+        "cos_tilt_1": cost1_all[found],
+        "cos_tilt_2": cost2_all[found],
         "log_p_draw": log_p_draw[found],
         "Ndraw":    Ndraw,
         "T_obs_yr": T_obs,
@@ -234,11 +288,123 @@ def _log_norm_pl(m, alpha, lo, hi):
     return log_unnorm + np.where(not_one, log_norm_not1, log_norm_1)
 
 
+def _log_normal_pdf(x, mu, sigma):
+    """Fast vectorized Normal log-PDF."""
+    sigma2 = np.square(sigma)
+    return -0.5 * (np.square(x - mu) / sigma2 + np.log(sigma2) + LOG_2PI)
+
+
+def _log_tilt_density(cost1, cost2, f_iso, mu_tilt, sigma_tilt):
+    """Replicate the tilt mixture used in ``make_joint_model``."""
+    quad = (cost1 - mu_tilt) ** 2 + (cost2 - mu_tilt) ** 2
+    log_gauss = -0.5 * quad / np.square(sigma_tilt) - np.log(
+        2.0 * np.pi * np.square(sigma_tilt)
+    )
+    trunc_norm_1d = scipy_norm.cdf((1.0 - mu_tilt) / sigma_tilt) - scipy_norm.cdf(
+        (-1.0 - mu_tilt) / sigma_tilt
+    )
+    log_gauss -= 2.0 * np.log(np.maximum(trunc_norm_1d, 1e-300))
+    term_a = np.log(np.maximum(f_iso, 1e-300)) - np.log(4.0)
+    term_b = np.log(np.maximum(1.0 - f_iso, 1e-300)) + log_gauss
+    return np.logaddexp(term_a, term_b)
+
+
+def _init_rate_worker(inj_data):
+    """Store the shared injection data in a forked worker process."""
+    global _RATE_WORKER_INJ_DATA
+    _RATE_WORKER_INJ_DATA = inj_data
+
+
+def _compute_rate_chunk(params_chunk, inj_data, N_obs):
+    """Compute merger-rate samples for one posterior chunk."""
+    m1_inj = inj_data["m1"][np.newaxis, :]
+    q_inj = inj_data["q"][np.newaxis, :]
+    z_inj = inj_data["z"][np.newaxis, :]
+    a1_inj = inj_data["a1"][np.newaxis, :]
+    a2_inj = inj_data["a2"][np.newaxis, :]
+    cost1_inj = inj_data["cos_tilt_1"][np.newaxis, :]
+    cost2_inj = inj_data["cos_tilt_2"][np.newaxis, :]
+    lp_inj = inj_data["log_p_draw"][np.newaxis, :]
+    Ndraw = inj_data["Ndraw"]
+    T_obs = inj_data["T_obs_yr"]
+
+    dVdzdt_inj = np.interp(z_inj, zinterp, dVdzdt_interp)
+    log_q_inj = np.log(np.maximum(q_inj, 1e-300))
+    log_m1_over_mmin = np.log(m1_inj / MMIN)
+
+    alpha_1 = params_chunk["alpha_1"][:, np.newaxis]
+    alpha_2 = params_chunk["alpha_2"][:, np.newaxis]
+    b = params_chunk["b"][:, np.newaxis]
+    frac_bpl = params_chunk["frac_bpl"][:, np.newaxis]
+    frac_peak_1 = params_chunk["frac_peak_1"][:, np.newaxis]
+    frac_peak_2 = params_chunk["frac_peak_2"][:, np.newaxis]
+    mu_peak_1 = params_chunk["mu_peak_1"][:, np.newaxis]
+    sigma_peak_1 = params_chunk["sigma_peak_1"][:, np.newaxis]
+    mu_peak_2 = params_chunk["mu_peak_2"][:, np.newaxis]
+    sigma_peak_2 = params_chunk["sigma_peak_2"][:, np.newaxis]
+    beta_q = params_chunk["beta"][:, np.newaxis]
+    lamb = params_chunk["lamb"][:, np.newaxis]
+    mu_spin = params_chunk["mu_spin"][:, np.newaxis]
+    sigma_spin = params_chunk["sigma_spin"][:, np.newaxis]
+    f_iso = params_chunk["f_iso"][:, np.newaxis]
+    mu_tilt = params_chunk["mu_tilt"][:, np.newaxis]
+    sigma_tilt = params_chunk["sigma_tilt"][:, np.newaxis]
+
+    m_break = MMIN + b * (MMAX - MMIN)
+    log_pl_lo = _log_norm_pl(m1_inj, alpha_1, MMIN, m_break)
+    log_pl_hi = _log_norm_pl(m1_inj, alpha_2, m_break, MMAX)
+    log_C = (
+        _log_norm_pl(m_break, alpha_2, m_break, MMAX)
+        - _log_norm_pl(m_break, alpha_1, MMIN, m_break)
+    )
+    log_bpl = (
+        np.where(m1_inj < m_break, log_pl_lo + log_C, log_pl_hi)
+        - np.logaddexp(0.0, log_C)
+    )
+    log_g1 = _log_normal_pdf(m1_inj, mu_peak_1, sigma_peak_1)
+    log_g2 = _log_normal_pdf(m1_inj, mu_peak_2, sigma_peak_2)
+    log_m1d = np.logaddexp(
+        np.logaddexp(
+            np.log(np.maximum(frac_bpl, 1e-30)) + log_bpl,
+            np.log(np.maximum(frac_peak_1, 1e-30)) + log_g1,
+        ),
+        np.log(np.maximum(frac_peak_2, 1e-30)) + log_g2,
+    )
+    log_m1d = np.where((m1_inj >= MMIN) & (m1_inj <= MMAX), log_m1d, -1e12)
+
+    low = MMIN / m1_inj
+    not_neg1 = ~np.isclose(beta_q, -1.0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        log_n_ne1 = np.log(np.abs(1.0 + beta_q)) - np.log(
+            np.maximum(1e-300, np.abs(1.0 - low ** (1.0 + beta_q)))
+        )
+        log_n_e1 = -np.log(log_m1_over_mmin)
+    log_qd = beta_q * log_q_inj + np.where(not_neg1, log_n_ne1, log_n_e1)
+    log_qd = np.where(q_inj >= low, log_qd, -1e12)
+
+    log_zd = lamb * np.log1p(z_inj) + np.log(np.maximum(dVdzdt_inj, 1e-300))
+    log_sd = _log_normal_pdf(a1_inj, mu_spin, sigma_spin) + _log_normal_pdf(
+        a2_inj, mu_spin, sigma_spin
+    )
+    log_td = _log_tilt_density(cost1_inj, cost2_inj, f_iso, mu_tilt, sigma_tilt)
+
+    log_wts = log_m1d + log_qd + log_zd + log_sd + log_td - lp_inj
+    log_sel = logsumexp(log_wts, axis=1) - np.log(Ndraw)
+    beta = np.exp(log_sel)
+    return N_obs / (T_obs * beta)
+
+
+def _compute_rate_chunk_worker(task):
+    """Worker wrapper for multiprocessing."""
+    params_chunk, N_obs = task
+    return _compute_rate_chunk(params_chunk, _RATE_WORKER_INJ_DATA, N_obs)
+
+
 # ---------------------------------------------------------------------------
 # Rate computation
 # ---------------------------------------------------------------------------
 
-def compute_R_samples(params, inj_data, N_obs, chunk=50):
+def compute_R_samples(params, inj_data, N_obs, chunk=50, workers=1):
     """Compute the merger rate R(Λ) for each posterior sample.
 
     The expected number of detections given population hyperparameters Λ is
@@ -255,14 +421,17 @@ def compute_R_samples(params, inj_data, N_obs, chunk=50):
         beta(Λ) = (1/N_draw) * sum_{found}  p_pop(theta | Λ) / p_draw(theta)   (2)
 
     where:
-      - p_pop(theta | Λ) = p_m1 * p_q * p_z * p_spin  (unnormalised in z:
+      - p_pop(theta | Λ) = p_m1 * p_q * p_z * p_spin * p_tilt
+            (unnormalised in z:
             p_z = (1+z)^lamb * dVc/dz/(1+z) carries units of Gpc^3, so beta
             has units Gpc^3 and R from (1) has units Gpc^-3 yr^-1)
       - p_draw is the injection draw density from _load_injection_data,
-            expressed in the same (m1, q, z, a1, a2) parameterisation
+            expressed in the same
+            (m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2) parameterisation
 
     The spin component of p_pop uses Normal(a1; mu_spin, sigma_spin^2) for
-    each spin magnitude, matching the event-level likelihood in models.py.
+    each spin magnitude together with the same isotropic-plus-truncated-Gaussian
+    tilt mixture used in models.py.
 
     Parameters
     ----------
@@ -274,101 +443,36 @@ def compute_R_samples(params, inj_data, N_obs, chunk=50):
         Number of observed events used in the analysis.
     chunk : int
         Number of posterior samples processed at once (memory control).
+    workers : int
+        Number of CPU worker processes for chunked rate evaluation.
 
     Returns
     -------
     R_samples : ndarray, shape (N,)
         Merger rate in Gpc^-3 yr^-1 for each posterior sample.
     """
-    m1_inj = inj_data["m1"][np.newaxis, :]   # (1, N_inj)
-    q_inj  = inj_data["q"][np.newaxis, :]
-    z_inj  = inj_data["z"][np.newaxis, :]
-    a1_inj = inj_data["a1"][np.newaxis, :]
-    a2_inj = inj_data["a2"][np.newaxis, :]
-    lp_inj = inj_data["log_p_draw"][np.newaxis, :]
-    Ndraw  = inj_data["Ndraw"]
-    T_obs  = inj_data["T_obs_yr"]
+    N = len(params["alpha_1"])
+    workers = max(1, int(workers))
+    tasks = [
+        (_slice_rate_params(params, i0, min(i0 + chunk, N)), N_obs)
+        for i0 in range(0, N, chunk)
+    ]
 
-    dVdzdt_inj = np.interp(z_inj, zinterp, dVdzdt_interp)  # (1, N_inj)
+    if workers == 1 or len(tasks) == 1:
+        parts = [
+            _compute_rate_chunk(params_chunk, inj_data, n_obs_chunk)
+            for params_chunk, n_obs_chunk in tasks
+        ]
+    else:
+        ctx = mp.get_context("fork")
+        with ctx.Pool(
+            processes=min(workers, len(tasks)),
+            initializer=_init_rate_worker,
+            initargs=(inj_data,),
+        ) as pool:
+            parts = pool.map(_compute_rate_chunk_worker, tasks)
 
-    alpha_1    = params["alpha_1"]
-    alpha_2    = params["alpha_2"]
-    b          = params["b"]
-    frac_bpl   = params["frac_bpl"]
-    frac_peak_1 = params["frac_peak_1"]
-    frac_peak_2 = params["frac_peak_2"]
-    mu_peak_1  = params["mu_peak_1"]
-    sigma_peak_1 = params["sigma_peak_1"]
-    mu_peak_2  = params["mu_peak_2"]
-    sigma_peak_2 = params["sigma_peak_2"]
-    beta_q     = params["beta"]
-    lamb       = params["lamb"]
-    mu_spin    = params["mu_spin"]
-    sigma_spin = params["sigma_spin"]
-    N = len(alpha_1)
-
-    log_sel_all = np.empty(N)
-
-    for i0 in range(0, N, chunk):
-        i1 = min(i0 + chunk, N)
-
-        # Broadcast params to (nc, 1)
-        a1_c  = alpha_1[i0:i1, np.newaxis]
-        a2_c  = alpha_2[i0:i1, np.newaxis]
-        b_c   = b[i0:i1, np.newaxis]
-        fb_c  = frac_bpl[i0:i1, np.newaxis]
-        f1_c  = frac_peak_1[i0:i1, np.newaxis]
-        f2_c  = frac_peak_2[i0:i1, np.newaxis]
-        m1pk  = mu_peak_1[i0:i1, np.newaxis]
-        s1pk  = sigma_peak_1[i0:i1, np.newaxis]
-        m2pk  = mu_peak_2[i0:i1, np.newaxis]
-        s2pk  = sigma_peak_2[i0:i1, np.newaxis]
-        bq_c  = beta_q[i0:i1, np.newaxis]
-        l_c   = lamb[i0:i1, np.newaxis]
-        mu_s  = mu_spin[i0:i1, np.newaxis]
-        sig_s = sigma_spin[i0:i1, np.newaxis]
-
-        # --- Primary mass density (BPL + 2 Gaussians) ---
-        m_break   = MMIN + b_c * (MMAX - MMIN)
-        log_pl_lo = _log_norm_pl(m1_inj, a1_c, MMIN, m_break)
-        log_pl_hi = _log_norm_pl(m1_inj, a2_c, m_break, MMAX)
-        log_C     = (_log_norm_pl(m_break, a2_c, m_break, MMAX)
-                     - _log_norm_pl(m_break, a1_c, MMIN, m_break))
-        log_bpl   = (np.where(m1_inj < m_break, log_pl_lo + log_C, log_pl_hi)
-                     - np.logaddexp(0.0, log_C))
-        log_g1    = (scipy_norm.logpdf(m1_inj, m1pk, s1pk))
-        log_g2    = (scipy_norm.logpdf(m1_inj, m2pk, s2pk))
-        log_m1d   = np.logaddexp(
-            np.logaddexp(
-                np.log(np.maximum(fb_c, 1e-30)) + log_bpl,
-                np.log(np.maximum(f1_c, 1e-30)) + log_g1,
-            ),
-            np.log(np.maximum(f2_c, 1e-30)) + log_g2,
-        )
-        log_m1d = np.where((m1_inj >= MMIN) & (m1_inj <= MMAX), log_m1d, -1e12)
-
-        # --- Mass-ratio density ---
-        low  = MMIN / m1_inj
-        nn1  = ~np.isclose(bq_c, -1.0)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            log_n_ne1 = (np.log(np.abs(1.0 + bq_c))
-                         - np.log(np.maximum(1e-300, np.abs(1.0 - low ** (1.0 + bq_c)))))
-            log_n_e1  = -np.log(np.log(m1_inj / MMIN))
-        log_qd = bq_c * np.log(np.maximum(q_inj, 1e-300)) + np.where(nn1, log_n_ne1, log_n_e1)
-        log_qd = np.where(q_inj >= low, log_qd, -1e12)
-
-        # --- Redshift density (includes dVc/dz/(1+z) in Gpc³ units) ---
-        log_zd = l_c * np.log1p(z_inj) + np.log(np.maximum(dVdzdt_inj, 1e-300))
-
-        # --- Spin density: Normal on (a1, a2) spin magnitudes ---
-        log_sd = (scipy_norm.logpdf(a1_inj, mu_s, sig_s)
-                  + scipy_norm.logpdf(a2_inj, mu_s, sig_s))
-
-        log_wts = log_m1d + log_qd + log_zd + log_sd - lp_inj  # (nc, N_inj)
-        log_sel_all[i0:i1] = logsumexp(log_wts, axis=1) - np.log(Ndraw)
-
-    beta = np.exp(log_sel_all)  # Gpc³
-    return N_obs / (T_obs * beta)
+    return np.concatenate(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -519,18 +623,40 @@ def main():
         help="Max posterior samples to use (default: all); reduces memory",
     )
     parser.add_argument(
-        "--n-m1-grid", type=int, default=600,
+        "--rate-chunk", type=int, default=50,
+        help=(
+            "Posterior chunk size for the rate calculation (default: 50). "
+            "Lower values reduce memory; higher values may run faster."
+        ),
+    )
+    parser.add_argument(
+        "--rate-workers", type=int, default=_default_rate_workers(),
+        help=(
+            "Number of worker processes for the rate calculation "
+            "(default: min(4, cpu_count))."
+        ),
+    )
+    parser.add_argument(
+        "--n-m1-grid", type=int, default=1200,
         help=(
             "Number of primary-mass grid cells used for the PPD integral "
-            "(default: 600). Higher values reduce visible stair-step "
+            "(default: 1200). Higher values reduce visible stair-step "
             "artifacts in the mass-ratio panel."
         ),
     )
     parser.add_argument(
-        "--n-q-grid", type=int, default=450,
+        "--n-q-grid", type=int, default=1200,
         help=(
             "Number of mass-ratio grid points used for plotting "
-            "(default: 450). Higher values make the q PPD look smoother."
+            "(default: 1200). Higher values make the q PPD look smoother."
+        ),
+    )
+    parser.add_argument(
+        "--n-m1-q-grid", type=int, default=None,
+        help=(
+            "Number of primary-mass grid cells used internally when "
+            "marginalizing to p(q). Defaults to max(--n-m1-grid, 4000) "
+            "for a smoother q panel."
         ),
     )
     parser.add_argument(
@@ -566,6 +692,14 @@ def main():
     outdir = args.outdir or os.path.dirname(os.path.abspath(args.nc_files[0]))
     os.makedirs(outdir, exist_ok=True)
 
+    effective_n_ppd = args.n_ppd
+    if effective_n_ppd is None and args.injection_file is not None:
+        effective_n_ppd = 500
+        print(
+            "Rate mode: defaulting to 500 posterior samples for faster "
+            "post-processing. Override with --n-ppd."
+        )
+
     # Load injection data once (shared across all NC files)
     inj_data = None
     if args.injection_file is not None:
@@ -582,12 +716,14 @@ def main():
     # at q=1 and its normalisation diverges, causing float64 overflow in the integral.
     # Dropping that single measure-zero point has no effect on the integral value.
     #
-    # Use a relatively fine default grid for q and the m1 marginalisation:
-    # the hard q >= MMIN / m1 support boundary otherwise shows up as visible
-    # stair-step artifacts in the plotted mass-ratio PPD.
+    # Use a denser *internal* m1 grid for the q marginalisation than for the plotted
+    # m1 panel. This smooths the visible stair-step artifacts from the hard
+    # q >= MMIN / m1 support boundary without forcing an equally dense display grid.
+    n_m1_q_grid = args.n_m1_q_grid or max(args.n_m1_grid, 4000)
     m1_grid = np.linspace(MMIN, MMAX, args.n_m1_grid + 1)[1:]
-    q_grid  = np.linspace(0.01, 1.0, args.n_q_grid)
-    a_grid  = np.linspace(0.0,  1.0, args.n_a_grid)
+    m1_q_grid = np.linspace(MMIN, MMAX, n_m1_q_grid + 1)[1:]
+    q_grid = np.linspace(0.01, 1.0, args.n_q_grid)
+    a_grid = np.linspace(0.0, 1.0, args.n_a_grid)
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
     ax_m1, ax_q, ax_a = axes
@@ -595,7 +731,7 @@ def main():
     for i, (nc_file, label) in enumerate(zip(args.nc_files, labels)):
         color = f"C{i}"
         print(f"[{label}] Loading {nc_file} ...")
-        params = _load_params(nc_file, args.n_ppd, args.seed + i)
+        params = _load_params(nc_file, effective_n_ppd, args.seed + i)
         N = len(params["alpha_1"])
         print(f"[{label}] {N} samples — computing PPDs ...")
 
@@ -607,9 +743,23 @@ def main():
         )
         pm1_normed = pm1 / np.maximum(norm_m1, 1e-300)
 
+        # Re-evaluate p(m1) on a denser internal grid for the q marginalisation.
+        pm1_q = compute_ppd_m1(m1_q_grid, params)
+        dm1_q = np.diff(m1_q_grid)
+        norm_m1_q = 0.5 * np.sum(
+            (pm1_q[:, :-1] + pm1_q[:, 1:]) * dm1_q, axis=1, keepdims=True
+        )
+        pm1_q_normed = pm1_q / np.maximum(norm_m1_q, 1e-300)
+
         if inj_data is not None:
             print(f"[{label}] Computing merger rate R(Λ) ...")
-            R_samples = compute_R_samples(params, inj_data, args.n_obs)
+            R_samples = compute_R_samples(
+                params,
+                inj_data,
+                args.n_obs,
+                chunk=args.rate_chunk,
+                workers=args.rate_workers,
+            )
             R_med = np.median(R_samples)
             R_lo, R_hi = np.percentile(R_samples, [5, 95])
             print(
@@ -636,7 +786,7 @@ def main():
             _plot_band(ax_m1, m1_grid, pm1_normed, color, label)
 
         # Mass ratio (marginalised over m1)
-        pq = compute_ppd_q(q_grid, m1_grid, pm1_normed, params)  # (N, Q)
+        pq = compute_ppd_q(q_grid, m1_q_grid, pm1_q_normed, params)  # (N, Q)
         _plot_band(ax_q, q_grid, pq, color, label)
 
         # Spin magnitude

@@ -343,15 +343,17 @@ $$
 $$
 
 $N_{\mathrm{draw}}$ is the total number of injections attempted (found + missed), and the
-sum runs over found injections only.  The population model density is
+sum runs over found injections only.  In the joint model the population density is
 
 $$
-p_{\mathrm{pop}}(\theta \mid \Lambda) = p(m_1)\,p(q\mid m_1)\,p(z)\,p(a_1)\,p(a_2)
+p_{\mathrm{pop}}(\theta \mid \Lambda) =
+p(m_1)\,p(q\mid m_1)\,p(z)\,p(a_1,a_2)\,p(c_{t,1},c_{t,2})
 $$
 
 where $p(z) \propto (1+z)^{\lambda}\,\frac{\mathrm{d}V_C/\mathrm{d}z}{1+z}$ is left **unnormalised**: the integral
 over redshift gives a volume in $\mathrm{Gpc}^3$, so $\beta$ has units $\mathrm{Gpc}^3$ and $R$ has
-units $\mathrm{Gpc}^{-3}\,\mathrm{yr}^{-1}$.
+units $\mathrm{Gpc}^{-3}\,\mathrm{yr}^{-1}$.  The `plot_ppd.py` rate calculation
+now includes the same tilt-mixture term used by `make_joint_model`.
 
 The differential rate is evaluated at $z = 0.2$ (following the LVK populations
 paper convention):
@@ -373,20 +375,20 @@ the rate at $z=0.2$.
 #### Draw prior Jacobian
 
 The injection file records the draw prior as a log-density in Cartesian spin
-coordinates, $\mathrm{lnpdraw}(m_1,m_2,z,s_x,s_y,s_z)$.  Converting to $(m_1,q,z,a_1,a_2)$
-requires two Jacobian factors:
+coordinates, $\mathrm{lnpdraw}(m_1,m_2,z,s_x,s_y,s_z)$.  Converting to
+$(m_1,q,z,a_1,a_2,c_{t,1},c_{t,2})$ requires two Jacobian factors:
 
 | Change of variables | Jacobian factor |
 |---|---|
 | $m_2 \to q = m_2/m_1$ | $m_1$ |
-| $(s_x,s_y,s_z) \to a$ (isotropic direction integrated out) | $4\pi a^2$ per spin |
+| $(s_x,s_y,s_z) \to (a,c_t)$ (azimuth integrated out) | $2\pi a^2$ per spin |
 
 Including the per-injection sensitivity weight $w$ (network duty cycle):
 
 $$
 \begin{aligned}
-\log p_{\mathrm{draw}}(m_1,q,z,a_1,a_2) = {}& \mathrm{lnpdraw} + \log(m_1) \\
-&+ \log(4\pi a_1^2) + \log(4\pi a_2^2) + \log(w)
+\log p_{\mathrm{draw}}(m_1,q,z,a_1,a_2,c_{t,1},c_{t,2}) = {}& \mathrm{lnpdraw} + \log(m_1) \\
+&+ \log(2\pi a_1^2) + \log(2\pi a_2^2) + \log(w)
 \end{aligned}
 $$
 
