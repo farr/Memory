@@ -16,9 +16,10 @@ merger rate dR/dm1 [Gpc^-3 yr^-1 M_sun^-1]:
 
     dR/dm1(m1 | Lambda) = R(Lambda) * p(m1 | Lambda)
 
-The total volumetric merger rate is estimated from the MCMC posterior via
+The total volumetric merger rate is drawn from the conditional posterior
+given each hyperposterior sample:
 
-    R(Lambda) = N_obs / (T_obs * beta(Lambda))                          (1)
+    p(R | Lambda, data) = Gamma(k=N_obs, rate=T_obs * beta(Lambda))     (1)
 
 where:
   - N_obs   is the number of observed events used in the analysis
@@ -35,7 +36,10 @@ where:
   - p_draw  is the injection draw density in
             (m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2) space
 
-Equation (2) is evaluated once per posterior sample, producing R_samples.
+Equation (2) is evaluated once per posterior sample to obtain beta(Lambda),
+then one conditional Gamma draw is taken for each sample to obtain
+R_samples. Under the usual log-uniform rate prior pi(R) propto 1/R, this is
+the exact rate posterior conditional on Lambda.
 The PPD is evaluated at z = 0.2 (the LVK populations paper convention):
 
     R(z=0.2) = R0 * (1+0.2)^lambda
@@ -47,27 +51,14 @@ factor simply evaluates the merger rate at z=0.2 instead of z=0.
 
 The PPD is then dR/dm1(z=0.2) = R(z=0.2)[:, newaxis] * p(m1 | Lambda_samples).
 
-Draw prior Jacobian
-~~~~~~~~~~~~~~~~~~~
-The injection HDF5 file stores the draw prior as a log-density in Cartesian
-spin coordinates: lnpdraw(m1, m2, z, sx, sy, sz).  The population model uses
-(m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2), so a coordinate change is needed:
-
-  * m2 -> q = m2/m1    with |dm2/dq| = m1         => factor m1
-  * (sx, sy, sz) -> (a, cos_tilt), marginalising over azimuth => factor 2*pi*a^2
-    (per spin)
-
-Combined:
-
-    log p_draw(m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2) = lnpdraw
-        + log(m1)
-        + log(2*pi*a1^2)
-        + log(2*pi*a2^2)
-        + log(weights)   # per-injection sensitivity weight
-
-The `weights` field accounts for the varying network sensitivity over the run
-(e.g. detector uptime fractions).  Including it in p_draw is equivalent to
-downweighting injections from less-sensitive periods when computing beta.
+Draw prior convention
+~~~~~~~~~~~~~~~~~~~~~
+For consistency with the archived hierarchical inference results, this script
+uses the same injection draw-density convention as
+`memory.hierarchical.data.read_injection_file()` when computing beta. In
+particular, the per-injection `weights` field enters with a minus sign in
+`log_p_draw`, so subtracting `log_p_draw` in the importance sum upweights
+injections from more sensitive observing periods in the same way as the model.
 
 Usage:
     python scripts/plot_ppd.py result_astro.nc
@@ -153,30 +144,9 @@ def _slice_rate_params(params, start, end):
 def _load_injection_data(inj_file, ifar_threshold=1000, snr_inspiral_cut=6):
     """Load found injections from an HDF5 sensitivity-estimate file.
 
-    Applies the same IFAR + inspiral-SNR selection as data.py, then converts
-    the raw Cartesian draw prior to the
-    (m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2) parameterisation used by the
-    population model.
-
-    The injection HDF5 file stores lnpdraw in Cartesian spin coordinates
-    (m1, m2, z, sx, sy, sz).  Two Jacobian factors convert this to the
-    model's (m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2) coordinates:
-
-      (i)  m2 -> q = m2/m1, so |dm2/dq| = m1
-      (ii) (sx, sy, sz) -> (a, cos_tilt), marginalising over azimuth:
-               p(a, cos_tilt) da dcos_tilt = p_cart * 2*pi*a^2 da dcos_tilt
-               => factor 2*pi*a^2 per spin
-
-    An additional `weights` factor in the file records the network sensitivity
-    at the time of each injection (e.g. duty-cycle fractions per detector).
-    Folding it into p_draw ensures that injections from less-sensitive periods
-    are downweighted in the importance sum (see compute_R_samples).
-
-    The full conversion is:
-        log p_draw(m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2)
-            = lnpdraw + log(m1)
-            + log(2*pi*a1^2) + log(2*pi*a2^2)
-            + log(weights)
+    Applies the same IFAR + inspiral-SNR selection as data.py and mirrors the
+    same `log_p_draw` convention used by the inference model. This keeps the
+    post-processed beta and rate posterior consistent with archived runs.
 
     Parameters
     ----------
@@ -231,21 +201,14 @@ def _load_injection_data(inj_file, ifar_threshold=1000, snr_inspiral_cut=6):
     cost1_all = np.clip(s1z / np.maximum(a1_all, 1e-300), -1.0, 1.0)
     cost2_all = np.clip(s2z / np.maximum(a2_all, 1e-300), -1.0, 1.0)
 
-    # Compute log p_draw(m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2) from the
-    # raw Cartesian density.
-    #
-    # For isotropic spin direction (injection convention):
-    #   p_draw(m1, q, z, a1, a2, cos_tilt_1, cos_tilt_2)
-    #     = p_draw_cart(m1, m2, z, sx, sy, sz) × |J|
-    # where the Jacobian |J| converts (m2 → q) and (sx,sy,sz → a, cos_tilt,
-    # phi), then marginalises over phi for each spin:
-    #   |J| = m1 × (2π × a1²) × (2π × a2²)
+    # Match memory.hierarchical.data.read_injection_file exactly so the
+    # post-processing beta uses the same draw-density convention as the
+    # inference model for archived runs.
     log_p_draw = (
         lnp_all
-        + np.log(np.maximum(m1_all, 1e-300))
-        + 2.0 * np.log(np.maximum(a1_all, 1e-300)) + np.log(2.0 * np.pi)
-        + 2.0 * np.log(np.maximum(a2_all, 1e-300)) + np.log(2.0 * np.pi)
-        + np.log(np.maximum(wgt_all, 1e-300))  # sensitivity weight
+        + 2.0 * np.log(np.maximum(a1_all, 1e-300))
+        + 2.0 * np.log(np.maximum(a2_all, 1e-300))
+        - np.log(np.maximum(wgt_all, 1e-300))
     )
 
     return {
@@ -315,8 +278,8 @@ def _init_rate_worker(inj_data):
     _RATE_WORKER_INJ_DATA = inj_data
 
 
-def _compute_rate_chunk(params_chunk, inj_data, N_obs):
-    """Compute merger-rate samples for one posterior chunk."""
+def _compute_rate_chunk(params_chunk, inj_data):
+    """Compute selection-factor samples beta(Lambda) for one posterior chunk."""
     m1_inj = inj_data["m1"][np.newaxis, :]
     q_inj = inj_data["q"][np.newaxis, :]
     z_inj = inj_data["z"][np.newaxis, :]
@@ -326,8 +289,6 @@ def _compute_rate_chunk(params_chunk, inj_data, N_obs):
     cost2_inj = inj_data["cos_tilt_2"][np.newaxis, :]
     lp_inj = inj_data["log_p_draw"][np.newaxis, :]
     Ndraw = inj_data["Ndraw"]
-    T_obs = inj_data["T_obs_yr"]
-
     dVdzdt_inj = np.interp(z_inj, zinterp, dVdzdt_interp)
     log_q_inj = np.log(np.maximum(q_inj, 1e-300))
     log_m1_over_mmin = np.log(m1_inj / MMIN)
@@ -390,30 +351,30 @@ def _compute_rate_chunk(params_chunk, inj_data, N_obs):
 
     log_wts = log_m1d + log_qd + log_zd + log_sd + log_td - lp_inj
     log_sel = logsumexp(log_wts, axis=1) - np.log(Ndraw)
-    beta = np.exp(log_sel)
-    return N_obs / (T_obs * beta)
+    return np.exp(log_sel)
 
 
 def _compute_rate_chunk_worker(task):
     """Worker wrapper for multiprocessing."""
-    params_chunk, N_obs = task
-    return _compute_rate_chunk(params_chunk, _RATE_WORKER_INJ_DATA, N_obs)
+    params_chunk = task
+    return _compute_rate_chunk(params_chunk, _RATE_WORKER_INJ_DATA)
 
 
 # ---------------------------------------------------------------------------
 # Rate computation
 # ---------------------------------------------------------------------------
 
-def compute_R_samples(params, inj_data, N_obs, chunk=50, workers=1):
-    """Compute the merger rate R(Λ) for each posterior sample.
+def compute_R_samples(params, inj_data, N_obs, chunk=50, workers=1, seed=None):
+    """Draw merger-rate samples R for each posterior sample.
 
     The expected number of detections given population hyperparameters Λ is
 
         mu(Λ) = R(Λ) * T_obs * beta(Λ)
 
-    Setting mu = N_obs (Poisson point estimate) gives
+    With the usual log-uniform prior pi(R) propto 1/R, the conditional
+    posterior for the local merger rate is
 
-        R(Λ) = N_obs / (T_obs * beta(Λ))                               (1)
+        R | Λ, data ~ Gamma(shape=N_obs, rate=T_obs * beta(Λ))         (1)
 
     The effective surveyed volume beta(Λ) [Gpc^3] is estimated by importance
     sampling over the found injections:
@@ -445,23 +406,27 @@ def compute_R_samples(params, inj_data, N_obs, chunk=50, workers=1):
         Number of posterior samples processed at once (memory control).
     workers : int
         Number of CPU worker processes for chunked rate evaluation.
+    seed : int or None
+        Seed for reproducible conditional rate draws.
 
     Returns
     -------
     R_samples : ndarray, shape (N,)
-        Merger rate in Gpc^-3 yr^-1 for each posterior sample.
+        Conditional merger-rate draws in Gpc^-3 yr^-1, one per posterior sample.
     """
     N = len(params["alpha_1"])
     workers = max(1, int(workers))
+    T_obs = float(inj_data["T_obs_yr"])
+    rng = np.random.default_rng(seed)
     tasks = [
-        (_slice_rate_params(params, i0, min(i0 + chunk, N)), N_obs)
+        _slice_rate_params(params, i0, min(i0 + chunk, N))
         for i0 in range(0, N, chunk)
     ]
 
     if workers == 1 or len(tasks) == 1:
         parts = [
-            _compute_rate_chunk(params_chunk, inj_data, n_obs_chunk)
-            for params_chunk, n_obs_chunk in tasks
+            _compute_rate_chunk(params_chunk, inj_data)
+            for params_chunk in tasks
         ]
     else:
         ctx = mp.get_context("fork")
@@ -472,7 +437,9 @@ def compute_R_samples(params, inj_data, N_obs, chunk=50, workers=1):
         ) as pool:
             parts = pool.map(_compute_rate_chunk_worker, tasks)
 
-    return np.concatenate(parts)
+    beta_samples = np.concatenate(parts)
+    rate_scale = 1.0 / np.maximum(T_obs * beta_samples, 1e-300)
+    return rng.gamma(shape=N_obs, scale=rate_scale)
 
 
 # ---------------------------------------------------------------------------
@@ -728,6 +695,8 @@ def main():
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
     ax_m1, ax_q, ax_a = axes
 
+    rate_title_lines = []
+
     for i, (nc_file, label) in enumerate(zip(args.nc_files, labels)):
         color = f"C{i}"
         print(f"[{label}] Loading {nc_file} ...")
@@ -752,13 +721,14 @@ def main():
         pm1_q_normed = pm1_q / np.maximum(norm_m1_q, 1e-300)
 
         if inj_data is not None:
-            print(f"[{label}] Computing merger rate R(Λ) ...")
+            print(f"[{label}] Drawing merger-rate posterior R(Λ) ...")
             R_samples = compute_R_samples(
                 params,
                 inj_data,
                 args.n_obs,
                 chunk=args.rate_chunk,
                 workers=args.rate_workers,
+                seed=args.seed + i,
             )
             R_med = np.median(R_samples)
             R_lo, R_hi = np.percentile(R_samples, [5, 95])
@@ -766,6 +736,14 @@ def main():
                 f"[{label}] R(z=0) = {R_med:.2f} [{R_lo:.2f}, {R_hi:.2f}] "
                 f"Gpc⁻³ yr⁻¹  (median, 90% CI)"
             )
+            if len(args.nc_files) > 1:
+                rate_title_lines.append(
+                    f"{label}: R = {R_med:.2f} [{R_lo:.2f}, {R_hi:.2f}]"
+                )
+            else:
+                rate_title_lines.append(
+                    f"R = {R_med:.2f} [{R_lo:.2f}, {R_hi:.2f}] Gpc^-3 yr^-1"
+                )
             # Evaluate rate at z = 0.2 (matches LVK populations paper convention).
             # R is the local (z=0) rate; the model parameterises the redshift
             # evolution as (1+z)^lambda, so R(z=0.2) = R0 * (1+0.2)^lambda.
@@ -802,7 +780,10 @@ def main():
             r"$\mathrm{d}R/\mathrm{d}m_1\ (z{=}0.2)$"
             r"$\ [\mathrm{Gpc}^{-3}\,\mathrm{yr}^{-1}\,M_\odot^{-1}]$"
         )
-        ax_m1.set_title("Primary mass merger rate")
+        title = "Primary mass merger rate"
+        if rate_title_lines:
+            title = title + "\n" + "\n".join(rate_title_lines)
+        ax_m1.set_title(title)
     else:
         ax_m1.set_ylabel(r"$p(m_1)\ [M_\odot^{-1}]$")
         ax_m1.set_title("Primary mass")
