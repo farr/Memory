@@ -431,7 +431,9 @@ The power law has two slopes separated at a break mass:
 m_break = mmin + b * (mmax - mmin)
 ```
 
-where `mmin = 3`, `mmax = 100`, and `b` is the break fraction. Each segment
+where `mmin = 3`, `mmax = 300`, and `b` is the break fraction. The prior on
+`b` is restricted so that `m_break` lies between 20 and 50 solar masses. Each
+segment
 is a normalised power law `PL(m; a, lo, hi)`:
 
 ```
@@ -450,18 +452,18 @@ BPL(m) = [ C * PL(m; a1, mmin, m_break) * I(m < m_break)
 Two Gaussian components capture features not well described by a power law.
 Their mean priors are non-overlapping to reduce degeneracies:
 
-- **Peak 1** (low-mass): `mu_peak_1 ~ U(3, 15)`
-- **Peak 2** (high-mass): `mu_peak_2 ~ U(15, 75)`
+- **Peak 1** (low-mass): `mu_peak_1 ~ U(5, 20)`
+- **Peak 2** (high-mass): `mu_peak_2 ~ U(25, 60)`
 
 Full mixture:
 
 ```
-p(m1) = (1 - frac_peak_1 - frac_peak_2) * BPL(m1)
+p(m1) = frac_bpl    * BPL(m1)
       +  frac_peak_1 * N(m1 | mu_peak_1, sigma_peak_1)
       +  frac_peak_2 * N(m1 | mu_peak_2, sigma_peak_2)
 ```
 
-with the constraint `frac_peak_1 + frac_peak_2 < 1`.
+where `(frac_bpl, frac_peak_1, frac_peak_2) ~ Dirichlet(1, 1, 1)`.
 
 #### Mass ratio: power law
 
@@ -497,13 +499,14 @@ p(a1, a2) = MVN([mu_spin, mu_spin], BW + sigma_spin^2 * I)
 
 #### Spin tilts (optional, `--use-tilts`)
 
-When enabled, the cosine tilt angles `(cos_t1, cos_t2)` follow a mixture of
-an isotropic component (uniform on `[-1, 1]^2`) and a Gaussian component
-peaked at aligned spins `(cos_t = 1)`:
+The cosine tilt angles `(cos_t1, cos_t2)` follow a mixture of
+an isotropic component (uniform on `[-1, 1]^2`) and a truncated Gaussian
+component with a shared population location and scale:
 
 ```
 p(cos_t1, cos_t2) = f_iso / 4
-    + (1 - f_iso) * N2d((cos_t1, cos_t2) | (1, 1), sigma_tilt^2 * I)
+    + (1 - f_iso) * N[-1,1](cos_t1 | mu_tilt, sigma_tilt)
+    * N[-1,1](cos_t2 | mu_tilt, sigma_tilt)
 ```
 
 #### TGR deviation parameter (optional)
@@ -553,25 +556,28 @@ convolution as the joint model's TGR component.
 
 ### All hyperparameters and priors
 
-All prior bounds and the `MMIN`/`MMAX` constants are defined in
-`memory/hierarchical/models.py` (`PRIOR` dict) and importable from there.
+The uniform prior bounds and the `MMIN`/`MMAX` constants are defined in
+`memory/hierarchical/models.py` (`PRIOR` dict); the primary-mass mixture
+fractions are sampled separately there via `Dirichlet(1, 1, 1)`.
 
 | Parameter       | Prior            | Component       | Description                       |
 |-----------------|------------------|-----------------|-----------------------------------|
 | `alpha_1`       | U(-4, 12)        | Primary mass    | PL slope below break              |
 | `alpha_2`       | U(-4, 12)        | Primary mass    | PL slope above break              |
-| `b`             | U(0, 1)          | Primary mass    | Break fraction                    |
+| `b`             | U((20-3)/(300-3), (50-3)/(300-3)) | Primary mass | Break fraction, i.e. `m_break in [20, 50]` |
+| `frac_bpl`      | Dirichlet(1,1,1) | Primary mass    | Broken-power-law mixture weight   |
 | `frac_peak_1`   | Dirichlet(1,1,1) | Primary mass    | Fraction in low-mass Gaussian     |
-| `mu_peak_1`     | U(3, 15)         | Primary mass    | Mean of low-mass Gaussian         |
-| `sigma_peak_1`  | U(0.5, 8)        | Primary mass    | Std of low-mass Gaussian          |
+| `mu_peak_1`     | U(5, 20)         | Primary mass    | Mean of low-mass Gaussian         |
+| `sigma_peak_1`  | U(0.05, 6)       | Primary mass    | Std of low-mass Gaussian          |
 | `frac_peak_2`   | Dirichlet(1,1,1) | Primary mass    | Fraction in high-mass Gaussian    |
-| `mu_peak_2`     | U(15, 75)        | Primary mass    | Mean of high-mass Gaussian        |
-| `sigma_peak_2`  | U(0.5, 8)        | Primary mass    | Std of high-mass Gaussian         |
-| `beta`          | U(-4, 12)        | Mass ratio      | Power-law slope for q             |
-| `lamb`          | U(-30, 30)       | Redshift        | Power-law index on (1+z)          |
+| `mu_peak_2`     | U(25, 60)        | Primary mass    | Mean of high-mass Gaussian        |
+| `sigma_peak_2`  | U(0.05, 10)      | Primary mass    | Std of high-mass Gaussian         |
+| `beta`          | U(-2, 7)         | Mass ratio      | Power-law slope for q             |
+| `lamb`          | U(-10, 10)       | Redshift        | Power-law index on (1+z)          |
 | `mu_spin`       | U(0, 0.7)        | Spin magnitudes | Shared mean of (a1, a2)           |
-| `sigma_spin`    | U(0.01, 0.5)     | Spin magnitudes | Shared std of (a1, a2)            |
+| `sigma_spin`    | U(0.01, 1)       | Spin magnitudes | Shared std of (a1, a2)            |
 | `f_iso`         | U(0, 1)          | Spin tilts      | Isotropic fraction                |
+| `mu_tilt`       | U(-1, 1)         | Spin tilts      | Shared truncated-Gaussian mean    |
 | `sigma_tilt`    | U(0.05, 10)      | Spin tilts      | Tilt peak width                   |
 | `mu_tgr`        | U(-s, s)         | TGR             | Population mean of A (auto-scaled)|
 | `sigma_tgr`     | U(0, s)          | TGR             | Population std of A (auto-scaled) |

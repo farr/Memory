@@ -35,6 +35,7 @@ PRIOR = {
     "mu_spin":      (0,    0.7),
     "sigma_spin":   (0.01,   1),
     "f_iso":        (0,      1),
+    "mu_tilt":      (-1,     1),
     "sigma_tilt":   (0.05,  10),
     "lamb":         (-10,   10),
 }
@@ -138,9 +139,9 @@ def make_joint_model(
     conditioned on the primary mass. The redshift distribution follows a
     power law in ``1 + z`` multiplied by the cosmological volume-time factor.
     The tilt distribution is a mixture of an isotropic component and a
-    truncated Gaussian aligned component. For spin magnitudes, the current
-    implementation uses an untruncated Gaussian approximation in ``(a1, a2)``
-    for simplicity.
+    truncated Gaussian on ``[-1, 1]`` with shared location and scale for both
+    component spins. For spin magnitudes, the current implementation uses an
+    untruncated Gaussian approximation in ``(a1, a2)`` for simplicity.
 
     Population components:
 
@@ -162,7 +163,7 @@ def make_joint_model(
     Tilt model:
 
     ``p(cos t1, cos t2) = f_iso / 4 + (1 - f_iso)
-    N[-1,1](cos t1 | 1, sigma_tilt) N[-1,1](cos t2 | 1, sigma_tilt)``
+    N[-1,1](cos t1 | mu_tilt, sigma_tilt) N[-1,1](cos t2 | mu_tilt, sigma_tilt)``
 
     where ``N[-1,1]`` is a Gaussian truncated to ``[-1, 1]`` and normalized
     with the standard-normal CDF ``Phi``.
@@ -238,9 +239,9 @@ def make_joint_model(
     frac_peak_2 = numpyro.deterministic("frac_peak_2", fracs[2])
 
     mu_peak_1 = numpyro.sample("mu_peak_1", dist.Uniform(*PRIOR["mu_peak_1"]))
-    # Peak widths bounded to [0.5, 8]: prevents the Gaussian components from
-    # becoming degenerate broad components that absorb the BPL, which creates
-    # multi-modal posteriors and poor NUTS conditioning.
+    # Peak widths use distinct bounds for the two Gaussians; these keep the
+    # components from becoming so broad that they effectively absorb the BPL,
+    # which creates multi-modal posteriors and poor NUTS conditioning.
     sigma_peak_1 = numpyro.sample("sigma_peak_1", dist.Uniform(*PRIOR["sigma_peak_1"]))
 
     mu_peak_2 = numpyro.sample("mu_peak_2", dist.Uniform(*PRIOR["mu_peak_2"]))
@@ -336,20 +337,20 @@ def make_joint_model(
         - log_pdraw_sel
     )
 
-    # Spin tilt mixture model
+    # Spin tilt model: isotropic mixture plus shared truncated Gaussian on [-1, 1]
     f_iso = numpyro.sample("f_iso", dist.Uniform(*PRIOR["f_iso"]))
+    mu_tilt = numpyro.sample("mu_tilt", dist.Uniform(*PRIOR["mu_tilt"]))
     sigma_tilt = numpyro.sample("sigma_tilt", dist.Uniform(*PRIOR["sigma_tilt"]))
 
     def log_tilt_density(cost1, cost2):
-        quad = ((cost1 - 1) ** 2 + (cost2 - 1) ** 2)
+        quad = ((cost1 - mu_tilt) ** 2 + (cost2 - mu_tilt) ** 2)
         log_gauss = -quad / (2 * jnp.square(sigma_tilt)) - jnp.log(
             2 * jnp.pi * jnp.square(sigma_tilt)
         )
-        # ndtr is the standard normal CDF, Phi; this gives the 1D probability mass
-        # inside cos(theta) in [-1, 1], needed to normalize the truncated Gaussian.
-        # note that ndtr(0) = 0.5 and
-        # Phi((1 - 1)/sigma_tilt) - Phi((-1 - 1)/sigma_tilt) = Phi(0) - Phi(-2/sigma_tilt)
-        trunc_norm_1d = 0.5 - ndtr(-2.0 / sigma_tilt)
+        # Normalize the shared 1D Gaussian after truncating each cosine tilt to [-1, 1].
+        trunc_norm_1d = ndtr((1.0 - mu_tilt) / sigma_tilt) - ndtr(
+            (-1.0 - mu_tilt) / sigma_tilt
+        )
         log_gauss -= 2 * jnp.log(trunc_norm_1d)
         term_a = jnp.log(f_iso) - jnp.log(4.0) + jnp.zeros_like(log_gauss)
         term_b = jnp.log1p(-f_iso) + log_gauss

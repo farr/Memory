@@ -794,6 +794,7 @@ def main():
             _init["mu_tgr"]    = 1.0
             _init["sigma_tgr"] = 0.5
         _init["f_iso"]      = 0.5
+        _init["mu_tilt"]    = 0.0
         _init["sigma_tilt"] = 1.0
         kernel = NUTS(make_joint_model,
                       init_strategy=init_to_value(values=_init))
