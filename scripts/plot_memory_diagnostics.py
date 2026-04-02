@@ -26,9 +26,10 @@ import matplotlib.pyplot as plt
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from memory.hierarchical.data import load_memory_data
 
-POSTERIOR_GLOB = "/mnt/home/ccalvk/ceph/GWTC-4/IGWN-GWTC4p0-*-combined_PEDataRelease.hdf5"
-WAVEFORM_LABEL = "C00:NRSur7dq4"
-
+POSTERIOR_GLOB1 = "/mnt/home/ccalvk/ceph/GWTC-2.1/IGWN-GWTC2p1-*PEDataRelease*nocosmo*.h5"
+POSTERIOR_GLOB2 = "/mnt/home/ccalvk/ceph/GWTC-3/IGWN-GWTC3p0-*PEDataRelease*nocosmo*.h5"
+POSTERIOR_GLOB3 = "/mnt/home/ccalvk/ceph/GWTC-4/IGWN-GWTC4p0-*-combined_PEDataRelease.hdf5"
+WAVEFORM_LABEL = None
 
 def _filter_to_memory_events(posterior_files, memory_dir):
     """Keep only posterior files whose event has a memory_results.h5 in memory_dir."""
@@ -58,11 +59,13 @@ def main():
     )
     os.makedirs(os.path.dirname(os.path.abspath(outfile)), exist_ok=True)
 
-    posterior_files = sorted(glob.glob(POSTERIOR_GLOB))
+    posterior_files = sorted(glob.glob(POSTERIOR_GLOB1) + glob.glob(POSTERIOR_GLOB2) + glob.glob(POSTERIOR_GLOB3))
+    print(len(posterior_files))
     kept_files = _filter_to_memory_events(posterior_files, memory_dir)
     print(f"Found {len(kept_files)} events with memory results in {memory_dir}")
+    
     memory_data = load_memory_data(kept_files, memory_dir, WAVEFORM_LABEL)
-
+    
     names = [md["event_name"] for md in memory_data]
     n = len(names)
     x = np.arange(n)
