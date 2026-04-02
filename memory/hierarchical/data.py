@@ -871,12 +871,15 @@ def read_injection_file(
         # The draw prior density (ln_prior) is defined w.r.t. Cartesian spin
         # coordinates: p_draw(m1, m2, z, s1x, s1y, s1z, s2x, s2y, s2z).
         # The population model uses spherical spin parameters (a, cos_tilt, phi)
-        # or aligned-spin (chi_z, cos_tilt, phi). To convert the draw prior to the
+        # and the mass ratio q = m2 / m1. To convert the draw prior to the
         # marginalized parameter space, we need to:
+        #   Since dm2 = m1 dq at fixed m1, the Jacobian for (m1, m2) -> (m1, q)
+        #   contributes +log(m1).
         #   The Jacobian for (sx, sy, sz) -> (a, cos_tilt, phi) is a^2,
         #   so we add 2*log(a) per spin to convert the draw prior to the
         #   spherical-spin parameter space used by the model.
         log_jacobian = (
+            np.log(np.clip(injections["mass_1_source"], 1e-30, None)) +
             2 * np.log(np.clip(injections["a_1"], 1e-30, None)) +
             2 * np.log(np.clip(injections["a_2"], 1e-30, None))
         )
