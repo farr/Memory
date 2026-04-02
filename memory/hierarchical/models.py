@@ -19,6 +19,9 @@ MMAX = 300  # upper primary mass cutoff [M_sun]
 MBREAK_MIN = 20
 MBREAK_MAX = 50
 
+SPIN_PHI_PDF = 1.0 / (2.0 * np.pi)
+JOINT_SPIN_PHI_LOGPDF = 2.0 * np.log(SPIN_PHI_PDF)
+
 b_min = (MBREAK_MIN - MMIN) / (MMAX - MMIN)
 b_max = (MBREAK_MAX - MMIN) / (MMAX - MMIN)
 
@@ -122,7 +125,8 @@ def make_joint_model(
     The imposed population factorization is
 
     ``p(theta | Lambda) = p(m1 | Lambda_m) p(q | m1, Lambda_q)
-    p(z | Lambda_z) p(cos t1, cos t2 | Lambda_tilt) p(a1, a2 | Lambda_spin)``
+    p(z | Lambda_z) p(cos t1, cos t2 | Lambda_tilt) p(a1, a2 | Lambda_spin)
+    p(phi_1) p(phi_2)``
 
     with optional TGR factor
 
@@ -174,6 +178,10 @@ def make_joint_model(
 
     where the current implementation intentionally uses an untruncated Gaussian
     approximation for simplicity, even though the physical support is ``[0, 1]^2``.
+
+    The azimuthal spin angles ``phi_1`` and ``phi_2`` are implicit and assumed
+    to be independent and uniform on ``[0, 2 pi]``, contributing the constant
+    factor ``(2 pi)^-2`` to the joint spin density.
 
     Parameters
     ----------
@@ -336,6 +344,10 @@ def make_joint_model(
         + log_redshift_powerlaw(zs_sel)
         - log_pdraw_sel
     )
+
+    # Account for the two implicit spin azimuths, each with uniform pdf 1/(2 pi).
+    log_wts += JOINT_SPIN_PHI_LOGPDF
+    log_sel_wts += JOINT_SPIN_PHI_LOGPDF
 
     # Spin tilt model: isotropic mixture plus shared truncated Gaussian on [-1, 1]
     f_iso = numpyro.sample("f_iso", dist.Uniform(*PRIOR["f_iso"]))
