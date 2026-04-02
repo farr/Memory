@@ -1,11 +1,11 @@
-"""Numpyro model definitions for hierarchical TGR population analysis."""
+"""NumPyro model definitions for hierarchical TGR population analysis."""
 
 import numpy as np
 import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
-from jax.scipy.special import logsumexp
+from jax.scipy.special import logsumexp, ndtr
 from astropy import cosmology as cosmo
 import astropy.units as u
 
@@ -14,21 +14,29 @@ import astropy.units as u
 # ---------------------------------------------------------------------------
 
 MMIN = 3    # lower primary mass cutoff [M_sun]
-MMAX = 100  # upper primary mass cutoff [M_sun]
+MMAX = 300  # upper primary mass cutoff [M_sun]
+
+MBREAK_MIN = 20
+MBREAK_MAX = 50
+
+b_min = (MBREAK_MIN - MMIN) / (MMAX - MMIN)
+b_max = (MBREAK_MAX - MMIN) / (MMAX - MMIN)
 
 # Uniform prior ranges (lo, hi) for each sampled hyperparameter.
 PRIOR = {
     "alpha_1":      (-4,    12),
     "alpha_2":      (-4,    12),
-    "beta":         (-4,    12),
-    "b":            (0,      1),
-    "mu_peak_1":    (MMIN,  15),   # lower bound tied to MMIN
-    "sigma_peak_1": (0.5,    8),
-    "mu_peak_2":    (15,    75),
-    "sigma_peak_2": (0.5,    8),
+    "beta":         (-2,     7),
+    "b":            (b_min, b_max),
+    "mu_peak_1":    (5,     20),   # lower bound tied to MMIN
+    "sigma_peak_1": (0.05,   6),
+    "mu_peak_2":    (25,    60),
+    "sigma_peak_2": (0.05,    10),
     "mu_spin":      (0,    0.7),
     "sigma_spin":   (0.01,   1),
-    "lamb":         (-30,   30),
+    "f_iso":        (0,      1),
+    "sigma_tilt":   (0.05,  10),
+    "lamb":         (-10,   10),
 }
 
 # ---------------------------------------------------------------------------
@@ -50,15 +58,14 @@ dVdzdt_interp = (
 
 def make_tgr_only_model(A_hats, A_sigmas, log_weights, Nobs,
                         mu_tgr_scale=None, sigma_tgr_scale=None):
-    """Numpyro model for TGR-only hierarchical inference.
+    """NumPyro model for TGR-only hierarchical inference.
 
-    Defines a two-hyperparameter model (mu_tgr, sigma_tgr) describing a
-    Gaussian population distribution for the TGR deviation parameter.
-    The per-event likelihood uses an analytic Gaussian convolution:
-    the per-sample measurement uncertainty A_sigma is added in quadrature
-    with sigma_tgr.  The per-sample memory log-likelihood ratios
-    (log_weights) are included as additive importance-sampling terms so
-    that no pre-resampling by log_weight is required in data preparation.
+    This model imposes a Gaussian population distribution for the TGR
+    deviation parameter, with a free population mean and width.
+
+    ``mu_tgr ~ Uniform(-mu_tgr_scale, mu_tgr_scale)``
+
+    ``sigma_tgr ~ Uniform(0, sigma_tgr_scale)``
 
     Parameters
     ----------
@@ -105,16 +112,67 @@ def make_joint_model(
     mu_tgr_scale=None,
     sigma_tgr_scale=None,
 ):
-    """Numpyro model jointly fitting astrophysical population and TGR parameters.
+    """Joint hierarchical model for masses, spins, redshift, and optional TGR.
 
-    Combines a broken power law + two Gaussian peaks primary mass function,
-    power-law mass ratio, power-law-in-(1+z) redshift distribution, Beta-like spin
-    magnitude distribution (via multivariate normal in KDE space), and
-    spin tilt mixture model, with Gaussian TGR hyperparameters
-    (mu_tgr, sigma_tgr). The TGR dimension uses analytic Gaussian
-    convolution rather than KDE smoothing. Includes selection-effect
-    correction via importance-weighted injection sums and
-    effective-sample-size regularization terms.
+    This model factorizes the astrophysical population into primary mass,
+    mass ratio, redshift, spin tilts, and spin magnitudes, with an optional
+    Gaussian population model for the TGR deviation parameter.
+
+    The imposed population factorization is
+
+    ``p(theta | Lambda) = p(m1 | Lambda_m) p(q | m1, Lambda_q)
+    p(z | Lambda_z) p(cos t1, cos t2 | Lambda_tilt) p(a1, a2 | Lambda_spin)``
+
+    with optional TGR factor
+
+    ``p(A | mu_tgr, sigma_tgr) = Normal(A | mu_tgr, sigma_tgr)``.
+
+    and, when ``use_tgr`` is enabled,
+
+    ``mu_tgr ~ Uniform(-mu_tgr_scale, mu_tgr_scale)``
+
+    ``sigma_tgr ~ Uniform(0, sigma_tgr_scale)``.
+
+    The primary-mass distribution is a mixture of a continuous broken power
+    law and two Gaussian peaks. The mass-ratio distribution is a power law
+    conditioned on the primary mass. The redshift distribution follows a
+    power law in ``1 + z`` multiplied by the cosmological volume-time factor.
+    The tilt distribution is a mixture of an isotropic component and a
+    truncated Gaussian aligned component. For spin magnitudes, the current
+    implementation uses an untruncated Gaussian approximation in ``(a1, a2)``
+    for simplicity.
+
+    Population components:
+
+    ``p(m1) = f_bpl p_bpl(m1) + f_1 N(m1 | mu_peak_1, sigma_peak_1)
+    + f_2 N(m1 | mu_peak_2, sigma_peak_2)``
+
+    where ``m_break = MMIN + b (MMAX - MMIN)``.
+
+    Mass-ratio model:
+
+    ``p(q | m1) propto q^beta`` for ``q in [MMIN / m1, 1]``.
+
+    Redshift model:
+
+    ``p(z) propto (1 + z)^lamb dV_c/dz /(1 + z)``
+
+    where the cosmology-dependent factor is tabulated in ``dVdzdt_interp``.
+
+    Tilt model:
+
+    ``p(cos t1, cos t2) = f_iso / 4 + (1 - f_iso)
+    N[-1,1](cos t1 | 1, sigma_tilt) N[-1,1](cos t2 | 1, sigma_tilt)``
+
+    where ``N[-1,1]`` is a Gaussian truncated to ``[-1, 1]`` and normalized
+    with the standard-normal CDF ``Phi``.
+
+    Spin-magnitude model:
+
+    ``p(a1, a2) approx Normal([mu_spin, mu_spin], Sigma)``
+
+    where the current implementation intentionally uses an untruncated Gaussian
+    approximation for simplicity, even though the physical support is ``[0, 1]^2``.
 
     Parameters
     ----------
@@ -279,14 +337,20 @@ def make_joint_model(
     )
 
     # Spin tilt mixture model
-    f_iso = numpyro.sample("f_iso", dist.Uniform(0, 1))
-    sigma_tilt = numpyro.sample("sigma_tilt", dist.Uniform(0.05, 10))
+    f_iso = numpyro.sample("f_iso", dist.Uniform(*PRIOR["f_iso"]))
+    sigma_tilt = numpyro.sample("sigma_tilt", dist.Uniform(*PRIOR["sigma_tilt"]))
 
     def log_tilt_density(cost1, cost2):
         quad = ((cost1 - 1) ** 2 + (cost2 - 1) ** 2)
         log_gauss = -quad / (2 * jnp.square(sigma_tilt)) - jnp.log(
             2 * jnp.pi * jnp.square(sigma_tilt)
         )
+        # ndtr is the standard normal CDF, Phi; this gives the 1D probability mass
+        # inside cos(theta) in [-1, 1], needed to normalize the truncated Gaussian.
+        # note that ndtr(0) = 0.5 and
+        # Phi((1 - 1)/sigma_tilt) - Phi((-1 - 1)/sigma_tilt) = Phi(0) - Phi(-2/sigma_tilt)
+        trunc_norm_1d = 0.5 - ndtr(-2.0 / sigma_tilt)
+        log_gauss -= 2 * jnp.log(trunc_norm_1d)
         term_a = jnp.log(f_iso) - jnp.log(4.0) + jnp.zeros_like(log_gauss)
         term_b = jnp.log1p(-f_iso) + log_gauss
         return logsumexp(jnp.stack([term_a, term_b], axis=0), axis=0)
@@ -294,8 +358,10 @@ def make_joint_model(
     log_wts += log_tilt_density(cost1s, cost2s)
     log_sel_wts += log_tilt_density(cost1s_sel, cost2s_sel)
 
-    # Spin KDE — always 2×2 (a1, a2); the TGR dimension is handled
-    # analytically below.
+    # Spin KDE — always 2×2 (a1, a2).
+    # For simplicity we use untruncated Gaussians here, even though the
+    # physical spin magnitudes are bounded to [0, 1] and the paper model uses
+    # truncated Gaussians on that interval.
     sigma_evts = BW_matrices + jnp.diag(
         jnp.array([jnp.square(sigma_spin), jnp.square(sigma_spin)])
     )
