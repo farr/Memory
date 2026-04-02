@@ -779,7 +779,7 @@ def main():
         _init = {
             "alpha_1":     6.6,
             "alpha_2":    -0.7,
-            "b":           0.23,
+            "b":           0.108,   # midpoint of Uniform(b_min, b_max) → m_break≈35 M_sun
             "beta":        5.1,
             "fracs":       np.array([0.33, 0.40, 0.27]),
             "mu_peak_1":   10.0,

@@ -47,6 +47,7 @@ _ASTRO_VARS = [
     "frac_bpl", "frac_peak_1", "mu_peak_1", "sigma_peak_1",
     "frac_peak_2", "mu_peak_2", "sigma_peak_2",
     "mu_spin", "sigma_spin", "lamb",
+    "f_iso", "mu_tilt", "sigma_tilt",
 ]
 
 
