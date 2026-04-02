@@ -89,7 +89,7 @@ scripts/run_hierarchical_analysis.py \
 
 **Why `nocosmo` for GWTC-3 (not `cosmo`)?**
 
-The hierarchical model importance-weights PE samples by `p_pop(θ) / p_draw(θ)`,
+The hierarchical model importance-weights PE samples by $p_{\mathrm{pop}}(\theta) / p_{\mathrm{draw}}(\theta)$,
 where `p_draw` is read from each file's `log_prior` field.  The correct
 computation requires that `log_prior` accurately reflects the distribution the
 samples were drawn from.
@@ -102,12 +102,12 @@ samples were drawn from.
   reweight them toward `UniformSourceFrame`.  Crucially, PESummary does **not**
   update the `log_prior` field — it still records the original `PowerLaw(alpha=2)`
   prior.  Using these samples with their stored `log_prior` therefore introduces a
-  spurious per-sample factor of `p_USF(θ) / p_PL2(θ)` ∝ `dV_c/dz / ((1+z) d_L²)`
+  spurious per-sample factor of $p_{\mathrm{USF}}(\theta) / p_{\mathrm{PL2}}(\theta) \propto \frac{\mathrm{d}V_c/\mathrm{d}z}{(1+z)\,d_L^2}$
   that biases the redshift weighting for every O3 event.
 - **GWTC-3 `nocosmo`** files retain the full original sample set with
-  `log_prior = log p_PL2(θ)` and samples drawn from `L · p_PL2` — internally
-  consistent.  The hierarchical model divides out `p_PL2` correctly for O3 events
-  and `p_USF` correctly for O4a events; mixing PE priors across events is fine
+  `log_prior` $=$ $\log p_{\mathrm{PL2}}(\theta)$ and samples drawn from $L \cdot p_{\mathrm{PL2}}$ — internally
+  consistent.  The hierarchical model divides out $p_{\mathrm{PL2}}$ correctly for O3 events
+  and $p_{\mathrm{USF}}$ correctly for O4a events; mixing PE priors across events is fine
   because the `Z_pe` normalisation cancels in importance-sampling ratios.
 
 **Injection file:** use `mixture-real_o3_o4a-*` (not `o4a`-only) whenever O3
@@ -153,11 +153,11 @@ baseline.
 
 - **`memory/hierarchical/models.py`** — Numpyro model definitions and cosmology globals.
   - Module-level cosmology setup: `Planck15_LAL`, `zinterp`, `dVdzdt_interp`
-  - `make_tgr_only_model()`: numpyro model with two hyperparameters (mu_tgr, sigma_tgr) describing a Gaussian population distribution for the TGR deviation parameter; likelihood is a KDE-smoothed sum over per-event posterior samples
+  - `make_tgr_only_model()`: numpyro model with two hyperparameters $(\mu_{\mathrm{tgr}}, \sigma_{\mathrm{tgr}})$ describing a Gaussian population distribution for the TGR deviation parameter; likelihood is a KDE-smoothed sum over per-event posterior samples
   - `make_joint_model()`: numpyro model jointly fitting astrophysical population (broken power law + two Gaussian peaks mass function, power-law mass ratio, power-law redshift, spin magnitude/tilt distributions) and TGR hyperparameters; includes selection-effect correction and effective-sample-size regularization
 
 - **`memory/hierarchical/plotting.py`** — Plotting and ArviZ post-processing.
-  - `get_samples_df()`: converts an ArviZ InferenceData posterior into a flat pandas DataFrame (chains × draws)
+  - `get_samples_df()`: converts an ArviZ InferenceData posterior into a flat pandas DataFrame (chains $\times$ draws)
   - `create_plots()`: generates diagnostic plots — population KDE, hyperparameter pairplot, TGR corner plot, and full joint corner plot; saves PNGs and per-fit CSV sample files
 
 ### Scripts
@@ -167,14 +167,14 @@ baseline.
 - Outputs: `result_{astro,joint,memory}.nc`, `fit_{astro,joint,memory}_samples.dat`, corner plots (PNG), provenance text files
 
 **`scripts/plot_ppd.py`** — Post-processing script that plots 1D Population Predictive Distributions from one or more NetCDF result files.
-- Panels: primary mass `m1`, mass ratio `q`, spin magnitude `a`
-- With `--injection-file` and `--n-obs`: converts `m1` panel to differential merger rate `dR/dm1 [Gpc⁻³ yr⁻¹ M☉⁻¹]` via importance sampling over found injections
+- Panels: primary mass $m_1$, mass ratio $q$, spin magnitude $a$
+- With `--injection-file` and `--n-obs`: converts `m1` panel to differential merger rate $\mathrm{d}R/\mathrm{d}m_1$ $[\mathrm{Gpc}^{-3}\,\mathrm{yr}^{-1}\,M_\odot^{-1}]$ via importance sampling over found injections
 - Output: `ppd.png`
 
 **`scripts/compute_gw_memory_for_GWTC.py`** — Catalog-level GW memory computation for GWTC events.
 - Computes memory waveforms, detector projections, and likelihoods across a catalog
 - Uses multiprocessing for parallel sample processing (`--multiprocess_samples`)
-- Outputs per-event `{output_dir}/{event_name}/memory_results.h5` with datasets: `A_hat` (ML amplitude), `A_sigma` (posterior std), `A_sample` (posterior draws), `log_weight`, `log_likelihood`, grouped by waveform label
+- Outputs per-event `{output_dir}/{event_name}/memory_results.h5` with datasets: `A_hat` (ML amplitude $\hat{A}$), `A_sigma` (posterior std $A_\sigma$), `A_sample` (posterior draws), `log_weight`, `log_likelihood`, grouped by waveform label
 - Only the surrogate (TD modes) waveform path is fully working; FD-only and ROM approximants fail at the SH-mode step
 - Validation run (10 samples, all 176 events): 165 fully complete, 11 partial, 0 total failures
   - 13 SEOBNRv4PHM failures (prior to guard-bug fix): ISCO limit ~9–10 Hz; a guard-logic bug in `compute_one_sample_fd` fired the no-progress check before any retry was attempted for events where `f_ref < ISCO limit` (e.g. GW190403: f_ref=5 Hz, ISCO=9.9 Hz → new_fmin=9.8 Hz ≥ curr_fmin=5.0 Hz triggered the guard); fixed by only applying the no-progress guard when `minimum_frequency` is already explicitly set in `waveform_arguments`
@@ -210,9 +210,9 @@ The no-progress check only compares against
 `waveform_arguments["minimum_frequency"]` when that key is already explicitly
 set by a prior retry. On the first ISCO failure, `minimum_frequency` is not yet
 in `waveform_arguments`, so the guard is skipped and the retry must proceed.
-This matters for events where `f_ref < ISCO limit` (for example GW190403:
-`f_ref = 5 Hz`, `ISCO ~= 9.9 Hz`): using `f_ref` as the fallback `curr_fmin`
-caused the guard to fire immediately since `9.8 Hz >= 5 Hz`, preventing any
+This matters for events where $f_{\mathrm{ref}} < f_{\mathrm{ISCO}}$ (for example GW190403:
+$f_{\mathrm{ref}} = 5\,\mathrm{Hz}$, $f_{\mathrm{ISCO}} \approx 9.9\,\mathrm{Hz}$): using $f_{\mathrm{ref}}$ as the fallback $f_{\mathrm{min}}$
+caused the guard to fire immediately since $9.8\,\mathrm{Hz} \ge 5.0\,\mathrm{Hz}$, preventing any
 retry.
 
 The same `_CaptureCStderr`-based retry loop is used in
@@ -255,55 +255,48 @@ The reference paper is `farr_ms.pdf` in the repo root.
 
 ### Per-sample memory quantities (Eqs. 6–9)
 
-The memory signal model adds a memory waveform `h_m(θ)` scaled by amplitude `A_m` to the residual `r(θ) = d − R(θ)h(θ)`. GR predicts `A_m = 1`.
+The memory signal model adds a memory waveform $h_m(\theta)$ scaled by amplitude $A_m$ to the residual $r(\theta) = d - R(\theta)\,h(\theta)$. GR predicts $A_m = 1$.
 
-Marginalising `A_m` with a flat prior over a Gaussian likelihood (Eq. 5) gives (Eq. 8):
+Marginalising $A_m$ with a flat prior over a Gaussian likelihood (Eq. 5) gives (Eq. 8):
 
-```
-log L̃(θ) = −½<r|r> + ½ Â Re<h̃_m|r> − ½ log(2π<h̃_m|h̃_m>) + C
-```
+$$
+\log \tilde{L}(\theta) = -\tfrac{1}{2}\langle r \vert r \rangle + \tfrac{1}{2}\hat{A}\,\Re\langle \tilde{h}_m \vert r \rangle - \tfrac{1}{2}\log\bigl(2\pi\langle \tilde{h}_m \vert \tilde{h}_m \rangle\bigr) + C
+$$
 
 Key quantities per posterior sample (computed in `compute_memory_variables_likelihoods_and_weights`):
-- **Inner products:** `hrs = <h_m|r>`, `hhs = <h_m|h_m>`, `rrs = <r|r>` (noise-weighted, summed over detectors). bilby returns these as **complex** numbers (`4/T · Σ conj(a)·b/PSD`); only the real parts carry physical meaning.
-- **ML amplitude (Eq. 6):** `A_hat = Re(hrs) / hhs`
-- **Amplitude uncertainty (Eq. 7):** `A_sigma = 1 / sqrt(hhs)`
+- **Inner products:** $\mathit{hrs} = \langle h_m\vert r\rangle$, $\mathit{hhs} = \langle h_m\vert h_m\rangle$, $\mathit{rrs} = \langle r\vert r\rangle$ (noise-weighted, summed over detectors). bilby returns these as **complex** numbers ($\frac{4}{T}\sum \overline{a}\cdot b/\mathrm{PSD}$); only the real parts carry physical meaning.
+- **ML amplitude (Eq. 6):** $\hat{A} = \Re(\mathit{hrs}) / \mathit{hhs}$
+- **Amplitude uncertainty (Eq. 7):** $A_\sigma = 1/\sqrt{\mathit{hhs}}$
 - **`log_weight` (Eq. 9):** log of the memory-to-no-memory likelihood ratio, used to importance-weight PE samples:
-  ```
-  log_weight.real = ½ A_hat · Re(hrs) − ½ log(2π · hhs)
-                  = ½ (A_hat/A_sigma)² + log(A_sigma) − ½ log(2π)
-  ```
-  Stored as complex128 in HDF5; `load_memory_data` takes `.real`. Verified analytically: `log_weight.real − ½(A_hat/A_sigma)² − log(A_sigma) = −½log(2π)` exactly for all samples.
-- **`log_likelihood`:** full amplitude-marginalized log-likelihood: `−½ rrs + log_weight` (Eq. 8).
+  $$
+  \begin{aligned}
+  \log\mathit{w}_{\mathrm{real}} &= \tfrac{1}{2}\hat{A}\,\Re(\mathit{hrs}) - \tfrac{1}{2}\log(2\pi\cdot \mathit{hhs}) \\
+  &= \tfrac{1}{2}(\hat{A}/A_\sigma)^2 + \log(A_\sigma) - \tfrac{1}{2}\log(2\pi)
+  \end{aligned}
+  $$
+  Stored as complex128 in HDF5; `load_memory_data` takes `.real`. Verified analytically: $\log\mathit{w}_{\mathrm{real}} - \tfrac{1}{2}(\hat{A}/A_\sigma)^2 - \log(A_\sigma) = -\tfrac{1}{2}\log(2\pi)$ exactly for all samples.
+- **`log_likelihood`:** full amplitude-marginalized log-likelihood: $-\tfrac{1}{2}\,\mathit{rrs} + \log\mathit{w}$ (Eq. 8).
 
 ### Hierarchical population analysis (Eqs. 10–15)
 
-The goal is to infer population hyperparameters Λ = (Λ_θ, μ_A, σ_A) from a catalog.
+The goal is to infer population hyperparameters $\Lambda = (\Lambda_\theta, \mu_A, \sigma_A)$ from a catalog.
 
-Starting from per-event PE samples θ_i ~ p(θ|d) (original no-memory posterior), and the conditional `p(A|θ_i) = N(A | A_hat_i, A_sigma_i)` (Eq. 10), the hierarchical integral (Eq. 11) reduces to (Eq. 15):
+Starting from per-event PE samples $\theta_i \sim p(\theta\mid d)$ (original no-memory posterior), and the conditional $p(A\mid\theta_i) = \mathcal{N}(A \mid \hat{A}_i, A_{\sigma,i})$ (Eq. 10), the hierarchical integral (Eq. 11) reduces to (Eq. 15):
 
-```
-I ≈ (1/N) Σ_i  [p(θ_i | Λ_θ) / W(θ_i)]  · N(A_hat_i | μ_A, sqrt(A_sigma_i² + σ_A²))
-```
+$$
+I \approx \frac{1}{N}\sum_i \left[\frac{p(\theta_i \mid \Lambda_\theta)}{W(\theta_i)}\right] \cdot \mathcal{N}\bigl(\hat{A}_i \mid \mu_A, \sqrt{A_{\sigma,i}^2 + \sigma_A^2}\bigr)
+$$
 
-where `W(θ)` is the PE sampling prior and the integral over `A` has been performed analytically.
+where $W(\theta)$ is the PE sampling prior and the integral over $A$ has been performed analytically.
 
 **The `log_weight` importance weights (Eq. 9) are applied in `generate_data` and `generate_tgr_only_data` when resampling PE samples**, to reweight from the original no-memory posterior to the memory-marginalised posterior (Eq. 9). The Farr et al. paper notes this correction is small when the memory SNR is low per event.
-
-### Practical limitations with current data
-
-Memory signals are DC/step-function-like, concentrated well below 10 Hz where detector noise is large. Consequently:
-- `hhs = <h_m|h_m>` is very small → `A_sigma = 1/sqrt(hhs)` is large (O(10)–O(300) observed)
-- `A_hat = Re(hrs)/hhs` is poorly constrained and noise-dominated → values up to O(10,000) observed for most events
-- `log_weight ∝ (A_hat/A_sigma)²` can reach thousands → ESS after memory reweighting collapses to ~1 for most events
-- Only events where the memory template happens to have low noise-weighted cross-correlation (e.g., GW230924_124453) contribute meaningfully to the hierarchical analysis
-- This is a fundamental observational limitation, not a code error — the formulas have been verified to be consistent with the paper
 
 ## Post-processing: PPD and rate plots
 
 `scripts/plot_ppd.py` visualises the results of a hierarchical run by drawing
 1D Population Predictive Distributions (PPDs) — the marginal population
-density averaged over the posterior — for primary mass `m1`, mass ratio `q`,
-and spin magnitude `a`.
+density averaged over the posterior — for primary mass $m_1$, mass ratio $q$,
+and spin magnitude $a$.
 
 ### Basic usage
 
@@ -322,10 +315,10 @@ uv run python scripts/plot_ppd.py result_astro.nc --n-ppd 500
 Output is `ppd.png` in the same directory as the first input file (override
 with `--outdir`).
 
-### Rate mode: dR/dm1 instead of p(m1)
+### Rate mode: $\mathrm{d}R/\mathrm{d}m_1$ instead of $p(m_1)$
 
 Passing `--injection-file` converts the `m1` panel from the normalised PDF
-`p(m1)` to the differential merger rate `dR/dm1 [Gpc^-3 yr^-1 M_sun^-1]`.
+$p(m_1)$ to the differential merger rate $\mathrm{d}R/\mathrm{d}m_1$ $[\mathrm{Gpc}^{-3}\,\mathrm{yr}^{-1}\,M_\odot^{-1}]$.
 `--n-obs` must also be provided (the number of events used in the analysis).
 
 ```bash
@@ -338,63 +331,64 @@ uv run python scripts/plot_ppd.py result_astro.nc \
 
 The total volumetric merger rate is estimated as
 
-```
-R(Λ) = N_obs / (T_obs * β(Λ))
-```
+$$
+R(\Lambda) = \frac{N_{\mathrm{obs}}}{T_{\mathrm{obs}}\,\beta(\Lambda)}
+$$
 
-where `T_obs` is the live observing time (read from the injection file) and
-`β(Λ)` is the **effective surveyed comoving volume** [Gpc^3]:
+where $T_{\mathrm{obs}}$ is the live observing time (read from the injection file) and
+$\beta(\Lambda)$ is the **effective surveyed comoving volume** $[\mathrm{Gpc}^3]$:
 
-```
-β(Λ) = (1/N_draw) * Σ_{found}  p_pop(θ | Λ) / p_draw(θ)
-```
+$$
+\beta(\Lambda) = \frac{1}{N_{\mathrm{draw}}}\sum_{\mathrm{found}} \frac{p_{\mathrm{pop}}(\theta \mid \Lambda)}{p_{\mathrm{draw}}(\theta)}
+$$
 
-`N_draw` is the total number of injections attempted (found + missed), and the
+$N_{\mathrm{draw}}$ is the total number of injections attempted (found + missed), and the
 sum runs over found injections only.  The population model density is
 
-```
-p_pop(θ | Λ) = p(m1) * p(q|m1) * p(z) * p(a1) * p(a2)
-```
+$$
+p_{\mathrm{pop}}(\theta \mid \Lambda) = p(m_1)\,p(q\mid m_1)\,p(z)\,p(a_1)\,p(a_2)
+$$
 
-where `p(z) ∝ (1+z)^λ * dVc/dz/(1+z)` is left **unnormalised**: the integral
-over redshift gives a volume in Gpc^3, so `β` has units Gpc^3 and `R` has
-units Gpc^-3 yr^-1.
+where $p(z) \propto (1+z)^{\lambda}\,\frac{\mathrm{d}V_C/\mathrm{d}z}{1+z}$ is left **unnormalised**: the integral
+over redshift gives a volume in $\mathrm{Gpc}^3$, so $\beta$ has units $\mathrm{Gpc}^3$ and $R$ has
+units $\mathrm{Gpc}^{-3}\,\mathrm{yr}^{-1}$.
 
-The differential rate is evaluated at z = 0.2 (following the LVK populations
+The differential rate is evaluated at $z = 0.2$ (following the LVK populations
 paper convention):
 
-```
-R(z=0.2 | Λ) = R(Λ) * (1 + 0.2)^lambda
-dR/dm1(z=0.2) = R(z=0.2 | Λ) * p(m1 | Λ)
-```
+$$
+\begin{aligned}
+R(z=0.2 \mid \Lambda) &= R(\Lambda)\,(1+0.2)^{\lambda} \\
+\frac{\mathrm{d}R}{\mathrm{d}m_1}(z=0.2) &= R(z=0.2\mid \Lambda)\,p(m_1\mid \Lambda)
+\end{aligned}
+$$
 
-No `dz/dVc` Jacobian is needed: `β` already has units of Gpc³ (comoving
-volume), so `R` is already per unit comoving volume at z=0.  The
-`(1+z)^lambda` factor shifts the evaluation to z=0.2.
+No $\mathrm{d}z/\mathrm{d}V_C$ Jacobian is needed: $\beta$ already has units of $\mathrm{Gpc}^3$ (comoving
+volume), so $R$ is already per unit comoving volume at $z=0$.  The
+$(1+z)^{\lambda}$ factor shifts the evaluation to $z=0.2$.
 
-Both `R(z=0)` and `R(z=0.2)` are printed to stdout; the plot y-axis shows
-the rate at z=0.2.
+Both $R(z=0)$ and $R(z=0.2)$ are printed to stdout; the plot y-axis shows
+the rate at $z=0.2$.
 
 #### Draw prior Jacobian
 
 The injection file records the draw prior as a log-density in Cartesian spin
-coordinates, `lnpdraw(m1, m2, z, sx, sy, sz)`.  Converting to `(m1, q, z, a1,
-a2)` requires two Jacobian factors:
+coordinates, $\mathrm{lnpdraw}(m_1,m_2,z,s_x,s_y,s_z)$.  Converting to $(m_1,q,z,a_1,a_2)$
+requires two Jacobian factors:
 
 | Change of variables | Jacobian factor |
 |---|---|
-| `m2 → q = m2/m1` | `m1` |
-| `(sx, sy, sz) → a` (isotropic direction integrated out) | `4π a²` per spin |
+| $m_2 \to q = m_2/m_1$ | $m_1$ |
+| $(s_x,s_y,s_z) \to a$ (isotropic direction integrated out) | $4\pi a^2$ per spin |
 
-Including the per-injection sensitivity weight `w` (network duty cycle):
+Including the per-injection sensitivity weight $w$ (network duty cycle):
 
-```
-log p_draw(m1, q, z, a1, a2) = lnpdraw
-    + log(m1)
-    + log(4π a1²)
-    + log(4π a2²)
-    + log(w)
-```
+$$
+\begin{aligned}
+\log p_{\mathrm{draw}}(m_1,q,z,a_1,a_2) = {}& \mathrm{lnpdraw} + \log(m_1) \\
+&+ \log(4\pi a_1^2) + \log(4\pi a_2^2) + \log(w)
+\end{aligned}
+$$
 
 ## Hierarchical population model
 
@@ -413,12 +407,12 @@ over posterior samples from individual-event parameter estimation.
 
 The full joint population density factorises as:
 
-```
-p(m1, q, z, a1, a2, cos_t1, cos_t2, A) =
-    p(m1) * p(q | m1) * p(z) * p(a1, a2) * [p(cos_t1, cos_t2)] * [p(A)]
-```
+$$
+p(m_1,q,z,a_1,a_2,c_{t,1},c_{t,2},A) =
+p(m_1)\,p(q\mid m_1)\,p(z)\,p(a_1,a_2)\,[p(c_{t,1},c_{t,2})]\,[p(A)]
+$$
 
-where brackets denote optional components (TGR amplitude, included when running
+where $c_{t,i}$ are cosine tilts, brackets denote optional components (TGR amplitude, included when running
 `--analyze memory` or `--analyze joint`). Spin tilts are always included.
 
 #### Primary mass: broken power law + two Gaussian peaks
@@ -427,101 +421,113 @@ Following the standard LVK parameterisation (cf. gwpopulation / GWTC-3).
 
 The power law has two slopes separated at a break mass:
 
-```
-m_break = mmin + b * (mmax - mmin)
-```
+$$
+m_{\mathrm{break}} = m_{\min} + b\,(m_{\max}-m_{\min})
+$$
 
-where `mmin = 3`, `mmax = 300`, and `b` is the break fraction. The prior on
-`b` is restricted so that `m_break` lies between 20 and 50 solar masses. Each
+where $m_{\min} = 3$, $m_{\max} = 300$, and $b$ is the break fraction. The prior on
+$b$ is restricted so that $m_{\mathrm{break}}$ lies between 20 and 50 solar masses. Each
 segment
-is a normalised power law `PL(m; a, lo, hi)`:
+is a normalised power law $\mathrm{PL}(m; a, \mathrm{lo}, \mathrm{hi})$:
 
-```
-PL(m; a, lo, hi) = (1-a) * m^{-a} / (hi^{1-a} - lo^{1-a})     (a != 1)
-                 = m^{-1} / ln(hi/lo)                            (a = 1)
-```
+$$
+\mathrm{PL}(m; a, \mathrm{lo}, \mathrm{hi}) =
+\begin{cases}
+\dfrac{(1-a)\,m^{-a}}{\mathrm{hi}^{1-a}-\mathrm{lo}^{1-a}} & a \neq 1 \\[0.6em]
+\dfrac{m^{-1}}{\ln(\mathrm{hi}/\mathrm{lo})} & a = 1
+\end{cases}
+$$
 
-A continuity correction `C = PL_high(m_break) / PL_low(m_break)` ensures the
+A continuity correction $C = \mathrm{PL}_{\mathrm{high}}(m_{\mathrm{break}}) / \mathrm{PL}_{\mathrm{low}}(m_{\mathrm{break}})$ ensures the
 density is continuous at the break:
 
-```
-BPL(m) = [ C * PL(m; a1, mmin, m_break) * I(m < m_break)
-         +     PL(m; a2, m_break, mmax) * I(m >= m_break) ] / (1 + C)
-```
+$$
+\mathrm{BPL}(m) = \frac{
+C\,\mathrm{PL}(m; a_1, m_{\min}, m_{\mathrm{break}})\,\mathbf{1}_{\{m < m_{\mathrm{break}}\}}
++ \mathrm{PL}(m; a_2, m_{\mathrm{break}}, m_{\max})\,\mathbf{1}_{\{m \ge m_{\mathrm{break}}\}}
+}{1 + C}
+$$
 
 Two Gaussian components capture features not well described by a power law.
 Their mean priors are non-overlapping to reduce degeneracies:
 
-- **Peak 1** (low-mass): `mu_peak_1 ~ U(5, 20)`
-- **Peak 2** (high-mass): `mu_peak_2 ~ U(25, 60)`
+- **Peak 1** (low-mass): $\mu_{\mathrm{peak},1} \sim \mathcal{U}(5, 20)$
+- **Peak 2** (high-mass): $\mu_{\mathrm{peak},2} \sim \mathcal{U}(25, 60)$
 
 Full mixture:
 
-```
-p(m1) = frac_bpl    * BPL(m1)
-      +  frac_peak_1 * N(m1 | mu_peak_1, sigma_peak_1)
-      +  frac_peak_2 * N(m1 | mu_peak_2, sigma_peak_2)
-```
+$$
+\begin{aligned}
+p(m_1) = {}& f_{\mathrm{bpl}}\,\mathrm{BPL}(m_1) \\
+&+ f_{\mathrm{peak},1}\,\mathcal{N}(m_1 \mid \mu_{\mathrm{peak},1}, \sigma_{\mathrm{peak},1}) \\
+&+ f_{\mathrm{peak},2}\,\mathcal{N}(m_1 \mid \mu_{\mathrm{peak},2}, \sigma_{\mathrm{peak},2})
+\end{aligned}
+$$
 
-where `(frac_bpl, frac_peak_1, frac_peak_2) ~ Dirichlet(1, 1, 1)`.
+where $(f_{\mathrm{bpl}}, f_{\mathrm{peak},1}, f_{\mathrm{peak},2}) \sim \mathrm{Dirichlet}(1, 1, 1)$.
 
 #### Mass ratio: power law
 
-The mass ratio `q = m2/m1` follows a normalised power law on
-`[mmin/m1, 1]`:
+The mass ratio $q = m_2/m_1$ follows a normalised power law on
+$[m_{\min}/m_1,\,1]$:
 
-```
-p(q | m1) ~ q^beta,    q >= mmin / m1
-```
+$$
+p(q \mid m_1) \propto q^{\beta},\qquad q \ge m_{\min}/m_1
+$$
 
 #### Redshift: power law in (1+z)
 
-The merger rate density evolves as a power law in `(1+z)` weighted by the
+The merger rate density evolves as a power law in $(1+z)$ weighted by the
 differential comoving volume per unit source time:
 
-```
-p(z) ~ (1+z)^lamb * dVc/dz / (1+z)
-```
+$$
+p(z) \propto (1+z)^{\lambda}\,\frac{\mathrm{d}V_C/\mathrm{d}z}{1+z}
+$$
 
-where `dVc/dz` is computed from a Planck15-like cosmology (H0=67.9,
-Om0=0.3065) and interpolated on a grid up to `z = 2.5`.
+where $\mathrm{d}V_C/\mathrm{d}z$ is computed from a Planck15-like cosmology (H0=67.9,
+Om0=0.3065) and interpolated on a grid up to $z = 2.5$.
 
 #### Spin magnitudes
 
-The spin magnitudes `(a1, a2)` are modelled as a bivariate normal
-distribution with shared mean `mu_spin` and shared variance `sigma_spin^2`,
+The spin magnitudes $(a_1,a_2)$ are modelled as a bivariate normal
+distribution with shared mean $\mu_{\mathrm{spin}}$ and shared variance $\sigma_{\mathrm{spin}}^2$,
 convolved with per-event KDE bandwidth matrices to account for measurement
 uncertainty:
 
-```
-p(a1, a2) = MVN([mu_spin, mu_spin], BW + sigma_spin^2 * I)
-```
+$$
+p(a_1,a_2) = \mathcal{N}\!\left(
+\begin{pmatrix}\mu_{\mathrm{spin}} \\ \mu_{\mathrm{spin}}\end{pmatrix},\;
+\mathrm{BW} + \sigma_{\mathrm{spin}}^2 I
+\right)
+$$
 
 #### Spin tilts (optional, `--use-tilts`)
 
-The cosine tilt angles `(cos_t1, cos_t2)` follow a mixture of
-an isotropic component (uniform on `[-1, 1]^2`) and a truncated Gaussian
+The cosine tilt angles $(c_{t,1},c_{t,2})$ follow a mixture of
+an isotropic component (uniform on $[-1,1]^2$) and a truncated Gaussian
 component with a shared population location and scale:
 
-```
-p(cos_t1, cos_t2) = f_iso / 4
-    + (1 - f_iso) * N[-1,1](cos_t1 | mu_tilt, sigma_tilt)
-    * N[-1,1](cos_t2 | mu_tilt, sigma_tilt)
-```
+$$
+p(c_{t,1}, c_{t,2}) = \frac{f_{\mathrm{iso}}}{4}
++ (1-f_{\mathrm{iso}})\,\mathcal{N}_{\mathrm{TN}}(c_{t,1} \mid \mu_{\mathrm{tilt}}, \sigma_{\mathrm{tilt}})\,
+\mathcal{N}_{\mathrm{TN}}(c_{t,2} \mid \mu_{\mathrm{tilt}}, \sigma_{\mathrm{tilt}})
+$$
+
+where $\mathcal{N}_{\mathrm{TN}}$ is a Gaussian truncated to $[-1,1]$.
 
 #### TGR deviation parameter (optional)
 
-The population distribution for the TGR memory amplitude `A` is Gaussian with
-hyperparameters `mu_tgr` and `sigma_tgr`. GR predicts `mu_tgr = 0` and
-`sigma_tgr = 0` (i.e., no deviation from the GR memory prediction). The
-per-sample measurement uncertainty `A_sigma` is convolved analytically:
+The population distribution for the TGR memory amplitude $A$ is Gaussian with
+hyperparameters $\mu_{\mathrm{tgr}}$ and $\sigma_{\mathrm{tgr}}$. GR predicts $\mu_{\mathrm{tgr}} = 0$ and
+$\sigma_{\mathrm{tgr}} = 0$ (i.e., no deviation from the GR memory prediction). The
+per-sample measurement uncertainty $A_\sigma$ is convolved analytically:
 
-```
-p(A_hat | mu_tgr, sigma_tgr) = N(A_hat | mu_tgr, sqrt(A_sigma^2 + sigma_tgr^2))
-```
+$$
+p(\hat{A} \mid \mu_{\mathrm{tgr}}, \sigma_{\mathrm{tgr}}) = \mathcal{N}\!\left(\hat{A} \mid \mu_{\mathrm{tgr}}, \sqrt{A_\sigma^2 + \sigma_{\mathrm{tgr}}^2}\right)
+$$
 
-Prior widths on `mu_tgr` and `sigma_tgr` are auto-scaled from the data (1.5x
-the maximum absolute `A_hat`), or set manually via `--mu-tgr-scale` and
+Prior widths on $\mu_{\mathrm{tgr}}$ and $\sigma_{\mathrm{tgr}}$ are auto-scaled from the data (1.5×
+the maximum absolute $\hat{A}$), or set manually via `--mu-tgr-scale` and
 `--sigma-tgr-scale`.
 
 ### Selection effects
@@ -530,27 +536,27 @@ The joint model corrects for selection bias using an injection set. The
 expected detection fraction is estimated by importance-reweighting simulated
 injections:
 
-```
-<det> = (1/Ndraw) * sum_i p_pop(theta_i) / p_draw(theta_i)
-```
+$$
+\langle \mathrm{det} \rangle = \frac{1}{N_{\mathrm{draw}}}\sum_i \frac{p_{\mathrm{pop}}(\theta_i)}{p_{\mathrm{draw}}(\theta_i)}
+$$
 
-The log-likelihood includes a `-Nobs * log(<det>)` correction term.
+The log-likelihood includes a $-N_{\mathrm{obs}}\log\langle \mathrm{det} \rangle$ correction term.
 
 ### Effective sample size regularization
 
-Two soft N_eff penalties discourage regions of parameter space where the
+Two soft $N_{\mathrm{eff}}$ penalties discourage regions of parameter space where the
 importance weights become too concentrated:
 
-- **Per-event N_eff**: the minimum across events must exceed `Nobs`.
-- **Selection N_eff**: must exceed `4 * Nobs`.
+- **Per-event $N_{\mathrm{eff}}$**: the minimum across events must exceed `Nobs`.
+- **Selection $N_{\mathrm{eff}}$**: must exceed $4 \times N_{\mathrm{obs}}$.
 
 Both use a smooth boundary function that applies a steep penalty
-(`-x^10` scaling) when N_eff drops below the threshold.
+($-x^{10}$ scaling) when $N_{\mathrm{eff}}$ drops below the threshold.
 
 ### TGR-only model
 
-A simpler two-parameter model fitting only `mu_tgr` and `sigma_tgr` directly
-to the per-event `(A_hat, A_sigma)` measurements, without modelling any
+A simpler two-parameter model fitting only $\mu_{\mathrm{tgr}}$ and $\sigma_{\mathrm{tgr}}$ directly
+to the per-event $(\hat{A}, A_\sigma)$ measurements, without modelling any
 astrophysical population structure. Uses the same analytic Gaussian
 convolution as the joint model's TGR component.
 
@@ -564,7 +570,7 @@ fractions are sampled separately there via `Dirichlet(1, 1, 1)`.
 |-----------------|------------------|-----------------|-----------------------------------|
 | `alpha_1`       | U(-4, 12)        | Primary mass    | PL slope below break              |
 | `alpha_2`       | U(-4, 12)        | Primary mass    | PL slope above break              |
-| `b`             | U((20-3)/(300-3), (50-3)/(300-3)) | Primary mass | Break fraction, i.e. `m_break in [20, 50]` |
+| `b`             | U((20-3)/(300-3), (50-3)/(300-3)) | Primary mass | Break fraction, i.e. $m_{\mathrm{break}} \in [20, 50]$ |
 | `frac_bpl`      | Dirichlet(1,1,1) | Primary mass    | Broken-power-law mixture weight   |
 | `frac_peak_1`   | Dirichlet(1,1,1) | Primary mass    | Fraction in low-mass Gaussian     |
 | `mu_peak_1`     | U(5, 20)         | Primary mass    | Mean of low-mass Gaussian         |
@@ -573,9 +579,9 @@ fractions are sampled separately there via `Dirichlet(1, 1, 1)`.
 | `mu_peak_2`     | U(25, 60)        | Primary mass    | Mean of high-mass Gaussian        |
 | `sigma_peak_2`  | U(0.05, 10)      | Primary mass    | Std of high-mass Gaussian         |
 | `beta`          | U(-2, 7)         | Mass ratio      | Power-law slope for q             |
-| `lamb`          | U(-10, 10)       | Redshift        | Power-law index on (1+z)          |
-| `mu_spin`       | U(0, 0.7)        | Spin magnitudes | Shared mean of (a1, a2)           |
-| `sigma_spin`    | U(0.01, 1)       | Spin magnitudes | Shared std of (a1, a2)            |
+| `lamb`          | U(-10, 10)       | Redshift        | Power-law index on $(1+z)$          |
+| `mu_spin`       | U(0, 0.7)        | Spin magnitudes | Shared mean of $(a_1, a_2)$           |
+| `sigma_spin`    | U(0.01, 1)       | Spin magnitudes | Shared std of $(a_1, a_2)$            |
 | `f_iso`         | U(0, 1)          | Spin tilts      | Isotropic fraction                |
 | `mu_tilt`       | U(-1, 1)         | Spin tilts      | Shared truncated-Gaussian mean    |
 | `sigma_tilt`    | U(0.05, 10)      | Spin tilts      | Tilt peak width                   |
