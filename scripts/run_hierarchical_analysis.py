@@ -109,12 +109,12 @@ def _resolve_injection_file(args):
     if args.injection_runs == "o4a":
         return os.path.join(
             REPO_DIR,
-            "data/selection/mixture-real_o4a-cartesian_spins_20250503134659UTC.hdf",
+            "data/selection/samples-rpo4a_v2_20250503133839UTC-1366933504-23846400.hdf",
         )
     if args.injection_runs == "o3+o4a":
         return os.path.join(
             REPO_DIR,
-            "data/selection/mixture-real_o3_o4a-cartesian_spins_20250503134659UTC.hdf",
+            "data/selection/mixture-real_o3_o4a-polar_spins_20250503134659UTC.hdf",
         )
     raise ValueError(f"Unrecognized injection runs: {args.injection_runs}")
 

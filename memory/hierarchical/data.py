@@ -108,6 +108,116 @@ def _get_hdf5_text(group, path):
     return _decode_hdf5_scalar(group[path][()])
 
 
+def _get_structured_field(table, *names):
+    """Return the first matching field from a structured array/table."""
+    dtype_names = getattr(table.dtype, "names", ()) or ()
+    for name in names:
+        if name in dtype_names:
+            return table[name]
+    raise KeyError(
+        f"None of the requested fields {names} were found in {dtype_names}"
+    )
+
+
+def _get_injection_redshift(events):
+    """Return the redshift column from a sensitivity-estimate table."""
+    return _get_structured_field(events, "redshift", "z")
+
+
+def _get_injection_spin_data(events):
+    """Return spin magnitudes/tilts derived from polar or Cartesian fields."""
+    dtype_names = set(getattr(events.dtype, "names", ()) or ())
+    polar_fields = {
+        "spin1_magnitude",
+        "spin1_polar_angle",
+        "spin2_magnitude",
+        "spin2_polar_angle",
+    }
+    if polar_fields.issubset(dtype_names):
+        a1 = np.asarray(events["spin1_magnitude"])
+        a2 = np.asarray(events["spin2_magnitude"])
+        sin_tilt_1 = np.sin(events["spin1_polar_angle"])
+        sin_tilt_2 = np.sin(events["spin2_polar_angle"])
+        cos_tilt_1 = np.clip(np.cos(events["spin1_polar_angle"]), -1.0, 1.0)
+        cos_tilt_2 = np.clip(np.cos(events["spin2_polar_angle"]), -1.0, 1.0)
+        return {
+            "a_1": a1,
+            "a_2": a2,
+            "sin_tilt_1": np.clip(sin_tilt_1, 0.0, None),
+            "sin_tilt_2": np.clip(sin_tilt_2, 0.0, None),
+            "cos_tilt_1": cos_tilt_1,
+            "cos_tilt_2": cos_tilt_2,
+            "spin1z": a1 * cos_tilt_1,
+            "spin2z": a2 * cos_tilt_2,
+            "draw_coordinates": "polar",
+        }
+
+    s1x = np.asarray(_get_structured_field(events, "spin1x"))
+    s1y = np.asarray(_get_structured_field(events, "spin1y"))
+    s1z = np.asarray(_get_structured_field(events, "spin1z"))
+    s2x = np.asarray(_get_structured_field(events, "spin2x"))
+    s2y = np.asarray(_get_structured_field(events, "spin2y"))
+    s2z = np.asarray(_get_structured_field(events, "spin2z"))
+    a1 = np.sqrt(s1x**2 + s1y**2 + s1z**2)
+    a2 = np.sqrt(s2x**2 + s2y**2 + s2z**2)
+    return {
+        "a_1": a1,
+        "a_2": a2,
+        "sin_tilt_1": np.sqrt(s1x**2 + s1y**2) / np.maximum(a1, 1e-30),
+        "sin_tilt_2": np.sqrt(s2x**2 + s2y**2) / np.maximum(a2, 1e-30),
+        "cos_tilt_1": np.clip(s1z / np.maximum(a1, 1e-30), -1.0, 1.0),
+        "cos_tilt_2": np.clip(s2z / np.maximum(a2, 1e-30), -1.0, 1.0),
+        "spin1z": s1z,
+        "spin2z": s2z,
+        "draw_coordinates": "cartesian",
+    }
+
+
+def _get_injection_log_draw_prior(events):
+    """Return the stored log draw density and its spin coordinate system."""
+    dtype_names = set(getattr(events.dtype, "names", ()) or ())
+
+    polar_joint_name = (
+        "lnpdraw_mass1_source_mass2_source_redshift_"
+        "spin1_magnitude_spin1_polar_angle_spin1_azimuthal_angle_"
+        "spin2_magnitude_spin2_polar_angle_spin2_azimuthal_angle"
+    )
+    if polar_joint_name in dtype_names:
+        return np.asarray(events[polar_joint_name]), "polar"
+
+    polar_factorized_names = (
+        "lnpdraw_mass1_source",
+        "lnpdraw_mass2_source_GIVEN_mass1_source",
+        "lnpdraw_z",
+        "lnpdraw_spin1_magnitude",
+        "lnpdraw_spin1_polar_angle",
+        "lnpdraw_spin1_azimuthal_angle",
+        "lnpdraw_spin2_magnitude",
+        "lnpdraw_spin2_polar_angle",
+        "lnpdraw_spin2_azimuthal_angle",
+    )
+    if all(name in dtype_names for name in polar_factorized_names):
+        return (
+            np.sum(
+                [np.asarray(events[name]) for name in polar_factorized_names],
+                axis=0,
+            ),
+            "polar",
+        )
+
+    cartesian_joint_name = (
+        "lnpdraw_mass1_source_mass2_source_redshift_"
+        "spin1x_spin1y_spin1z_spin2x_spin2y_spin2z"
+    )
+    if cartesian_joint_name in dtype_names:
+        return np.asarray(events[cartesian_joint_name]), "cartesian"
+
+    raise KeyError(
+        "Could not identify a supported injection draw-density field in the "
+        "selection file."
+    )
+
+
 def _build_prior_eval_namespace():
     """Return the namespace needed to evaluate bilby prior repr strings."""
     import bilby
@@ -785,8 +895,11 @@ def read_injection_file(
     Applies IFAR and, when requested, detector-frame total-mass,
     mass-ratio, and minimum secondary mass cuts to determine which
     injections were "found", then extracts source-frame masses, spins,
-    redshifts, and draw priors. Also computes derived spin quantities
-    (chi_eff, chi_p) and converts the analysis time to years.
+    redshifts, and draw priors. Official polar-spin releases are
+    converted from tilt angle to cos(tilt), while legacy Cartesian files
+    retain the corresponding spin-coordinate Jacobian. Also computes
+    derived spin quantities (chi_eff, chi_p) and converts the analysis
+    time to years.
 
     Sources:
     - https://iopscience.iop.org/article/10.3847/2515-5172/ac2ba7
@@ -829,9 +942,10 @@ def read_injection_file(
         fars = [events[key] for key in events.dtype.names if "far" in key]
         min_fars = np.min(fars, axis=0)
         found = min_fars < 1 / ifar_threshold
+        redshift = _get_injection_redshift(events)
         detector_frame_total_mass = (
             (events["mass1_source"] + events["mass2_source"])
-            * (1 + events["redshift"])
+            * (1 + redshift)
         )
         if min_detector_frame_total_mass is not None:
             found &= detector_frame_total_mass >= min_detector_frame_total_mass
@@ -842,47 +956,37 @@ def read_injection_file(
             found &= events["mass2_source"] >= min_mass_2_source
 
         events = events[found]
+        spin_data = _get_injection_spin_data(events)
+        ln_prior, draw_coordinates = _get_injection_log_draw_prior(events)
 
         injections["mass_1_source"] = events["mass1_source"]
         injections["mass_ratio"] = (
             events["mass2_source"] / injections["mass_1_source"]
         )
-        injections["redshift"] = events["redshift"]
-        injections["a_1"] = (
-            events["spin1x"] ** 2
-            + events["spin1y"] ** 2
-            + events["spin1z"] ** 2
-        ) ** 0.5
-        injections["a_2"] = (
-            events["spin2x"] ** 2
-            + events["spin2y"] ** 2
-            + events["spin2z"] ** 2
-        ) ** 0.5
-        injections["cos_tilt_1"] = events["spin1z"] / injections["a_1"]
-        injections["cos_tilt_2"] = events["spin2z"] / injections["a_2"]
+        injections["redshift"] = _get_injection_redshift(events)
+        injections["a_1"] = spin_data["a_1"]
+        injections["a_2"] = spin_data["a_2"]
+        injections["cos_tilt_1"] = spin_data["cos_tilt_1"]
+        injections["cos_tilt_2"] = spin_data["cos_tilt_2"]
+        injections["spin1z"] = spin_data["spin1z"]
+        injections["spin2z"] = spin_data["spin2z"]
 
-        injections["spin1z"] = events["spin1z"]
-        injections["spin2z"] = events["spin2z"]
-
-        ln_prior = events[
-            "lnpdraw_mass1_source_mass2_source_redshift_spin1x_spin1y_spin1z_spin2x_spin2y_spin2z"
-        ]
-
-        # The draw prior density (ln_prior) is defined w.r.t. Cartesian spin
-        # coordinates: p_draw(m1, m2, z, s1x, s1y, s1z, s2x, s2y, s2z).
-        # The population model uses spherical spin parameters (a, cos_tilt, phi)
-        # and the mass ratio q = m2 / m1. To convert the draw prior to the
-        # marginalized parameter space, we need to:
-        #   Since dm2 = m1 dq at fixed m1, the Jacobian for (m1, m2) -> (m1, q)
-        #   contributes +log(m1).
-        #   The Jacobian for (sx, sy, sz) -> (a, cos_tilt, phi) is a^2,
-        #   so we add 2*log(a) per spin to convert the draw prior to the
-        #   spherical-spin parameter space used by the model.
-        log_jacobian = (
-            np.log(np.clip(injections["mass_1_source"], 1e-30, None)) +
-            2 * np.log(np.clip(injections["a_1"], 1e-30, None)) +
-            2 * np.log(np.clip(injections["a_2"], 1e-30, None))
-        )
+        # The population model is written in (m1, q, z, a1, a2, cos_tilt_1,
+        # cos_tilt_2), so we always need the m2 -> q Jacobian. Legacy
+        # Cartesian mixture files need the a^2 spin-coordinate Jacobian,
+        # while official polar-spin releases need dtheta/dcos(theta)=1/sin(theta)
+        # for each spin.
+        log_jacobian = np.log(np.clip(injections["mass_1_source"], 1e-30, None))
+        if draw_coordinates == "cartesian":
+            log_jacobian += (
+                2 * np.log(np.clip(injections["a_1"], 1e-30, None))
+                + 2 * np.log(np.clip(injections["a_2"], 1e-30, None))
+            )
+        else:
+            log_jacobian -= (
+                np.log(np.clip(spin_data["sin_tilt_1"], 1e-30, None))
+                + np.log(np.clip(spin_data["sin_tilt_2"], 1e-30, None))
+            )
 
         log_prior = ln_prior + log_jacobian
 

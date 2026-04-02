@@ -78,6 +78,11 @@ from scipy.special import logsumexp
 from scipy.stats import norm as scipy_norm
 import arviz as az
 
+from memory.hierarchical.data import (
+    _get_injection_log_draw_prior,
+    _get_injection_redshift,
+    _get_injection_spin_data,
+)
 from memory.hierarchical.models import MMIN, MMAX, zinterp, dVdzdt_interp
 
 
@@ -145,7 +150,8 @@ def _load_injection_data(inj_file, ifar_threshold=1000, snr_inspiral_cut=6):
     """Load found injections from an HDF5 sensitivity-estimate file.
 
     Applies the same IFAR + inspiral-SNR selection as data.py and mirrors the
-    same `log_p_draw` convention used by the inference model. This keeps the
+    same `log_p_draw` convention used by the inference model for both the new
+    polar-spin releases and the legacy Cartesian mixture files. This keeps the
     post-processed beta and rate posterior consistent with archived runs.
 
     Parameters
@@ -169,17 +175,16 @@ def _load_injection_data(inj_file, ifar_threshold=1000, snr_inspiral_cut=6):
     """
     with h5py.File(inj_file, "r") as f:
         ev = f["events"]
-        m1_all  = ev["mass1_source"][:]
-        m2_all  = ev["mass2_source"][:]
-        z_all   = ev["redshift"][:]
-        lnp_all = ev[
-            "lnpdraw_mass1_source_mass2_source_redshift_"
-            "spin1x_spin1y_spin1z_spin2x_spin2y_spin2z"
-        ][:]
-        s1x = ev["spin1x"][:]; s1y = ev["spin1y"][:]; s1z = ev["spin1z"][:]
-        s2x = ev["spin2x"][:]; s2y = ev["spin2y"][:]; s2z = ev["spin2z"][:]
+        m1_all = ev["mass1_source"][:]
+        m2_all = ev["mass2_source"][:]
+        z_all = np.asarray(_get_injection_redshift(ev))
+        spin_data = _get_injection_spin_data(ev)
+        lnp_all, draw_coordinates = _get_injection_log_draw_prior(ev)
         wgt_all = ev["weights"][:]
-        snr_all = ev["estimated_optimal_snr_net"][:]
+        if "estimated_optimal_snr_net" in ev.dtype.names:
+            snr_all = ev["estimated_optimal_snr_net"][:]
+        else:
+            snr_all = ev["snr_net"][:]
 
         # IFAR cut
         far_keys = [k for k in ev.dtype.names if "far" in k]
@@ -196,20 +201,32 @@ def _load_injection_data(inj_file, ifar_threshold=1000, snr_inspiral_cut=6):
         Ndraw = int(f.attrs["total_generated"])
         T_obs = float(f.attrs["total_analysis_time"]) / (3600.0 * 24.0 * 365.25)
 
-    a1_all = np.sqrt(s1x**2 + s1y**2 + s1z**2)
-    a2_all = np.sqrt(s2x**2 + s2y**2 + s2z**2)
-    cost1_all = np.clip(s1z / np.maximum(a1_all, 1e-300), -1.0, 1.0)
-    cost2_all = np.clip(s2z / np.maximum(a2_all, 1e-300), -1.0, 1.0)
+    a1_all = np.asarray(spin_data["a_1"])
+    a2_all = np.asarray(spin_data["a_2"])
+    cost1_all = np.asarray(spin_data["cos_tilt_1"])
+    cost2_all = np.asarray(spin_data["cos_tilt_2"])
+
+    sin_tilt_1 = np.asarray(spin_data["sin_tilt_1"])
+    sin_tilt_2 = np.asarray(spin_data["sin_tilt_2"])
 
     # Match memory.hierarchical.data.read_injection_file exactly so the
     # post-processing beta uses the same draw-density convention as the
     # inference model for archived runs.
     log_p_draw = (
         lnp_all
-        + 2.0 * np.log(np.maximum(a1_all, 1e-300))
-        + 2.0 * np.log(np.maximum(a2_all, 1e-300))
+        + np.log(np.maximum(m1_all, 1e-300))
         - np.log(np.maximum(wgt_all, 1e-300))
     )
+    if draw_coordinates == "cartesian":
+        log_p_draw += (
+            2.0 * np.log(np.maximum(a1_all, 1e-300))
+            + 2.0 * np.log(np.maximum(a2_all, 1e-300))
+        )
+    else:
+        log_p_draw -= (
+            np.log(np.maximum(sin_tilt_1, 1e-300))
+            + np.log(np.maximum(sin_tilt_2, 1e-300))
+        )
 
     return {
         "m1":       m1_all[found],

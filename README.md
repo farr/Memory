@@ -16,9 +16,10 @@ Python 3.11 is required; the version is pinned in `.python-version`.
 cd data && ./download.sh
 ```
 
-This fetches `NRSur7dq4_v1.0.h5` (surrogate model) and
-`posterior_samples_NRSur7dq4.h5` from Zenodo, then creates the
-`NRSur7dq4.h5` symlink expected by the waveform code.
+This fetches `NRSur7dq4_v1.0.h5` (surrogate model),
+`posterior_samples_NRSur7dq4.h5`, and the default polar-spin selection
+files from Zenodo, then creates the `NRSur7dq4.h5` symlink expected by
+the waveform code.
 
 ### Run the main analysis
 

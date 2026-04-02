@@ -17,6 +17,18 @@ curl -L -C - -z NRSur7dq4_v1.0.h5 --fail \
   -o NRSur7dq4_v1.0.h5 \
   "https://zenodo.org/records/14999310/files/NRSur7dq4_v1.0.h5?download=1"
 
+mkdir -p selection
+
+echo "Downloading O3+O4a polar-spin selection file..."
+curl -L -C - -z selection/mixture-real_o3_o4a-polar_spins_20250503134659UTC.hdf --fail \
+  -o selection/mixture-real_o3_o4a-polar_spins_20250503134659UTC.hdf \
+  "https://zenodo.org/records/16740128/files/mixture-real_o3_o4a-polar_spins_20250503134659UTC.hdf?download=1"
+
+echo "Downloading O4a polar-spin selection file..."
+curl -L -C - -z selection/samples-rpo4a_v2_20250503133839UTC-1366933504-23846400.hdf --fail \
+  -o selection/samples-rpo4a_v2_20250503133839UTC-1366933504-23846400.hdf \
+  "https://zenodo.org/records/16740117/files/samples-rpo4a_v2_20250503133839UTC-1366933504-23846400.hdf?download=1"
+
 # Create symlink if it doesn't exist
 if [ ! -L NRSur7dq4.h5 ]; then
   echo "Creating symlink NRSur7dq4.h5 -> NRSur7dq4_v1.0.h5"
