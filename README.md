@@ -389,7 +389,7 @@ Including the per-injection sensitivity weight $w$ (network duty cycle):
 $$
 \begin{aligned}
 \log p_{\mathrm{draw}}(m_1,q,z,a_1,a_2,c_{t,1},c_{t,2}) = {}& \mathrm{lnpdraw} + \log(m_1) \\
-&+ \log(2\pi a_1^2) + \log(2\pi a_2^2) + \log(w)
+&+ \log(2\pi a_1^2) + \log(2\pi a_2^2) - \log(w)
 \end{aligned}
 $$
 
