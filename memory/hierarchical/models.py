@@ -90,7 +90,7 @@ def make_tgr_only_model(A_hats, A_sigmas, log_weights, Nobs,
     log_wts = dist.Normal(mu_tgr, sigma_eff).log_prob(A_hats) + log_weights
 
     log_like = logsumexp(log_wts, axis=1)
-    log_like = jnp.nan_to_num(log_like, neginf=-1e20, posinf=1e20)
+    log_like = jnp.nan_to_num(log_like, nan=-1e20, neginf=-1e20, posinf=1e20)
     numpyro.factor("log_likelihood", jnp.sum(log_like))
 
 
@@ -341,12 +341,12 @@ def make_joint_model(
 
     # Adding the per event likelihood term (stable log-sum-exp)
     log_like = logsumexp(log_wts, axis=1)
-    log_like = jnp.nan_to_num(log_like, neginf=-1e20, posinf=1e20)
+    log_like = jnp.nan_to_num(log_like, nan=-1e20, neginf=-1e20, posinf=1e20)
     numpyro.factor("log_likelihood", jnp.sum(log_like))
 
     # Selection effect term
     log_sel = logsumexp(log_sel_wts) - jnp.log(Ndraw)
-    log_sel = jnp.nan_to_num(log_sel, neginf=-1e20, posinf=1e20)
+    log_sel = jnp.nan_to_num(log_sel, nan=1e20, neginf=-1e20, posinf=1e20)
     numpyro.factor("selection", -Nobs * log_sel)
 
     # N eff cuts
@@ -362,7 +362,7 @@ def make_joint_model(
     numpyro.deterministic("neff", neff)
     numpyro.factor(
         "neff_criteria",
-        jnp.nan_to_num(log_smooth_neff_boundary(min_neff, Nobs), neginf=-1e20, posinf=1e20),
+        jnp.nan_to_num(log_smooth_neff_boundary(min_neff, Nobs), nan=-1e20, neginf=-1e20, posinf=1e20),
     )
 
     log_mu2 = logsumexp(2 * log_sel_wts) - 2 * jnp.log(Ndraw)
@@ -374,6 +374,6 @@ def make_joint_model(
     numpyro.factor(
         "neff_sel_criteria",
         jnp.nan_to_num(
-            log_smooth_neff_boundary(neff_sel, 4 * Nobs), neginf=-1e20, posinf=1e20
+            log_smooth_neff_boundary(neff_sel, 4 * Nobs), nan=-1e20, neginf=-1e20, posinf=1e20
         ),
     )
