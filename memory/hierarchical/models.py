@@ -266,7 +266,14 @@ def make_joint_model(
     # Defining the models
     def log_m1_density(primary_masses):
         huge_neg = -1.0e12
-        indicator = jnp.where(jnp.greater_equal(primary_masses, mmin), 0.0, huge_neg)
+        indicator = jnp.where(
+            jnp.logical_and(
+                jnp.greater_equal(primary_masses, mmin),
+                jnp.less_equal(primary_masses, mmax),
+            ),
+            0.0,
+            huge_neg,
+        )
 
         m_break = mmin + b * (mmax - mmin)
 
@@ -293,13 +300,13 @@ def make_joint_model(
         log_bpl = (jnp.where(is_low, log_pl_low + log_C, log_pl_high)
                    - jnp.logaddexp(0.0, log_C))
 
-        # Two Gaussian peaks
-        log_gauss_1 = dist.Normal(mu_peak_1, sigma_peak_1).log_prob(
-            primary_masses.T
-        ).T
-        log_gauss_2 = dist.Normal(mu_peak_2, sigma_peak_2).log_prob(
-            primary_masses.T
-        ).T
+        # Two Gaussian peaks (truncated to [mmin, mmax])
+        trunc_norm_1 = ndtr((mmax - mu_peak_1) / sigma_peak_1) - ndtr((mmin - mu_peak_1) / sigma_peak_1)
+        log_gauss_1 = (dist.Normal(mu_peak_1, sigma_peak_1).log_prob(primary_masses.T).T
+                       - jnp.log(jnp.maximum(trunc_norm_1, 1e-30)))
+        trunc_norm_2 = ndtr((mmax - mu_peak_2) / sigma_peak_2) - ndtr((mmin - mu_peak_2) / sigma_peak_2)
+        log_gauss_2 = (dist.Normal(mu_peak_2, sigma_peak_2).log_prob(primary_masses.T).T
+                       - jnp.log(jnp.maximum(trunc_norm_2, 1e-30)))
 
         # Three-component mixture (fracs sum to 1 by Dirichlet construction)
         comp_bpl = jnp.log(jnp.maximum(frac_bpl, 1e-30)) + log_bpl

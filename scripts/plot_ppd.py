@@ -83,7 +83,7 @@ from memory.hierarchical.data import (
     _get_injection_redshift,
     _get_injection_spin_data,
 )
-from memory.hierarchical.models import MMIN, MMAX, zinterp, dVdzdt_interp
+from memory.hierarchical.models import MMIN, MMAX, zinterp, dVdzdt_interp, JOINT_SPIN_PHI_LOGPDF
 
 
 LOG_2PI = np.log(2.0 * np.pi)
@@ -339,8 +339,10 @@ def _compute_rate_chunk(params_chunk, inj_data):
         np.where(m1_inj < m_break, log_pl_lo + log_C, log_pl_hi)
         - np.logaddexp(0.0, log_C)
     )
-    log_g1 = _log_normal_pdf(m1_inj, mu_peak_1, sigma_peak_1)
-    log_g2 = _log_normal_pdf(m1_inj, mu_peak_2, sigma_peak_2)
+    trunc_g1 = scipy_norm.cdf((MMAX - mu_peak_1) / sigma_peak_1) - scipy_norm.cdf((MMIN - mu_peak_1) / sigma_peak_1)
+    log_g1 = _log_normal_pdf(m1_inj, mu_peak_1, sigma_peak_1) - np.log(np.maximum(trunc_g1, 1e-300))
+    trunc_g2 = scipy_norm.cdf((MMAX - mu_peak_2) / sigma_peak_2) - scipy_norm.cdf((MMIN - mu_peak_2) / sigma_peak_2)
+    log_g2 = _log_normal_pdf(m1_inj, mu_peak_2, sigma_peak_2) - np.log(np.maximum(trunc_g2, 1e-300))
     log_m1d = np.logaddexp(
         np.logaddexp(
             np.log(np.maximum(frac_bpl, 1e-30)) + log_bpl,
@@ -366,7 +368,7 @@ def _compute_rate_chunk(params_chunk, inj_data):
     )
     log_td = _log_tilt_density(cost1_inj, cost2_inj, f_iso, mu_tilt, sigma_tilt)
 
-    log_wts = log_m1d + log_qd + log_zd + log_sd + log_td - lp_inj
+    log_wts = log_m1d + log_qd + log_zd + log_sd + log_td - lp_inj + JOINT_SPIN_PHI_LOGPDF
     log_sel = logsumexp(log_wts, axis=1) - np.log(Ndraw)
     return np.exp(log_sel)
 
@@ -491,9 +493,11 @@ def compute_ppd_m1(m1_grid, params):
         - np.logaddexp(0.0, log_C)
     )
 
-    # Gaussian peaks
-    log_g1 = scipy_norm.logpdf(m, m1, s1)
-    log_g2 = scipy_norm.logpdf(m, m2, s2)
+    # Gaussian peaks (truncated to [MMIN, MMAX])
+    trunc1 = scipy_norm.cdf((MMAX - m1) / s1) - scipy_norm.cdf((MMIN - m1) / s1)
+    log_g1 = scipy_norm.logpdf(m, m1, s1) - np.log(np.maximum(trunc1, 1e-300))
+    trunc2 = scipy_norm.cdf((MMAX - m2) / s2) - scipy_norm.cdf((MMIN - m2) / s2)
+    log_g2 = scipy_norm.logpdf(m, m2, s2) - np.log(np.maximum(trunc2, 1e-300))
 
     # Three-component mixture
     log_p = np.logaddexp(
