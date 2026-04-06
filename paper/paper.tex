@@ -1,0 +1,111 @@
+\documentclass[aps,prd,reprint,twocolumn,10pt,eqsecnum,showpacs,nofootinbib,amsfonts,amssymb,amsmath,longbibliography,superscriptaddress,floatfix]{revtex4-1}
+\usepackage[colorlinks=true,allcolors=blue, pdfusetitle]{hyperref}
+\usepackage[all]{hypcap}
+\usepackage{bm}
+\usepackage{mathrsfs}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{mathtools}
+\usepackage{graphicx}
+\usepackage{orcidlink}
+\usepackage{xspace}
+\usepackage{tensor}
+
+\graphicspath{{../figures/}}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+
+\interfootnotelinepenalty=10000
+
+\DeclareMathAlphabet{\mathbfsf}{\encodingdefault}{\sfdefault}{bx}{sl}
+
+\renewcommand{\labelenumi}{(\roman{enumi})}
+
+\newcommand{\ud}{\mathrm{d}}
+\newcommand{\mc}[1]{\mathcal{#1}}
+\newcommand{\ms}[1]{\mathscr{#1}}
+\renewcommand{\Re}{\operatorname{Re}}
+\renewcommand{\Im}{\operatorname{Im}}
+\newcommand{\scri}{\mathscr{I}^{+}}
+
+\usepackage[normalem]{ulem}
+
+\newcommand{\Cornell}{\affiliation{Cornell Center for Astrophysics and Planetary Science, Cornell University, Ithaca, New York 14853, USA}}
+\newcommand{\Columbia}{\affiliation{Columbia University, Department of Astronomy, 550 West 120th Street, New York, NY 10027, USA}}
+\newcommand{\CCA}{\affiliation{Center for Computational Astrophysics, Flatiron Institute, 162 Fifth Avenue, New York, NY 10010, USA}}
+\newcommand{\StonyBrook}{\affiliation{Department of Physics and Astronomy, Stony Brook University, Stony Brook, NY 11794, USA}}
+
+\newcommand{\KM}[1]{\textcolor{orange}{KM: #1}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Macros for easily moving figures
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Macros for important numbers
+
+\newcommand{\hatAconstraint}{{\color{red}$1_{-0}^{+0}$}\xspace}
+\newcommand{\hatAnumberofevents}{{\color{red}2,000}\xspace}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+
+\author{Will M. Farr
+	\orcidlink{0000-0003-1540-8562}}
+\email{will.farr@stonybrook.edu} \StonyBrook\CCA
+\author{Maximiliano Isi 
+	\orcidlink{0000-0001-8830-8672}}
+\email{msi2114@columbia.edu} \Columbia\CCA
+\author{Keefe Mitman
+  \orcidlink{0000-0003-0276-3856}}
+\email{kem343@cornell.edu} \Cornell
+
+% Because hyperref only gets the *last* author, we need to be explicit.
+\hypersetup{pdfauthor={Mitman et al.}}
+
+\title{Constraining Gravitational Wave Memory with Hierarchical Inference}
+
+\begin{abstract}
+  With the multitude of gravitational wave observations made in the past ten years, testing the nonlinear and dynamical nature of strong gravity is becoming a much more feasible task. In particular, one promising means for testing the nonlinear nature of Einstein's theory of general relativity (GR) is through the gravitational wave null memory effect: a nonlinear prediction of GR which causes initially co-moving observers to experience a net displacement due to a burst of gravitational radiation. Previous studies have shown that, while it is unlikely that the memory effect will be observed in a single event by the LIGO-Virgo-KAGRA (LVK) Collaboration, evidence for memory in the population of events should be attainable after $\sim$2,000 gravitational wave detections. These works, however, failed to jointly model the evidence for memory and the astrophysical parameters of each event, which is crucial for performing this inference correctly. In this work, using the GWTC-4.0 catalog of binary black hole observations, we perform hierarchical Bayesian inference to measure the evidence for memory in current LVK observations. We find that we can currently constrain what we call the memory enhancement factor---the constant appearing in front of the contribution to the strain from the supermomentum flux---to \hatAconstraint, which is consistent with its expected GR value of 1. Furthermore, in agreement with previous analyses,  we forecast that $\sim$\hatAnumberofevents gravitational wave detections are needed to constrain the variance of the memory enhancement factor to $\lesssim1$.
+\end{abstract}
+
+\maketitle
+
+%\tableofcontents
+
+\section{Introduction}
+\label{sec:introduction}
+
+Gravitational wave memory...
+
+\KM{Discuss what memory is, why it probes the nonlinear nature of GR, and why it's of interest more generally (BMS, soft theorems, celestial holography, etc.)}
+
+\KM{Introduce memory mathematically to see how it's sourced in the strain from the supermomentum flux}
+
+\KM{Reference prior memory studies, like Refs.~\cite{Hubner:2019sly,Boersma:2020gxx,Hubner:2021amk,Grant:2022bla} (missing some others by Thrane/Lasky) and explain why including astrophysical parameters is important}
+
+\KM{Outline the rest of the paper}
+
+\newpage
+
+\section{Hierarchical Inference}
+\label{sec:hierarchicalinference}
+
+\KM{Effectively copy Will's original note here and add results from \texttt{run\_hierarchical\_inference.py}}
+
+\section{Forecasts}
+\label{sec:forecasts}
+
+\KM{Add a description of our forecasting method and add the result from \texttt{forecast\_mu\_tgr\_sensitivity\_curves.py}}
+
+\section{Discussion}
+\label{sec:discussion}
+
+\newpage
+
+\bibliography{refs}
+
+\end{document}

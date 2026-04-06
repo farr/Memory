@@ -1,3 +1,8 @@
+# Constraining Gravitational Wave Memory with Hierarchical Inference
+
+![LaTeX build](../../workflows/LaTeX%20build/badge.svg)
+ [![Latest paper](https://img.shields.io/badge/paper-latest-orange.svg?style=flat)](../gh-action-result/pdflatex/paper/paper.pdf)
+
 Bayesian hierarchical analysis pipeline for testing general relativity (TGR) using gravitational wave memory effects in binary mergers. Uses posterior samples from GW parameter estimation runs, builds population-level models with numpyro/JAX, and performs MCMC inference.
 
 ## Setup and Commands
