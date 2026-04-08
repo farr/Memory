@@ -89,11 +89,29 @@ Unfortunately, because the memory effect is largely a low-frequency effect, it i
 
 In this work, we do exactly that. Namely, we utilize hierarchical Bayesian inference to simultaneously infer the evidence for the memory in the LVK Collaboration's GWTC-4.0 catalog of GW observations as well as the usual astrophysical parameter populations. The paper is outlined as follows. In Sec.~\ref{sec:memory} we review how the memory can be computed from the gravitational wave strain and how this will be relevant to our analysis. In Sec.~\ref{sec:hierarchicalinference} we illustrate our method for hierarchical inference and show the results we obtain when running said analysis on the GWTC-4.0 catalog. In Sec.~\ref{sec:forecasts} we provide a forecast for how many GW events are required to measure memory in a population using hierarchical inference. And, finally, in Sec.~\ref{sec:discussion} we summarize our findings and highlight prospects for observing the memory effect in the near future.
 
-\newpage
-
-\section{Memory}
+\section{Computation of memory}
 \label{sec:memory}
 
+Until recently, numerical relativity (NR) simulations of BBH mergers could not resolve the memory effect~\cite{Favata:2010zu,Pollney:2010hs,Mitman:2020pbt}. This was largely because the way the strain waveforms were extracted to future null infinity in NR---a technique known as extrapolation~\cite{Boyle:2019kee}---was insufficient for resolving the low-frequency memory effect.\footnote{The more robust method of using Cauchy-characteristic evolution, or CCE for short, for obtaining waveforms at future null infinity, however, does resolve memory effects~\cite{Bishop:1996gt,Bishop:1997ik,Bishop:1998uk,Reisswig:2009rx,Reisswig:2009us,Babiuc:2010ze,Pollney:2010hs,Handmer:2014qha,Handmer:2015dsa,Handmer:2016mls,Moxon:2020gha,Moxon:2021gbv,Mitman:2020pbt}.} As a result of this--- at least in part---the majority of waveform models do not contain memory~\cite{Varma:2019csw,Pratten:2020ceb,Colleoni:2024knd,Pompili:2023tna,Ramos-Buades:2023ehm,Hamilton:2021pkf,Thompson:2023ase}.\footnote{See Ref.~\cite{Yoo:2023spi} for a model trained on CCE waveforms which does contain memory effects.} Fortunately, due to the way in which memory is sourced, for any model of the gravitational wave strain, the memory can be computed from said model via a kind of post-processing~\cite{Talbot:2018sgr,Mitman:2020pbt,Mitman:2020bjf}. In particular, motivated by the BMS symmetry group and its corresponding conserved charges~\cite{Wald:1999wa,Flanagan:2015pxa,Mitman:2020pbt}, one can write the real part of gravitational wave strain---which is the only part containing the memory---as
+\begin{align}
+	\label{eq:restrain}
+	\mathrm{Re}\left[h(u,\theta,\phi)\right]=\bar{\eth}^{2}\mathfrak{D}^{-1}\left[m+\frac{1}{4}\int_{-\infty}^{u}|\dot{h}|^{2}du\right],
+\end{align}
+where $\eth$ is the usual spin-weight operator~\cite{Newman:1961qr,Goldberg:1966uu,Geroch:1973am}, whose action on spin-weighted spherical harmonics~\cite{Goldberg:1966uu} is
+\begin{align}
+	\eth\phantom{}_{s}Y_{\ell,m}=\frac{1}{\sqrt{2}}\sqrt{(\ell-s)(\ell+s+1)}\phantom{}_{s+1}Y_{\ell,m},
+\end{align}
+$\mathfrak{D}$ is an operator, who action on spherical harmonics is
+\begin{align}
+	\mathfrak{D}Y_{\ell,m}=\frac{1}{8}(\ell+2)(\ell+1)\ell(\ell-1)Y_{\ell,m},
+\end{align}
+$m$ is the Bondi mass aspect~\cite{Bondi:1962px}, and the coordinate $u\equiv t-r$ is the Bondi time (or the retarded time) with overdots representing derivatives with respect to $u$. Thus, since the null memory contribution to the strain is sourced by the supermomentum flux, i.e., the second term in Eq.~\eqref{eq:restrain}, one can compute the memory as
+\begin{align}
+	\label{eq:memory}
+	h_{\mathrm{memory}}(u,\theta,\phi)=\frac{1}{4}\bar{\eth}^{2}\mathfrak{D}^{-1}\int_{-\infty}^{u}|\dot{h}|^{2}du.
+\end{align}
+\KM{Add annoying bit here about supermomentum flux vs. Isaacson averaging}
+	
 \section{Hierarchical Inference}
 \label{sec:hierarchicalinference}
 
