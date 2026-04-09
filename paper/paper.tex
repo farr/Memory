@@ -47,8 +47,26 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Macros for important numbers
 
-\newcommand{\hatAconstraint}{{\color{red}$1_{-0}^{+0}$}\xspace}
+\newcommand{\Nmemoryevents}{148\xspace}
+\newcommand{\Nevents}{146\xspace}
+\newcommand{\hatAconstraint}{{\color{red}$1.4\pm4.3$}\xspace}
 \newcommand{\hatAnumberofevents}{{\color{red}2,000}\xspace}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Macros for figures
+\graphicspath{{../figures/}}
+
+\newcommand{\figTGR}{%
+	\begin{figure}[t]
+		\begin{center}
+			\includegraphics[width=\columnwidth]{tgr_comparison_corner.pdf}
+		\end{center}
+		\caption{Mean and standard deviation (see Eq.~\eqref{eq:Aconditionaldistribution}) of the memory enhancmenet factor across the population of events up to GWTC-4.0. Contours correspond to the $1\sigma$, $2\sigma$, and $3\sigma$ credible regions. The blue contours correspond to fits of only the memory hyperparameters, while the yellow contours correspond to fits of the astrophysical population parameters and the memory hyperparameters. The black marker/line represents the GR prediction for the memory distribution.}
+		\label{fig:TGR}
+	\end{figure}
+}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{document}
@@ -69,7 +87,7 @@
 \title{Constraining Gravitational Wave Memory with Hierarchical Inference}
 
 \begin{abstract}
-  With the multitude of gravitational wave observations that have been made in the past ten years, testing the dynamical and nonlinear nature of strong gravity is becoming more feasible. In particular, one promising way to test the nonlinear nature of Einstein's theory of general relativity (GR) is through the gravitational wave null memory effect: a nonlinear prediction of GR which corresponds to initially co-moving observers being permanently displaced due to a burst of gravitational radiation. Previous studies have shown that, while it is unlikely that the memory effect will be observed in a single event by the LIGO-Virgo-KAGRA (LVK) detector, evidence for memory in the population of LVK events should be attainable after $\sim$2,000 gravitational wave detections. These works, however, did not jointly model the evidence for memory with the astrophysical parameters of each event, which is crucial for performing this inference correctly. In this work, using the GWTC-4.0 catalog of binary black hole observations, we perform hierarchical Bayesian inference to measure the evidence for memory in current LVK observations. We find that we can currently constrain what we call the memory enhancement factor---the constant appearing in front of the contribution to the strain from the supermomentum flux---to \hatAconstraint, which is consistent with its expected GR value of 1. Furthermore, in agreement with previous analyses,  we forecast that $\sim$\hatAnumberofevents gravitational wave detections will be needed to constrain the variance of the memory enhancement factor to $\lesssim1$, i.e., away from zero.
+  With the multitude of gravitational wave observations that have been made in the past ten years, testing the dynamical and nonlinear nature of strong gravity is becoming more feasible. In particular, one promising way to test the nonlinear nature of Einstein's theory of general relativity (GR) is through the gravitational wave null memory effect: a nonlinear prediction of GR which corresponds to initially co-moving observers being permanently displaced due to a burst of gravitational radiation. Previous studies have shown that, while it is unlikely that the memory effect will be observed in a single event by the LIGO-Virgo-KAGRA (LVK) detector, evidence for memory in the population of LVK events should be attainable after $\sim$2,000 gravitational wave detections. These works, however, did not jointly model the evidence for memory with the astrophysical parameters of each event, which is crucial for performing this inference correctly. In this work, using the GWTC-4.0 catalog of binary black hole observations, we perform hierarchical Bayesian inference to measure the evidence for memory in current LVK observations. We find that we can currently constrain what we call the memory enhancement factor---the constant appearing in front of the contribution to the strain from the supermomentum flux---to \hatAconstraint, which is consistent with its expected GR value of 1. Furthermore, in agreement with previous analyses,  we forecast that $\sim$\hatAnumberofevents detections will be needed to constrain the variance of the memory enhancement factor to $\lesssim1$, i.e., away from zero.
 \end{abstract}
 
 \maketitle
@@ -222,6 +240,10 @@ where we used Eq.~\eqref{eq:Aconditionaldistribution} to replace $p(A|\theta_{i}
 
 \section{Results}
 \label{sec:results}
+
+For our analysis, we consider all binary black hole events observed by the LVK Collaboration with an inverse false alarm rate above one year, up to and including the GWTC-4.0 catalog. This amounted to \Nmemoryevents events in total. 
+
+\figTGR
 
 \subsection{Memory Constraints}
 \label{sec:memoryconstraints}
