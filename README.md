@@ -417,20 +417,18 @@ The full joint population density factorises as:
 
 $$
 p(m_1,q,z,a_1,a_2,c_{t,1},c_{t,2},A) =
-p(m_1)\,p(q\mid m_1)\,p(z)\,p(a_1,a_2)\,[p(c_{t,1},c_{t,2})]\,[p(A)]
+p(m_1) p(q\mid m_1) p(z) p(a_1,a_2) p(c_{t,1},c_{t,2}) p(A)
 $$
 
-where $c_{t,i}$ are cosine tilts, brackets denote optional components (TGR amplitude, included when running
-`--analyze memory` or `--analyze joint`). Spin tilts are always included.
+where $c_{t,i}$ are cosine tilts and $A$ is the memory amplitude (included when running
+`--analyze memory` or `--analyze joint`).
 
 #### Primary mass: broken power law + two Gaussian peaks
-
-Following the standard LVK parameterisation (cf. gwpopulation / GWTC-3).
 
 The power law has two slopes separated at a break mass:
 
 $$
-m_{\mathrm{break}} = m_{\min} + b\,(m_{\max}-m_{\min})
+m_{\mathrm{break}} = m_{\min} + b \left(m_{\max}-m_{\min}\right)
 $$
 
 where $m_{\min} = 3$, $m_{\max} = 300$, and $b$ is the break fraction. The prior on
