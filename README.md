@@ -108,13 +108,12 @@ samples were drawn from.
   reweight them toward `UniformSourceFrame`.  Crucially, PESummary does **not**
   update the `log_prior` field — it still records the original `PowerLaw(alpha=2)`
   prior.  Using these samples with their stored `log_prior` therefore introduces a
-  spurious per-sample factor of $p_{\mathrm{USF}}(\theta) / p_{\mathrm{PL2}}(\theta) \propto \frac{\mathrm{d}V_c/\mathrm{d}z}{(1+z)\,d_L^2}$
+  spurious per-sample factor of $\frac{p_{\mathrm{USF}}(\theta)}{ p_{\mathrm{PL2}}(\theta)} \propto \frac{\mathrm{d}V_c/\mathrm{d}z}{(1+z) d_L^2}$
   that biases the redshift weighting for every O3 event.
 - **GWTC-3 `nocosmo`** files retain the full original sample set with
   `log_prior` $=$ $\log p_{\mathrm{PL2}}(\theta)$ and samples drawn from $L \cdot p_{\mathrm{PL2}}$ — internally
   consistent.  The hierarchical model divides out $p_{\mathrm{PL2}}$ correctly for O3 events
-  and $p_{\mathrm{USF}}$ correctly for O4a events; mixing PE priors across events is fine
-  because the `Z_pe` normalisation cancels in importance-sampling ratios.
+  and $p_{\mathrm{USF}}$ correctly for O4a events.
 
 **Injection file:** use `mixture-real_o3_o4a-*` (not `o4a`-only) whenever O3
 events are included, since the selection function must cover the full observing
