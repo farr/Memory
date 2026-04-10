@@ -61,7 +61,8 @@
 \newcommand{\figMemoryPosteriors}{%
 	\begin{figure*}[t]
 		\begin{center}
-			\includegraphics[width=\textwidth]{memory_mean_stddev_from_posteriors.pdf}
+			\includegraphics[width=\textwidth
+			]{memory_mean_stddev_from_posteriors.pdf}
 		\end{center}
 		\caption{Values of the memory (\emph{top})) mean $\mu_{i}$ (Eq.~\eqref{eq:mean}), (\emph{middle}) standard deviataion $\sigma_{i}$ (Eq.~\eqref{eq:stddev}), and (\emph{bottom}) SNR for the posteriors from each waveform model available for five events. Whisker plots show the 50\% and 90\% credible regions.}
 		\label{fig:MemoryPoseteriors}
@@ -75,6 +76,16 @@
 		\end{center}
 		\caption{Mean and standard deviation (see Eq.~\eqref{eq:Aconditionaldistribution}) of the memory enhancmenet factor across the population of events up to GWTC-4.0. Contours correspond to the $1\sigma$, $2\sigma$, and $3\sigma$ credible regions. The blue contours correspond to fits of only the memory hyperparameters, while the yellow contours correspond to fits of the astrophysical population parameters and the memory hyperparameters. The black marker/line represents the GR prediction for the memory distribution.}
 		\label{fig:TGR}
+	\end{figure}
+}
+
+\newcommand{\figForecast}{%
+	\begin{figure}[t]
+		\begin{center}
+			\includegraphics[width=\textwidth]{forecast.pdf}
+		\end{center}
+		\caption{}
+		\label{fig:Forecast}
 	\end{figure}
 }
 
@@ -267,6 +278,10 @@ With the computation of $\mu_{i}$ and $\sigma_{i}$ performed for the posterior s
 
 \subsection{Forecasts}
 \label{sec:forecasts}
+
+\figForecast
+
+\newpage
 
 \section{Discussion}
 \label{sec:discussion}
