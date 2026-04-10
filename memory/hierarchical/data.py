@@ -1013,7 +1013,12 @@ def read_injection_file(
             if key in f.attrs:
                 injections["analysis_time"] = f.attrs[key]
         if "analysis_time" not in injections:
-            logger.warning("analysis_time not found in injection file")
+            logger.warning(
+                "analysis_time not found in injection file; "
+                "setting T_obs=1 yr as placeholder — "
+                "absolute merger-rate R(z=0) will be WRONG"
+            )
+            injections["analysis_time"] = 1.0
         else:
             injections["analysis_time"] /= 60 * 60 * 24 * 365.25
 
@@ -1466,7 +1471,8 @@ def generate_data(
             injection_data["a_1"],
             injection_data["a_2"],
             injection_data["redshift"],
-            injection_data["log_prior"],
+            injection_data["log_prior"]
+            - np.log(injection_data["analysis_time"]),  # p_draw/T_obs so exp(log_sel) = T_obs*beta(Λ) = VT
         ]
     )
 

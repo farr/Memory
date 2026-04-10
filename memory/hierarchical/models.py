@@ -430,10 +430,18 @@ def make_joint_model(
     log_like = jnp.nan_to_num(log_like, nan=-1e20, neginf=-1e20, posinf=1e20)
     numpyro.factor("log_likelihood", jnp.sum(log_like))
 
-    # Selection effect term
+    # Selection effect term (log_pdraw_sel already includes 1/T_obs,
+    # so exp(log_sel) = VT(Λ) and the rate-marginalized likelihood
+    # under p(R) ∝ 1/R gives -Nobs * log_sel).
     log_sel = logsumexp(log_sel_wts) - jnp.log(Ndraw)
     log_sel = jnp.nan_to_num(log_sel, nan=1e20, neginf=-1e20, posinf=1e20)
     numpyro.factor("selection", -Nobs * log_sel)
+
+    # Conditional merger-rate posterior: R | Λ, data ~ Gamma(Nobs, rate=VT).
+    # This is an auxiliary draw that does not affect the marginal posterior
+    # on the population hyperparameters.
+    VT = jnp.exp(log_sel)
+    numpyro.sample("R", dist.Gamma(concentration=Nobs, rate=VT))
 
     # N eff cuts
     def log_smooth_neff_boundary(values, criteria):
