@@ -87,6 +87,7 @@ from memory.hierarchical import (  # noqa: E402
     make_joint_model,
     get_samples_df,
     create_plots,
+    generate_ppd,
 )
 from memory.hierarchical.data import (  # noqa: E402
     NRSUR_MIN_DETECTOR_FRAME_TOTAL_MASS,
@@ -151,6 +152,7 @@ def _check_output_files_exist(outdir, analyze, no_plots):
             required.append(os.path.join(outdir, "joint_model_corner.png"))
         if analyze & {"astro", "joint"}:
             required.append(os.path.join(outdir, "astro_corner.png"))
+            required.append(os.path.join(outdir, "ppd.png"))
 
     existing = [f for f in required if os.path.exists(f)]
     missing = [f for f in required if not os.path.exists(f)]
@@ -849,6 +851,33 @@ def main():
     if not args.no_plots:
         logger.info("Creating plots...")
         create_plots(fit_astro, fit_joint, fit_memory, outdir)
+
+        # PPD plot for any astrophysical (astro or joint) results
+        ppd_nc_files = []
+        ppd_labels = []
+        ppd_n_obs = None
+        if run_astro:
+            ppd_nc_files.append(os.path.join(outdir, "result_astro.nc"))
+            ppd_labels.append("astro")
+            ppd_n_obs = Nobs_astro
+        if run_joint:
+            ppd_nc_files.append(os.path.join(outdir, "result_joint.nc"))
+            ppd_labels.append("joint")
+            if ppd_n_obs is None:
+                # astro not run; use joint event count for rate mode
+                ppd_n_obs = Nobs_joint
+            # When both astro and joint are overlaid, rate mode uses Nobs_astro
+            # (astro event count) for both curves — an approximation since joint
+            # uses fewer events. The shape of p(m1), p(q), p(a) is unaffected.
+        if ppd_nc_files:
+            logger.info("Generating PPD plot (%s)...", ", ".join(ppd_labels))
+            generate_ppd(
+                nc_files=ppd_nc_files,
+                outdir=outdir,
+                labels=ppd_labels,
+                injection_file=injection_file,
+                n_obs=ppd_n_obs,
+            )
     else:
         for fit, name in [
             (fit_astro,  "astro"),
