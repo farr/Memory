@@ -495,6 +495,16 @@ def _build_parser():
         default=1,
         help="Inverse false-alarm rate threshold in years (default: 1)",
     )
+    parser.add_argument(
+        "--enforce-selection",
+        action="store_true",
+        help=(
+            "Apply the same event selection criteria to the 'memory' analysis "
+            "as are applied to 'joint': min_mass_2_source, and (for NRSur runs) "
+            "min_detector_frame_total_mass and min_mass_ratio cuts. "
+            "By default the 'memory' analysis uses only the IFAR cut."
+        ),
+    )
     # -- Output -------------------------------------------------------------
     parser.add_argument(
         "-o", "--outdir",
@@ -747,9 +757,11 @@ def main():
             scale_tgr=False, event_names=_all_event_names, **_gen_kwargs,
         )
 
-    # joint: memory-filtered events, memory-reweighted samples
-    # (use_tgr=True so event names are taken from memory_data)
-    if run_joint:
+    # joint / memory-with-selection: memory-filtered events, memory-reweighted
+    # samples.  event_data layout (axis 0):
+    #   [m1s, qs, cost1s, cost2s, a1s, a2s, A_hats, A_sigmas,
+    #    zs, log_pdraw, log_weights]
+    if run_joint or (run_memory and args.enforce_selection):
         (event_data_joint, inj_data_joint, BW_joint, BW_sel_joint,
          Nobs_joint, Ndraw_joint, A_scale_joint) = generate_data(
             mem_posteriors, memory_data=memory_data, use_tgr=True,
@@ -758,14 +770,21 @@ def main():
 
     # memory: TGR-only model data
     if run_memory:
-        A_hats_mem, A_sigmas_mem, log_weights_mem, Nobs_mem, A_scale_mem = generate_tgr_only_data(
-            mem_posteriors, memory_data,
-            N_samples=args.n_samples_per_event, prng=seed,
-            scale_tgr=args.scale_tgr,
-            ignore_memory_weights=args.ignore_memory_weights,
-            ifar_threshold=args.ifar_threshold,
-            ifar_cache_file=_ifar_cache_file,
-        )
+        if args.enforce_selection:
+            A_hats_mem      = event_data_joint[6]
+            A_sigmas_mem    = event_data_joint[7]
+            log_weights_mem = event_data_joint[10]
+            Nobs_mem        = Nobs_joint
+            A_scale_mem     = A_scale_joint
+        else:
+            A_hats_mem, A_sigmas_mem, log_weights_mem, Nobs_mem, A_scale_mem = generate_tgr_only_data(
+                mem_posteriors, memory_data,
+                N_samples=args.n_samples_per_event, prng=seed,
+                scale_tgr=args.scale_tgr,
+                ignore_memory_weights=args.ignore_memory_weights,
+                ifar_threshold=args.ifar_threshold,
+                ifar_cache_file=_ifar_cache_file,
+            )
 
     # --- MCMC -------------------------------------------------------------
     prng_astro, prng_joint, prng_mem = jax.random.split(prng, 3)
