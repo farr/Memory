@@ -64,7 +64,7 @@
 			\includegraphics[width=\textwidth
 			]{memory_mean_stddev_from_posteriors.pdf}
 		\end{center}
-		\caption{Values of the memory (\emph{top})) mean $\mu_{i}$ (Eq.~\eqref{eq:mean}), (\emph{middle}) standard deviataion $\sigma_{i}$ (Eq.~\eqref{eq:stddev}), and (\emph{bottom}) SNR for the posteriors from each waveform model available for five events. Whisker plots show the 50\% and 90\% credible regions.}
+		\caption{Values of the memory (\emph{top})) mean $\mu_{i}$ (Eq.~\eqref{eq:mean}), (\emph{middle}) standard deviataion $\sigma_{i}$ (Eq.~\eqref{eq:stddev}), and (\emph{bottom}) SNR for the posteriors from the waveform models that are available for five events. Whisker plots show the 50\% and 90\% credible regions, with the circle marker being the median value.}
 		\label{fig:MemoryPoseteriors}
 	\end{figure*}
 }
@@ -74,19 +74,19 @@
 		\begin{center}
 			\includegraphics[width=\columnwidth]{tgr_comparison_corner.pdf}
 		\end{center}
-		\caption{Mean and standard deviation (see Eq.~\eqref{eq:Aconditionaldistribution}) of the memory enhancmenet factor across the population of events up to GWTC-4.0. Contours correspond to the $1\sigma$, $2\sigma$, and $3\sigma$ credible regions. The blue contours correspond to fits of only the memory hyperparameters, while the yellow contours correspond to fits of the astrophysical population parameters and the memory hyperparameters. The black marker/line represents the GR prediction for the memory distribution.}
+		\caption{Mean and standard deviation (see Eq.~\eqref{eq:Aconditionaldistribution}) of the memory enhancmenet factor across the population of events up to GWTC-4.0. Contours correspond to the $1\sigma$, $2\sigma$, and $3\sigma$ credible regions. The blue contours correspond to fits of only the memory hyperparameters, while the yellow contours correspond to fits of the astrophysical population parameters and the memory hyperparameters. The black marker/line represents the GR prediction for the memory distribution, i.e., a delta function at 1---$\mu_{\Lambda}=1$, $\sigma_{\Lambda}=0$.}
 		\label{fig:TGR}
 	\end{figure}
 }
 
 \newcommand{\figForecast}{%
-	\begin{figure}[t]
+	\begin{figure*}[t]
 		\begin{center}
 			\includegraphics[width=\textwidth]{forecast.pdf}
 		\end{center}
-		\caption{}
+		\caption{Evolution of the $1\sigma$ variance on $\mu_{\Lambda}$ as a function of the number of future GW observations. Blue shows the projection for future O4a-like observations, while yellow shows the projection for future O5a-like observations (i.e., a gain factor of 1.41 in detector sensitivity). The vertical dotted line shows the current number of events analyzed: 146. The horizontal dashed lines shows the point at which $\mu_{\Lambda}$ is measured away from 0 with a confidence of $1\sigma$. The vertical dot-dashed line shows the naive $1/\sqrt{N}$ estimate (based on the current catalog) of how many events are required to reach the $1\sigma$ confidence level: 1,795.}
 		\label{fig:Forecast}
-	\end{figure}
+	\end{figure*}
 }
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -153,7 +153,7 @@ $m$ is the Bondi mass aspect~\cite{Bondi:1962px}, and the coordinate $u\equiv t-
 \end{align}
 Critically, the computation of $h_{\mathrm{mem.}}$ requires knowledge of $h$ over the entire two-sphere. To express $h_{\mathrm{mem.}}$ in terms of the angular basis of spin-weighted spherical harmonics, one can use the integral formula
 \begin{align}
-	\int_{S^{2}}\phantom{}_{s_{1}}Y_{\ell_{1},m_{1}}\phantom{}_{s_{2}}Y_{\ell_{2},m_{2}}\phantom{}_{s_{2}}Y_{\ell_{2},m_{2}}\,d\Omega=\sqrt{\dfrac{(2\ell_{1}+1)(2\ell_{2}+1)(2\ell_{3}+1)}{4\pi}}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\m_{1}&m_{2}&m_{3}\end{pmatrix}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\-s_{1}&-s_{2}&-s_{3}\end{pmatrix}
+	\int_{S^{2}}\phantom{}_{s_{1}}Y_{\ell_{1},m_{1}}\phantom{}_{s_{2}}Y_{\ell_{2},m_{2}}\phantom{}_{s_{2}}Y_{\ell_{2},m_{2}}\,dw=\sqrt{\dfrac{(2\ell_{1}+1)(2\ell_{2}+1)(2\ell_{3}+1)}{4\pi}}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\m_{1}&m_{2}&m_{3}\end{pmatrix}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\-s_{1}&-s_{2}&-s_{3}\end{pmatrix}
 \end{align}
 for the right-most objects the Wigner-3j symbols with $s_{1}+s_{2}+s_{3}=0$, to obtain the memory contribution to the individual $(\ell,m)$ spin-weight -2 modes as
 \begin{align}
@@ -167,7 +167,7 @@ An important caveat regarding calling $h_{\mathrm{mem.}}$ in Eq.~\eqref{eq:memor
 \begin{enumerate}
 	\item to be a step-function, in which case it would have a $1/f$ dependence in the frequency domain;
 	\item to be that of Eq.~\eqref{eq:memory}, which although agrees with the memory when taking its difference between the boundaries $u\rightarrow-\infty$ and $u\rightarrow+\infty$ may include non-memory content in the intermediate regime;
-	\item or, to be some kind of Isaacson average of Eq.~\eqref{eq:memory}, which assumes the memory's time evolution should be monotonic, which is also not obvious~\cite{}.
+	\item or, to be some kind of Isaacson average of Eq.~\eqref{eq:memory}, which assumes the memory's time evolution should be monotonic, which is also not obvious~\cite{Zosso:2026czc}.
 \end{enumerate}
 For simplicity, and to avoid averaging procedures, in this study we take choice (ii) to be the proxy for the memory's time evolution. Consequently, we can aim to constrain the memory by considering the strain model
 \begin{align}
@@ -219,60 +219,66 @@ Marginalizing out the memory enhancement factor of the likelihood with a complet
 Therefore, if we have a set of samples drawn from a posterior based on the original, no-memory likelihood $\mathcal{L}$, then the ratio of the marginal likelihood in Eq.~\eqref{eq:marginalLL} to the original likelihood serves as an importance weight that can be applied to the samples to obtain a new set of samples drawn from the posterior that is based on the marginal likelihood $\overline{\mathcal{L}}$, i.e.,
 \begin{align}
 	\label{eq:weight}
-	\log w_{i}&=\log\mathcal{L}(\lambda_{i})-\log\mathcal{L}(\lambda_{i})\nonumber\\&=\frac{1}{2}\sigma_{A_{\mathrm{mem.}}}^{-2}\hat{A}_{\mathrm{mem.}}^{2}+\log\sigma_{A_{\mathrm{mem.}}}.
+	\log w&=\log\overline{\mathcal{L}}(\lambda)-\log\mathcal{L}(\lambda)\nonumber\\&=\frac{1}{2}\sigma_{A_{\mathrm{mem.}}}^{-2}\hat{A}_{\mathrm{mem.}}^{2}+\log\sigma_{A_{\mathrm{mem.}}}.
 \end{align}
 If the memory is not very strong in any individual event, then the importance weights will be close to 1, and the re-weighted samples will be remain very similar to the original samples. Furthermore, each sample can also be augmented by a value of $A_{\mathrm{mem.}}$ that is drawn from the Gaussian distribution described by Eqs.~\eqref{eq:mean} and~\eqref{eq:stddev} to obtain a new set of samples drawn from the posterior on $A_{\mathrm{mem.}}$. With the posteriors on $\hat{A}_{\mathrm{mem.}}$ and $\sigma_{A_{\mathrm{mem.}}}$ obtained for each event, one can then combine them in a hierarchical way to obtain an overall posterior on the population distribution of $A_{\mathrm{mem.}}$ across the entire catalog of GW events to determine whether the data prefer a non-zero memory effect in the population as a whole.
 
 \subsection{Hierarchical Inference}
 \label{sec:hierarchicalinference}
 
-Following the work of Ref.~\cite{Payne:2023kwj}, we simultaneously model the memory and all of the usual BBH merger astrophysical parameters. We assume that we start from regular parameter estimation samples $\lambda_{i}$ that have been enhanced to include $\hat{A}_{\mathrm{mem.}}$ and $\sigma_{A_{\mathrm{mem.}}}$, which we will hereafter call $\mu_{i}$ and $\sigma_{i}$ when referring to the i$^{\mathrm{th}}$ sample. This naturally defines the conditional distribution on the memory enhancement factor $A_{\mathrm{mem.}}$---which we now call $A$ to shorten notation---given $\lambda_{i}$, which is
+Following the work of Ref.~\cite{Payne:2023kwj}, we simultaneously model the memory and all of the usual BBH merger astrophysical parameters. We assume that we start from regular parameter estimation samples $\lambda_{s}$ that have been enhanced to include $\hat{A}_{\mathrm{mem.}}$ and $\sigma_{A_{\mathrm{mem.}}}$, which we will hereafter call $\mu_{s}$ and $\sigma_{s}$ when referring to the sample $s$. This naturally defines the conditional distribution on the memory enhancement factor $A_{\mathrm{mem.}}$---which we now call $A$ to shorten notation---given $\lambda_{s}$, which is
 \begin{align}
 	\label{eq:Aconditionaldistribution}
-	p(A|\lambda_{i})=\mathcal{N}(A|\mu_{i},\sigma_{i}).
+	p(A|\lambda_{s})=\mathcal{N}(A|\mu_{s},\sigma_{s}).
 \end{align}
-
-The hierarchical likelihood for population parameters $\Lambda$ requires computing an integral of the form
+The hierarchical likelihood for population parameters $\Lambda$ for the $i^{\mathrm{th}}$ event requires computing the integral
 \begin{align}
 	\label{eq:hierarchicalLL}
-	I=\int\dfrac{p(A,\lambda)}{W(\lambda)}p(A,\lambda|\Lambda)\,dAd\lambda,
+	\mathcal{L}_{i}=\int\dfrac{p(A,\lambda)}{W(\lambda)}p(A,\lambda|\Lambda)\,dAd\lambda,
 \end{align}
-where $p(A,\lambda)$ is the sample posterior and $W(\lambda)$ is the importance weight that encodes the sampling prior and any necessary Jacobians; we will assume that the prior on $A$ is flat so that $W$ is independent of $A$. Because $p(A,\lambda)=p(A|\lambda)p(\lambda)$, we can rewrite Eq.~\eqref{eq:hierarchicalLL} as
+where $p(A,\lambda)$ is the sample posterior and $W(\lambda)$ is the importance weight that encodes the sampling prior and any necessary Jacobians; we will assume that the prior on $A$ is flat so that the weight $W$ is independent of $A$. Because $p(A,\lambda)=p(A|\lambda)p(\lambda)$, we can write Eq.~\eqref{eq:hierarchicalLL} as
 \begin{align}
-	I=\int \dfrac{p(A|\lambda)p(\lambda)}{W(\lambda)}p(A,\lambda|\Lambda)\,dAd\lambda,
+	\mathcal{L}_{i}=\int \dfrac{p(A|\lambda)p(\lambda)}{W(\lambda)}p(A,\lambda|\Lambda)\,dAd\lambda,
 \end{align}
 
-At this point, we can now use the fact that since we have $N$ samples from the posterior $\lambda_{i}$, i.e.,
+At this point, we can now use the fact that since we have $N$ samples from the posterior $\lambda_{s}$, i.e.,
 \begin{align}
-	p(\lambda)\approx\frac{1}{N}\sum\limits_{i}\delta(\lambda-\lambda_{i})
+	p(\lambda)\approx\frac{1}{N}\sum\limits_{s}w_{s}\delta(\lambda-\lambda_{s})
 \end{align}
 we can approximate the integral as
 \begin{align}
-	I&\approx\frac{1}{N}\sum\limits_{i}\int\dfrac{p(A|\lambda)}{W(\lambda)}p(A,\lambda|\Lambda)\delta(\lambda-\lambda_{i})\,dAd\lambda\nonumber\\
-	&=\frac{1}{N}\sum\limits_{i}\int\dfrac{p(A|\lambda_{i})}{W(\lambda_{i})}p(A,\lambda_{i}|\Lambda)\,dA.
+	\mathcal{L}_{i}&\approx\frac{1}{N}\sum\limits_{s}w_{s}\int\dfrac{p(A|\lambda)}{W(\lambda)}p(A,\lambda|\Lambda)\delta(\lambda-\lambda_{s})\,dAd\lambda\nonumber\\
+	&=\frac{1}{N}\sum\limits_{s}w{s}\int\dfrac{p(A|\lambda_{i})}{W(\lambda_{s})}p(A,\lambda_{s}|\Lambda)\,dA.
 \end{align}
-If we further assume that the population model factorizes as $p(A,\lambda_{i}|\Lambda)=p(A|\Lambda_{A})p(\lambda|\Lambda_{\lambda})$, then
+If we further assume that the population model factorizes as $p(A,\lambda_{s}|\Lambda)=p(A|\Lambda_{A})p(\lambda|\Lambda_{\lambda})$, then
 \begin{align}
 	\label{eq:hierarchicalLLsimplified}
-	I\approx\frac{1}{N}\sum\limits_{i}\dfrac{p(\lambda_{i}|\Lambda_{\lambda})}{W(\lambda_{i})}\int p(A|\lambda_{i})p(A|\Lambda_{A})\,dA.
+	\mathcal{L}_{i}\approx\frac{1}{N}\sum\limits_{s}w_{s}\dfrac{p(\lambda_{s}|\Lambda_{\lambda})}{W(\lambda_{s})}\int p(A|\lambda_{s})p(A|\Lambda_{A})\,dA.
 \end{align}
 And, finally, if we assume a Gaussian population model on A with mean $\mu_{\Lambda}$ and standard deviation $\sigma_{\Lambda}$ so that $p(A|\Lambda_{A})=\mathcal{N}(A|\mu_{\Lambda},\sigma_{\Lambda})$, then the integral over $A$ in Eq.~\eqref{eq:hierarchicalLLsimplified} can be performed analytically, yielding
 \begin{align}
 	\label{eq:hierarchicalLLfinal}
-	I&\approx\frac{1}{N}\sum\limits_{i}\dfrac{p(\lambda_{i}|\Lambda_{\lambda})}{W(\lambda_{i})}\int\mathcal{N}(A|\mu_{i},\theta_{i})\mathcal{N}(A|\mu_{\Lambda},\sigma_{\Lambda})\,dA\nonumber\\
-	&=\frac{1}{N}\sum\limits_{i}\dfrac{p(\lambda_{i}|\Lambda_{\lambda})}{W(\lambda_{i})}\mathcal{N}\left(\mu_{i}|\mu_{\Lambda},\sqrt{\sigma_{i}^{2}+\sigma_{\Lambda}^{2}}\right),
+	\mathcal{L}_{i}&\approx\frac{1}{N}\sum\limits_{s}w_{s}\dfrac{p(\lambda_{s}|\Lambda_{\lambda})}{W(\lambda_{s})}\int\mathcal{N}(A|\mu_{s},\sigma_{s})\mathcal{N}(A|\mu_{\Lambda},\sigma_{\Lambda})\,dA\nonumber\\
+	&=\frac{1}{N}\sum\limits_{s}w_{s}\dfrac{p(\lambda_{s}|\Lambda_{\lambda})}{W(\lambda_{s})}\mathcal{N}\left(\mu_{s}|\mu_{\Lambda},\sqrt{\sigma_{s}^{2}+\sigma_{\Lambda}^{2}}\right),
 \end{align}
-where we used Eq.~\eqref{eq:Aconditionaldistribution} to replace $p(A|\lambda_{i})$ in Eq.~\eqref{eq:hierarchicalLLsimplified}. Equation~\eqref{eq:hierarchicalLLfinal} thus provides a straightforward way to evaluate the hierarchical likelihood \emph{without sampling the latent variable $A$} for each sample. Instead, each sample contributes to the likelihood through a Gaussian term that compares its event-level memory mean $\mu_{i}$ (Eq.~\eqref{eq:mean}) with the memory population mean $\mu_{\Lambda}$, with a variance given by the sum in quadrature of the event-level memory measurement uncertainty $\sigma_{i}^{2}$ (Eq.~\eqref{eq:stddev}) and the intrinsic memory population variance $\sigma_{\Lambda}^{2}$.
+where we used Eq.~\eqref{eq:Aconditionaldistribution} to replace $p(A|\lambda_{s})$ in Eq.~\eqref{eq:hierarchicalLLsimplified}. Equation~\eqref{eq:hierarchicalLLfinal} thus provides a straightforward way to evaluate the hierarchical likelihood \emph{without sampling the latent variable $A$} for each sample. Instead, each sample contributes to the likelihood through a Gaussian term that compares its sample-level memory mean $\mu_{s}$ (Eq.~\eqref{eq:mean}) with the memory population mean $\mu_{\Lambda}$, with a variance that is a sum in quadrature of the sample-level memory measurement uncertainty $\sigma_{s}$ (Eq.~\eqref{eq:stddev}) and the memory population uncertainty $\sigma_{\Lambda}$. Finally, while Eq.~\eqref{eq:hierarchicalLLfinal} is the likelihood for an individual event, note that we can obtain the likelihood across all events via
+\begin{align}
+	\log\mathcal{L}=\sum\limits_{i}\log\mathcal{L}_{i}.
+\end{align}
 
 \section{Results}
 \label{sec:results}
 
-For our memory analysis, we consider all BBH events observed by the LVK Collaboration which had an inverse false alarm rate above one year, up to and including the GWTC-4.0 catalog. This amounted to \Nmemoryevents events in total. For each event, each available waveform model, and its corresponding posterior samples, we computed the memory mean $\mu_{i}$ and standard deviation $\sigma_{i}$ using Eqs.~\eqref{eq:mean} and~\eqref{eq:stddev}. The waveform models used are those described in Refs.~\cite{Varma:2019csw,Pratten:2020ceb,Colleoni:2024knd,Pompili:2023tna,Ramos-Buades:2023ehm,Hamilton:2021pkf,Thompson:2023ase}. Because the computation of the memory requires the strain modes (see Eq.~\eqref{eq:memorymodes}), each waveform model was always used to provide as many modes as available. For the phenomenological models, which output waveforms in the frequency domain, we first transformed the output waveform to the time-domain before computing the memory. In Fig.~\ref{fig:MemoryPoseteriors} we show the distribution of $\mu_{i}$ and $\sigma_{i}$ across all posterior samples for a few of the more interesting events analyzed. As is shown, of these more significant events, none of them yield a confident measurement of memory. However, as we will show in the subsequent section, by instead inferring the memory hyperparameters across all events, one can obtain much better constraints on the evidence for memory.
+For our memory analysis, we consider all BBH events observed by the LVK Collaboration which had an inverse false alarm rate above one year, up to and including the GWTC-4.0 catalog. This amounted to \Nmemoryevents events in total. For each event, each available waveform model, and its corresponding posterior samples, we computed the memory mean $\mu_{s}$ and standard deviation $\sigma_{s}$ using Eqs.~\eqref{eq:mean} and~\eqref{eq:stddev}. The waveform models used are those described in Refs.~\cite{Varma:2019csw,Pratten:2020ceb,Colleoni:2024knd,Pompili:2023tna,Ramos-Buades:2023ehm,Hamilton:2021pkf,Thompson:2023ase}. Because the computation of the memory requires the strain modes (see Eq.~\eqref{eq:memorymodes}), each waveform model was always used to provide as many modes as available. For the phenomenological models, which output waveforms in the frequency domain, we first transformed the output waveform to the time-domain before computing the memory. In Fig.~\ref{fig:MemoryPoseteriors} we show the distribution of $\mu_{s}$ and $\sigma_{s}$ across all posterior samples for a few of the more interesting events analyzed. As is shown, of these more significant events, none of them yield a confident measurement of memory. However, as we will show in the subsequent section, by instead inferring the memory hyperparameters across all events, one can obtain much better constraints on the evidence for memory.
 
 \subsection{Memory Constraints}
 \label{sec:memoryconstraints}
 
-With the computation of $\mu_{i}$ and $\sigma_{i}$ performed for the posterior samples of all events and all of the available waveform models, we performed two hierarchical analyses: one in which we measured the memory hyperparameters $\mu_{\Lambda}$ and $\sigma_{\Lambda}$ (see Eq.~\eqref{eq:hierarchicalLLfinal}) independent of all of the other astrophysical parameters, and one in which we measured everything simultaneously.\footnote{Note that for the joint inference since there is a selection criteria restricting the secondary mass to be $>3M_{\odot}$ this reduced our total number of events to 146.} When conducting these analyses, we opted to use the following hierarchy for which waveform model to use. If available, we  ideally used the NR surrogate model, then the EOB model, and then the Phenom model. This choice was made based on the model accuracy results presented in Fig.~2 of Ref.~\cite{LIGOScientific:2025rsn}. Our results for this study are highlighted in Fig.~\ref{fig:TGR}, which shows the $1\sigma$, $2\sigma$, and $3\sigma$ credible regions for the posterior of $\mu_{\Lambda}$ and $\sigma_{\Lambda}$. As can be seen, across all available events, we can currently constrain these hyperparameters to 
+\KM{Add statement about throwing away samples from Phenom that have high SNRs to do model issues}
+
+\KM{Add statement the population model used}
+
+With the computation of $\mu_{s}$ and $\sigma_{s}$ performed for the posterior samples of all events and all of the available waveform models, we performed two hierarchical analyses: one in which we measured the memory hyperparameters $\mu_{\Lambda}$ and $\sigma_{\Lambda}$ (see Eq.~\eqref{eq:hierarchicalLLfinal}) independent of all of the other astrophysical parameters, and one in which we measured everything simultaneously.\footnote{Note that for the joint inference since there is a selection criteria restricting the secondary mass to be $>3M_{\odot}$ this reduced our total number of events to 146.} When conducting these analyses, we opted to use the following hierarchy for which waveform model to use. If available, we  ideally used the NR surrogate model, then the EOB model, and then the Phenom model. This choice was made based on the model accuracy results presented in Fig.~2 of Ref.~\cite{LIGOScientific:2025rsn}. Our results for this study are highlighted in Fig.~\ref{fig:TGR}, which shows the $1\sigma$, $2\sigma$, and $3\sigma$ credible regions for the posterior of $\mu_{\Lambda}$ and $\sigma_{\Lambda}$. As can be seen, across all available events, we can currently constrain these hyperparameters to 
 
 \figTGR
 
@@ -280,6 +286,37 @@ With the computation of $\mu_{i}$ and $\sigma_{i}$ performed for the posterior s
 \label{sec:forecasts}
 
 \figForecast
+
+\KM{WIP: still trying to figure out how to write this}
+
+To forecast the number of events that will be needed to constrain $\mu_{\Lambda}$ to be away from zero, i.e., to confidently measure memory, we require a representation of each event that is compatible with the hierarchical likelihood that was derived in Eq.~\eqref{eq:hierarchicalLLfinal}. To do this, we compress each current event $i$ to an effective Gaussian approximation. Specifically, starting from the weighted representation
+\begin{align}
+	p(A|d_{i})\propto\sum\limits_{s}w_{s}\mathcal{N}(A|\mu_{s},\sigma_{s}),
+\end{align}
+we define an effective event center $\mu_{i}$ as the mode of this mixture and an effective local width $\sigma_{i}$ from the curvature at the mode via
+\begin{align}
+	\sigma_{i}^{-2}=-\frac{\partial^{2}}{\partial A^2}\log p(A|d_{i})|_{A=\mu_{i}}.
+\end{align}
+This is required because obtaining $\sigma_{i}$ this way preserves the local information content of the event, whereas using a typical sample value of $\sigma_{s}$ would not, since it ignores the spread in $\mu_{s}$. But, because this value of $\sigma_{i}$ need not be consistent with the uncertainty in $\mu_{\Lambda}$, we apply the event-wide calibration
+\begin{align}
+	\sigma_{i}\rightarrow\alpha\sigma_{i}\quad\text{for}\quad\alpha=\sqrt{\sum\limits_{i}\sigma_{i}^{-2}}\Delta\mu_{\Lambda},
+\end{align}
+so that $\sigma_{i}$ reproduces the current uncertainty in $\mu_{\Lambda}$ from the full hierarchical analysis.
+
+To produce mock events to mimic some future catalog, we first construct a $\sigma_{j}$ for some future event $j$ by simply sampling from the previous $\sigma_{i}$ values. With this variance, we then have a representation of this future event through the distribution $\mu_{j}\sim\mathcal{N}(1,\sqrt{\sigma_{j}^{2}+\sigma_{\Lambda,\mathrm{true}}^{2}})$, where we have taken $\mu_{j}=1$ to match the expected value and $\sigma_{\Lambda,\mathrm{true}}$ is drawn from the current posterior conditioned on $\mu_{\Lambda}=1$. Based on this catalog of future events, we then construct weights for samples for the original posterior as
+\begin{align}
+	w_{i}\propto\prod\limits_{j=1}^{N_{\mathrm{future}}}\mathcal{N}(\mu_{j}|\mu_{\Lambda}^{(i)},\sqrt{\sigma_{j}^{2}+(\sigma_{\Lambda}^{i})^{2}}).
+\end{align}
+After normalizing these weights based on the weights of the samples from the original posteriors via
+\begin{align}
+	\overline{w}_{k}=\dfrac{w_{k}}{\sum\limits_{i}w_{i}}
+\end{align}
+the forecasted posterior is then
+\begin{align}
+	p(\mu_{\Lambda},\sigma_{\Lambda}&|\mathcal{D}_{\mathrm{original}},\mathcal{D}_{\mathrm{mock}})\nonumber\\
+	&\approx\sum\limits_{k}\overline{w}_{k}\delta(\mu_{\Lambda}-\mu_{\Lambda}^{(i)})\delta(\sigma_{\Lambda}-\sigma_{\Lambda}^{(i)}).
+\end{align}
+If we then marginalize over $\sigma_{\Lambda}$, we readily have a forecast for the posterior on $\mu_{\Lambda}$. Furthermore, we can run this analysis for many future catalogs to obtain an uncertainty on our 68\% half-width of $\mu_{\Lambda}$. Also, if we assume that our detectors increase in sensitivity for future observations, then we can account for this by simply scaling $\sigma_{i}$ by the expected gain of the detector. The results of this analysis are shown in Fig.~\ref{fig:Forecast}.
 
 \newpage
 
