@@ -10,8 +10,6 @@
 \usepackage{xspace}
 \usepackage{tensor}
 
-\graphicspath{{../figures/}}
-
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
 \usepackage[utf8]{inputenc}
@@ -49,7 +47,8 @@
 
 \newcommand{\Nmemoryevents}{148\xspace}
 \newcommand{\Nevents}{146\xspace}
-\newcommand{\hatAconstraint}{{\color{red}$1.4\pm4.3$}\xspace}
+\newcommand{\muLambdaconstraint}{{\color{red}$1.25\pm4.29$}\xspace}
+\newcommand{\sigmaLambdaconstraint}{{\color{red}$4.36\pm3.49$\xspace}}
 \newcommand{\hatAnumberofevents}{{\color{red}2,000}\xspace}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -64,8 +63,8 @@
 			\includegraphics[width=\textwidth
 			]{memory_mean_stddev_from_posteriors.pdf}
 		\end{center}
-		\caption{Values of the memory (\emph{top})) mean $\mu_{i}$ (Eq.~\eqref{eq:mean}), (\emph{middle}) standard deviataion $\sigma_{i}$ (Eq.~\eqref{eq:stddev}), and (\emph{bottom}) SNR for the posteriors from the waveform models that are available for five events. Whisker plots show the 50\% and 90\% credible regions, with the circle marker being the median value.}
-		\label{fig:MemoryPoseteriors}
+		\caption{Values of the memory (\emph{top}) mean $\mu_{s}$ (Eq.~\eqref{eq:mean}), (\emph{middle}) standard deviation $\sigma_{s}$ (Eq.~\eqref{eq:stddev}), and (\emph{bottom}) SNR for the posteriors from the waveform models that are available for five events. Blue markers represent samples obtained by \texttt{NRSur7dq4}~\cite{Varma:2019csw}, while yellow and pink markers present those obtained by \texttt{SEOBNRv5PHM}~\cite{Pompili:2023tna,Ramos-Buades:2023ehm} and the \texttt{IMRPhenom} models~\cite{Hamilton:2021pkf,Thompson:2023ase}. Whisker plots show the 50\% and 90\% credible regions, with the circle marker being the median value.}
+		\label{fig:MemoryPosteriors}
 	\end{figure*}
 }
 
@@ -74,7 +73,7 @@
 		\begin{center}
 			\includegraphics[width=\columnwidth]{tgr_comparison_corner.pdf}
 		\end{center}
-		\caption{Mean and standard deviation (see Eq.~\eqref{eq:Aconditionaldistribution}) of the memory enhancmenet factor across the population of events up to GWTC-4.0. Contours correspond to the $1\sigma$, $2\sigma$, and $3\sigma$ credible regions. The blue contours correspond to fits of only the memory hyperparameters, while the yellow contours correspond to fits of the astrophysical population parameters and the memory hyperparameters. The black marker/line represents the GR prediction for the memory distribution, i.e., a delta function at 1---$\mu_{\Lambda}=1$, $\sigma_{\Lambda}=0$.}
+		\caption{Mean and standard deviation (see Eq.~\eqref{eq:hierarchicalLLfinal}) of the memory enhancement factor across the population of events up to the GWTC-4.0 catalog. Contours represent the $1\sigma$, $2\sigma$, and $3\sigma$ credible regions. The blue contours correspond to fits of only the memory hyperparameters, while the yellow contours correspond to fits of the astrophysical population parameters and the memory hyperparameters. The black marker/line represents the GR prediction for the memory distribution, i.e., a delta function at 1---$\mu_{\Lambda}=1$, $\sigma_{\Lambda}=0$.}
 		\label{fig:TGR}
 	\end{figure}
 }
@@ -84,7 +83,7 @@
 		\begin{center}
 			\includegraphics[width=\textwidth]{forecast.pdf}
 		\end{center}
-		\caption{Evolution of the $1\sigma$ variance on $\mu_{\Lambda}$ as a function of the number of future GW observations. Blue shows the projection for future O4a-like observations, while yellow shows the projection for future O5a-like observations (i.e., a gain factor of 1.41 in detector sensitivity). The vertical dotted line shows the current number of events analyzed: 146. The horizontal dashed lines shows the point at which $\mu_{\Lambda}$ is measured away from 0 with a confidence of $1\sigma$. The vertical dot-dashed line shows the naive $1/\sqrt{N}$ estimate (based on the current catalog) of how many events are required to reach the $1\sigma$ confidence level: 1,795.}
+		\caption{Evolution of the $1\sigma$ uncertainty on $\mu_{\Lambda}$ as a function of the number of future GW observations. Blue shows the projection for future O4a-like observations, while yellow shows the projection for future O5a-like observations (i.e., a gain factor of 1.41 in detector sensitivity). The vertical dotted line shows the current number of events analyzed: 146. The horizontal dashed line shows the point at which $\mu_{\Lambda}$ is measured away from 0 at a 68\% credible level. The vertical dot-dashed line shows the naive $1/\sqrt{N}$ estimate (based on the current catalog) of how many events are required to reach the 68\% credible level: 1,795.}
 		\label{fig:Forecast}
 	\end{figure*}
 }
@@ -108,7 +107,7 @@
 \title{Constraining Gravitational Wave Memory with Hierarchical Inference}
 
 \begin{abstract}
-  With the multitude of gravitational wave observations that have been made in the past ten years, testing the dynamical and nonlinear nature of strong gravity is becoming more feasible. In particular, one promising way to test the nonlinear nature of Einstein's theory of general relativity (GR) is through the gravitational wave null memory effect: a nonlinear prediction of GR which corresponds to initially co-moving observers being permanently displaced due to a burst of gravitational radiation. Previous studies have shown that, while it is unlikely that the memory effect will be observed in a single event by the LIGO-Virgo-KAGRA (LVK) detectors, evidence for memory in the population of LVK events should be attainable after $\sim$2,000 gravitational wave detections. These works, however, did not jointly model the evidence for memory with the astrophysical parameters of each event, which is crucial for performing this inference correctly. In this work, using the GWTC-4.0 catalog of binary black hole observations, we perform hierarchical Bayesian inference to measure the evidence for memory in current LVK observations. We find that we can currently constrain what we call the memory enhancement factor---the constant appearing in front of the contribution to the strain from the supermomentum flux---to \hatAconstraint, which is consistent with its expected GR value of 1. Furthermore, in agreement with previous analyses,  we forecast that $\sim$\hatAnumberofevents detections will be needed to constrain the variance of the memory enhancement factor to $\lesssim1$, i.e., away from zero.
+  With the multitude of gravitational wave observations that have been made in the past ten years, testing the dynamical and nonlinear nature of strong gravity is becoming more feasible. In particular, one promising way to test the nonlinear nature of Einstein's theory of general relativity (GR) is through the gravitational wave null memory effect: a nonlinear prediction of GR which corresponds to initially co-moving observers being permanently displaced due to a burst of gravitational radiation. Previous studies have shown that, while it is unlikely that the memory effect will be observed in a single event by the LIGO-Virgo-KAGRA (LVK) detectors, evidence for memory in the population of LVK events should be attainable after $\sim$2,000 gravitational wave detections. These works, however, did not jointly model the evidence for memory with the astrophysical parameters of each event, which is crucial for performing this inference correctly. In this work, using the GWTC-4.0 catalog of binary black hole observations, we perform hierarchical Bayesian inference to measure the evidence for memory in current LVK observations. We find that we can currently constrain what we call the memory enhancement factor---the constant appearing in front of the contribution to the strain from the supermomentum flux---to \muLambdaconstraint, which is consistent with its expected GR value of 1. Furthermore, in agreement with previous analyses,  we forecast that $\sim$\hatAnumberofevents detections will be needed to constrain the uncertainty in the memory enhancement factor to $\lesssim1$, i.e., away from zero.
 \end{abstract}
 
 \maketitle
@@ -124,7 +123,7 @@ Among the various nonlinear predictions of GR, the GW null memory effect is an e
 
  Apart from its impact on observers, the memory effect is also intriguing because it is intimately connected to asymptotic symmetries~\cite{Newman:1966ub,Ashtekar:1981bq,Geroch:1981ut,Dray:1984rfa,Ludvigsen:1989kg,Flanagan:2014kfa} and soft theorems~\cite{Weinberg:1965nx,Strominger:2013jfa,Strominger:2014pwa}. As a result, memory plays an important role in fixing the coordinate freedom of gravitational systems~\cite{Mitman:2021xkq,Mitman:2022kwt}, formulating the concept of celestial holography~\cite{Strominger:2017zoo,Raclariu:2021zjz,Pasterski:2021raf,Pasterski:2021rjz}, and even in establishing a divergence-free, self-consistent theory of quantum gravity~\cite{Prabhu:2022zcr}.
 
-Unfortunately, because the memory effect is largely a low-frequency effect, it is nearly impossible to detect in individual binary black hole (BBH) observations with the current LIGO-Virgo-KAGRA (LVK) GW detectors~\cite{Lasky:2016knh}.  Nonetheless, Ref.~\cite{Lasky:2016knh} showed that one can measure the memory in a population of observations by performing a coherent summation of sub-threshold signals, which is often referred to as ``signal-to-noise ratio (SNR) stacking''. Assuming a population of GW150914-like events, which at the time was the only direct GW observation that had been made, Ref.~\cite{Lasky:2016knh} showed that 35 (90) events are needed to make a combined memory SNR of 3 (5). Later, once a more informative GW population had been established by the LVK detectors, Refs.~\cite{Hubner:2019sly,Boersma:2020gxx,Hubner:2021amk,Grant:2022bla,Cheung:2024zow} conducted their own memory searches on various LVK catalogs up to the GWTC-3.0 catalog and concluded that memory had yet to be confidently measured in the population of GW events and would require $\mathcal{O}(2$,$000)$ events to do so. All of these analyses, however, relied on Bayes factors to perform their inference, which are inherently dependent on the choice of prior, and did not simultaneously infer the evidence for the memory effect alongside the other astrophysical parameters' populations, which is crucial for performing this inference correctly.
+Unfortunately, because the memory effect is largely a low-frequency effect, it is nearly impossible to detect in individual binary black hole (BBH) observations with the current LIGO-Virgo-KAGRA (LVK) GW detectors~\cite{Lasky:2016knh}.  Nonetheless, Ref.~\cite{Lasky:2016knh} showed that one can measure the memory in a population of observations by performing a coherent summation of sub-threshold signals, which is often referred to as ``signal-to-noise ratio (SNR) stacking''. Assuming a population of GW150914-like events, which at the time was the only direct GW observation that had been made, Ref.~\cite{Lasky:2016knh} showed that 35 (90) events are needed to make a combined memory SNR of 3 (5). Later, once a more informative GW population had been established by the LVK detectors, Refs.~\cite{Hubner:2019sly,Boersma:2020gxx,Hubner:2021amk,Grant:2022bla,Cheung:2024zow} conducted various follow-up studies on memory using certain LVK catalogs up to the GWTC-3.0 catalog and concluded that memory had yet to be confidently measured in the population of GW events and would require $\mathcal{O}(2$,$000)$ events to do so. All of these analyses, however, relied on Bayes factors to perform their inference, which can be particularly sensitive to the prior volume, and did not simultaneously infer the evidence for the memory effect alongside the other astrophysical parameters' populations, which is crucial for performing this inference correctly.
 
 In this work, we do exactly that. Namely, we utilize hierarchical Bayesian inference to simultaneously infer the evidence for the memory in the LVK Collaboration's GWTC-4.0 catalog of GW observations as well as the usual astrophysical parameter populations. The paper is outlined as follows. In Sec.~\ref{sec:memory} we review how the memory can be computed from the gravitational wave strain and how this will be relevant to our analysis. In Sec.~\ref{sec:methodology} we illustrate our methodology for including memory in the analysis of the GWTC-4.0 catalog and performing hierarchical inference to constrain memory across the population of GW events. In Sec.~\ref{sec:results} we provide our various results, with Sec.~\ref{sec:memoryconstraints} showing the constraints on the memory population obtained via hierarchical inference and Sec.~\ref{sec:forecasts} showing a forecast for how many GW events are required to measure memory. And, finally, in Sec.~\ref{sec:discussion} we summarize our findings and highlight prospects for observing the memory effect in the near future.
 
@@ -153,9 +152,9 @@ $m$ is the Bondi mass aspect~\cite{Bondi:1962px}, and the coordinate $u\equiv t-
 \end{align}
 Critically, the computation of $h_{\mathrm{mem.}}$ requires knowledge of $h$ over the entire two-sphere. To express $h_{\mathrm{mem.}}$ in terms of the angular basis of spin-weighted spherical harmonics, one can use the integral formula
 \begin{align}
-	\int_{S^{2}}\phantom{}_{s_{1}}Y_{\ell_{1},m_{1}}\phantom{}_{s_{2}}Y_{\ell_{2},m_{2}}\phantom{}_{s_{2}}Y_{\ell_{2},m_{2}}\,dw=\sqrt{\dfrac{(2\ell_{1}+1)(2\ell_{2}+1)(2\ell_{3}+1)}{4\pi}}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\m_{1}&m_{2}&m_{3}\end{pmatrix}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\-s_{1}&-s_{2}&-s_{3}\end{pmatrix}
+	\int_{S^{2}}\phantom{}_{s_{1}}Y_{\ell_{1},m_{1}}\phantom{}_{s_{2}}Y_{\ell_{2},m_{2}}\phantom{}_{s_{3}}Y_{\ell_{3},m_{3}}\,d\Omega=\sqrt{\dfrac{(2\ell_{1}+1)(2\ell_{2}+1)(2\ell_{3}+1)}{4\pi}}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\m_{1}&m_{2}&m_{3}\end{pmatrix}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\-s_{1}&-s_{2}&-s_{3}\end{pmatrix}
 \end{align}
-for the right-most objects the Wigner-3j symbols with $s_{1}+s_{2}+s_{3}=0$, to obtain the memory contribution to the individual $(\ell,m)$ spin-weight -2 modes as
+where the right-most objects are the Wigner-3j symbols with $s_{1}+s_{2}+s_{3}=0$, to obtain the memory contribution to the individual $(\ell,m)$ spin-weight -2 modes as
 \begin{align}
 	\label{eq:memorymodes}
 	h_{\mathrm{mem.}}^{\ell,m}(u)&=\sum\limits_{\substack{\ell_{1},\ell_{2}\\m_{2}}}(-1)^{m_{2}}\sqrt{\dfrac{(2\ell_{1}+1)(2\ell_{2}+1)(2\ell+1)}{4\pi(\ell+2)(\ell+1)\ell(\ell-1)}}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell\\m-m_{2}&m_{2}&-m\end{pmatrix}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell\\-2&2&0\end{pmatrix}\int_{-\infty}^{u}\dot{\overline{h}}_{\ell_{1},m-m_{2}}\dot{h}_{\ell_{2},m_{2}}\,du.
@@ -172,9 +171,10 @@ An important caveat regarding calling $h_{\mathrm{mem.}}$ in Eq.~\eqref{eq:memor
 For simplicity, and to avoid averaging procedures, in this study we take choice (ii) to be the proxy for the memory's time evolution. Consequently, we can aim to constrain the memory by considering the strain model
 \begin{align}
 	\label{eq:strainmodel}
-	h(u,\lambda)=h_{\mathrm{no\,mem.}}(u,\lambda) + A_{\mathrm{mem.}}(\lambda)\,h_{\mathrm{mem.}}(u,\lambda),
+	h(u;&\lambda,A_{\mathrm{mem.}})=\nonumber\\
+	&h_{\mathrm{no\,mem.}}(u;\lambda) + A_{\mathrm{mem.}}\,h_{\mathrm{mem.}}(u;\lambda),
 \end{align}
-for $\lambda$ a vector of the 17 intrinsic and extrinsic parameters and $A_{\mathrm{mem.}}$ the ``memory enhancement factor'', which is 1 in GR. Equation~\eqref{eq:strainmodel} can then be used to measure $A_{\mathrm{mem.}}$ across the population of GW observations, by taking $h_{\mathrm{no\,mem.}}$ to be the waveform used in the LVK analysis, i.e., that of Refs.~\cite{Varma:2019csw,Pratten:2020ceb,Colleoni:2024knd,Pompili:2023tna,Ramos-Buades:2023ehm,Hamilton:2021pkf,Thompson:2023ase}, and $h_{\mathrm{mem.}}$ to be Eq.~\eqref{eq:memory} (or really the sum of the modes from Eq.~\eqref{eq:memorymodes}) using $h_{\mathrm{no\,mem.}}$.
+for $\lambda$ a vector of the 17 intrinsic and extrinsic parameters\footnote{Because we lack a waveform model that includes the eccentricity and mean anomaly, $\lambda$ is really a 15-dimensional vector.} and $A_{\mathrm{mem.}}$ the ``memory enhancement factor'', which is 1 in GR. Equation~\eqref{eq:strainmodel} can then be used to measure $A_{\mathrm{mem.}}$ across the population of GW observations, by taking $h_{\mathrm{no\,mem.}}$ to be the waveform used in the LVK analysis, i.e., that of Refs.~\cite{Varma:2019csw,Pratten:2020ceb,Colleoni:2024knd,Pompili:2023tna,Ramos-Buades:2023ehm,Hamilton:2021pkf,Thompson:2023ase}, and $h_{\mathrm{mem.}}$ to be Eq.~\eqref{eq:memory} (or really the sum of modes from Eq.~\eqref{eq:memorymodes}) using $h=h_{\mathrm{no\,mem.}}$.
 	
 \section{Methodology}
 \label{sec:methodology}
@@ -187,18 +187,18 @@ As stated in Sec.~\ref{sec:memory}, the LVK Collaboration's analysis of their ca
 	&=-\frac{1}{2}\langle d-\tilde{h}(\lambda)|d-\tilde{h}(\lambda)\rangle+C\nonumber\\
 	&=-\frac{1}{2}||d-\tilde{h}(\lambda)||^{2}+C
 \end{align}
-where $d$ is the observed data, $h(\lambda)$ is the waveform model evaluated at parameters $\lambda$, $R(\lambda)$ is the detector response (including calibration effects), $\tilde{h}(\lambda)\equiv R(\lambda)h(\lambda)$ is $h(\lambda)$ projected into the data using the detector response $R(\lambda)$, $\langle\cdot|\cdot\rangle$ is the usual noise-weighted inner product, and $C$ is just some unimportant parameter-independent constant. Let $r(\lambda)\equiv d-\tilde{h}(\lambda)$ denote the residual between the data and the waveform projected into the data using the detector response. Using $r(\lambda)$, the likelihood is simply
+where $d$ is the observed data, $h(\lambda)$ is the waveform model evaluated at parameters $\lambda$, $R(\lambda)$ is the detector response (including calibration effects), $\tilde{h}(\lambda)\equiv R(\lambda)h(\lambda)$ is $h(\lambda)$ projected into the data using the detector response $R(\lambda)$, $\langle\cdot|\cdot\rangle$ is the noise-weighted inner product ( $||\cdot||^{2}\equiv\langle\cdot|\cdot\rangle$), and $C$ is some unimportant parameter-independent constant. Let $r(\lambda)\equiv d-\tilde{h}(\lambda)$ denote the residual between the data and the waveform projected into the data using the detector response. With $r(\lambda)$, the likelihood is simply
 \begin{align}
-	\log\mathcal{L}=-\frac{1}{2}||r(\lambda)|r(\lambda)||^{2}+C.
+	\log\mathcal{L}=-\frac{1}{2}||r(\lambda)||^{2}+C.
 \end{align}
 If we wish to include the effects of memory, as was outlined in Sec.~\ref{sec:memory}, since the memory can be computed directly from the usual waveform models using Eqs.~\eqref{eq:memorymodes} and~\eqref{eq:memory}, the likelihood becomes
 \begin{align}
 	\log\mathcal{L}=-\frac{1}{2}|| r(\lambda)-\tilde{h}_{\mathrm{mem.}}(\lambda)||^{2}+C
 \end{align}
-and requires no new waveform model. But, if we wish to instead \emph{detect} the memory, then we want to include the memory enhancement factor:
+and requires no new waveform model. But, if we wish to instead \emph{detect} the memory, then we want to include the memory enhancement factor via
 \begin{align}
 	\label{eq:memoryLL}
-	\log\mathcal{L}=-\frac{1}{2}|| r(\lambda)-A_{\mathrm{mem.}}(\lambda)\tilde{h}_{\mathrm{mem.}}(\lambda)||^{2}+C.
+	\log\mathcal{L}=-\frac{1}{2}|| r(\lambda)-A_{\mathrm{mem.}}\tilde{h}_{\mathrm{mem.}}(\lambda)||^{2}+C.
 \end{align}
 Computing the posterior on $A_{\mathrm{mem.}}$ allows us to easily test the consistency of the observed memory effect with the predictions of GR, and to determine whether the data prefer a non-zero memory effect at all. Conveniently, Eq.~\eqref{eq:memoryLL} takes the form of a Gaussian on $A_{\mathrm{mem.}}$, which peaks at the value
 \begin{align}
@@ -208,7 +208,7 @@ Computing the posterior on $A_{\mathrm{mem.}}$ allows us to easily test the cons
 with standard deviation
 \begin{align}
 	\label{eq:stddev}
-	\sigma_{A_{\mathrm{mem}}}^{2}=||\tilde{h}_{\mathrm{mem.}}(\lambda)||^{-2}.
+	\sigma_{A_{\mathrm{mem}}}=||\tilde{h}_{\mathrm{mem.}}(\lambda)||^{-1}.
 \end{align}
 Marginalizing out the memory enhancement factor of the likelihood with a completely agnostic (improper) flat prior yields the marginal likelihood
 \begin{align}
@@ -221,7 +221,7 @@ Therefore, if we have a set of samples drawn from a posterior based on the origi
 	\label{eq:weight}
 	\log w&=\log\overline{\mathcal{L}}(\lambda)-\log\mathcal{L}(\lambda)\nonumber\\&=\frac{1}{2}\sigma_{A_{\mathrm{mem.}}}^{-2}\hat{A}_{\mathrm{mem.}}^{2}+\log\sigma_{A_{\mathrm{mem.}}}.
 \end{align}
-If the memory is not very strong in any individual event, then the importance weights will be close to 1, and the re-weighted samples will be remain very similar to the original samples. Furthermore, each sample can also be augmented by a value of $A_{\mathrm{mem.}}$ that is drawn from the Gaussian distribution described by Eqs.~\eqref{eq:mean} and~\eqref{eq:stddev} to obtain a new set of samples drawn from the posterior on $A_{\mathrm{mem.}}$. With the posteriors on $\hat{A}_{\mathrm{mem.}}$ and $\sigma_{A_{\mathrm{mem.}}}$ obtained for each event, one can then combine them in a hierarchical way to obtain an overall posterior on the population distribution of $A_{\mathrm{mem.}}$ across the entire catalog of GW events to determine whether the data prefer a non-zero memory effect in the population as a whole.
+If the memory is not very strong in any individual event, then the importance weights will be very close to 1, and the re-weighted samples will remain very similar to the original samples. Furthermore, each sample can also be augmented by a value of $A_{\mathrm{mem.}}$ that is drawn from the Gaussian distribution described by Eqs.~\eqref{eq:mean} and~\eqref{eq:stddev} to obtain a new set of samples drawn from the posterior on $A_{\mathrm{mem.}}$. With the posteriors on $\hat{A}_{\mathrm{mem.}}$ and $\sigma_{A_{\mathrm{mem.}}}$ obtained for each event, one can then combine them in a hierarchical way to obtain an overall posterior on the population distribution of $A_{\mathrm{mem.}}$ across the entire catalog of GW events to determine whether the data prefer a non-zero memory effect in the population as a whole.
 
 \subsection{Hierarchical Inference}
 \label{sec:hierarchicalinference}
@@ -248,9 +248,9 @@ At this point, we can now use the fact that since we have $N$ samples from the p
 we can approximate the integral as
 \begin{align}
 	\mathcal{L}_{i}&\approx\frac{1}{N}\sum\limits_{s}w_{s}\int\dfrac{p(A|\lambda)}{W(\lambda)}p(A,\lambda|\Lambda)\delta(\lambda-\lambda_{s})\,dAd\lambda\nonumber\\
-	&=\frac{1}{N}\sum\limits_{s}w{s}\int\dfrac{p(A|\lambda_{i})}{W(\lambda_{s})}p(A,\lambda_{s}|\Lambda)\,dA.
+	&=\frac{1}{N}\sum\limits_{s}w_{s}\int\dfrac{p(A|\lambda_{s})}{W(\lambda_{s})}p(A,\lambda_{s}|\Lambda)\,dA.
 \end{align}
-If we further assume that the population model factorizes as $p(A,\lambda_{s}|\Lambda)=p(A|\Lambda_{A})p(\lambda|\Lambda_{\lambda})$, then
+If we further assume that the population model factorizes as $p(A,\lambda_{s}|\Lambda)=p(A|\Lambda_{A})p(\lambda_{s}|\Lambda_{\lambda})$, then
 \begin{align}
 	\label{eq:hierarchicalLLsimplified}
 	\mathcal{L}_{i}\approx\frac{1}{N}\sum\limits_{s}w_{s}\dfrac{p(\lambda_{s}|\Lambda_{\lambda})}{W(\lambda_{s})}\int p(A|\lambda_{s})p(A|\Lambda_{A})\,dA.
@@ -261,7 +261,7 @@ And, finally, if we assume a Gaussian population model on A with mean $\mu_{\Lam
 	\mathcal{L}_{i}&\approx\frac{1}{N}\sum\limits_{s}w_{s}\dfrac{p(\lambda_{s}|\Lambda_{\lambda})}{W(\lambda_{s})}\int\mathcal{N}(A|\mu_{s},\sigma_{s})\mathcal{N}(A|\mu_{\Lambda},\sigma_{\Lambda})\,dA\nonumber\\
 	&=\frac{1}{N}\sum\limits_{s}w_{s}\dfrac{p(\lambda_{s}|\Lambda_{\lambda})}{W(\lambda_{s})}\mathcal{N}\left(\mu_{s}|\mu_{\Lambda},\sqrt{\sigma_{s}^{2}+\sigma_{\Lambda}^{2}}\right),
 \end{align}
-where we used Eq.~\eqref{eq:Aconditionaldistribution} to replace $p(A|\lambda_{s})$ in Eq.~\eqref{eq:hierarchicalLLsimplified}. Equation~\eqref{eq:hierarchicalLLfinal} thus provides a straightforward way to evaluate the hierarchical likelihood \emph{without sampling the latent variable $A$} for each sample. Instead, each sample contributes to the likelihood through a Gaussian term that compares its sample-level memory mean $\mu_{s}$ (Eq.~\eqref{eq:mean}) with the memory population mean $\mu_{\Lambda}$, with a variance that is a sum in quadrature of the sample-level memory measurement uncertainty $\sigma_{s}$ (Eq.~\eqref{eq:stddev}) and the memory population uncertainty $\sigma_{\Lambda}$. Finally, while Eq.~\eqref{eq:hierarchicalLLfinal} is the likelihood for an individual event, note that we can obtain the likelihood across all events via
+where we used Eq.~\eqref{eq:Aconditionaldistribution} to replace $p(A|\lambda_{s})$ in Eq.~\eqref{eq:hierarchicalLLsimplified}. Equation~\eqref{eq:hierarchicalLLfinal} thus provides a straightforward way to evaluate the hierarchical likelihood \emph{without sampling the latent variable $A$} for each sample. Instead, each sample contributes to the likelihood through a Gaussian term that compares its sample-level memory mean $\mu_{s}$ (Eq.~\eqref{eq:mean}) with the memory population mean $\mu_{\Lambda}$, with a variance that is a sum in quadrature of the sample-level memory measurement uncertainty $\sigma_{s}$ (Eq.~\eqref{eq:stddev}) and the memory population uncertainty $\sigma_{\Lambda}$. Finally, while Eq.~\eqref{eq:hierarchicalLLfinal} is the likelihood for an individual event, note that we can obtain the likelihood across all events trivially as
 \begin{align}
 	\log\mathcal{L}=\sum\limits_{i}\log\mathcal{L}_{i}.
 \end{align}
@@ -269,16 +269,14 @@ where we used Eq.~\eqref{eq:Aconditionaldistribution} to replace $p(A|\lambda_{s
 \section{Results}
 \label{sec:results}
 
-For our memory analysis, we consider all BBH events observed by the LVK Collaboration which had an inverse false alarm rate above one year, up to and including the GWTC-4.0 catalog. This amounted to \Nmemoryevents events in total. For each event, each available waveform model, and its corresponding posterior samples, we computed the memory mean $\mu_{s}$ and standard deviation $\sigma_{s}$ using Eqs.~\eqref{eq:mean} and~\eqref{eq:stddev}. The waveform models used are those described in Refs.~\cite{Varma:2019csw,Pratten:2020ceb,Colleoni:2024knd,Pompili:2023tna,Ramos-Buades:2023ehm,Hamilton:2021pkf,Thompson:2023ase}. Because the computation of the memory requires the strain modes (see Eq.~\eqref{eq:memorymodes}), each waveform model was always used to provide as many modes as available. For the phenomenological models, which output waveforms in the frequency domain, we first transformed the output waveform to the time-domain before computing the memory. In Fig.~\ref{fig:MemoryPoseteriors} we show the distribution of $\mu_{s}$ and $\sigma_{s}$ across all posterior samples for a few of the more interesting events analyzed. As is shown, of these more significant events, none of them yield a confident measurement of memory. However, as we will show in the subsequent section, by instead inferring the memory hyperparameters across all events, one can obtain much better constraints on the evidence for memory.
+For our memory analysis, we consider all BBH events observed by the LVK Collaboration which had an inverse false alarm rate above one year, up to and including the GWTC-4.0 catalog. This amounted to \Nmemoryevents events in total. For each event, each available waveform model, and its corresponding posterior samples, we computed the memory mean $\mu_{s}$ and standard deviation $\sigma_{s}$ using Eqs.~\eqref{eq:mean} and~\eqref{eq:stddev}. The waveform models used are those described in Refs.~\cite{Varma:2019csw,Pratten:2020ceb,Colleoni:2024knd,Pompili:2023tna,Ramos-Buades:2023ehm,Hamilton:2021pkf,Thompson:2023ase}. Because the computation of the memory requires the strain modes (see Eq.~\eqref{eq:memorymodes}), each waveform model was always used to provide as many modes as available. For the phenomenological models, which output waveforms in the frequency domain, we first transformed the output waveform to the time domain before computing the memory. In Fig.~\ref{fig:MemoryPosteriors} we show the distribution of $\mu_{s}$ and $\sigma_{s}$ across all posterior samples for a few of the more informative events analyzed. As shown, of these more significant events, none of them yield a confident measurement of memory. However, as we will show in the subsequent section, by instead inferring the memory hyperparameters across all events, one can obtain much better constraints on the evidence for memory.
 
 \subsection{Memory Constraints}
 \label{sec:memoryconstraints}
 
-\KM{Add statement about throwing away samples from Phenom that have high SNRs to do model issues}
+With the computation of $\mu_{s}$ and $\sigma_{s}$ performed for the posterior samples of all events and all of the available waveform models, we performed two hierarchical analyses: one in which we measured the memory hyperparameters $\mu_{\Lambda}$ and $\sigma_{\Lambda}$ (see Eq.~\eqref{eq:hierarchicalLLfinal}) independent of all of the other astrophysical parameters, and one in which we measured everything simultaneously.\footnote{Note that for the joint inference since there is a selection criterion restricting the secondary mass to be $>3M_{\odot}$ this reduced our total number of events to 146.} When conducting these analyses, we opted to use the following hierarchy for which waveform model to use. If available, we  ideally used the NR surrogate model, then the EOB model, and then the Phenom model.\footnote{For certain samples, we found that the waveforms produced by the Phenom models had unphysical spikes at low frequencies that caused incredibly large $\mu_{s}$ values. Because of this, when using the Phenom models, if the value of $|\mu_{s}/\sigma_{s}|$ was $>10$ for any sample we simply removed that sample from the analysis. This amounts to removing only a few tens of samples from the whole analysis.} This choice was made based on the model accuracy results presented in Fig.~2 of Ref.~\cite{LIGOScientific:2025rsn}. We used the same population model as Ref.~\cite{LIGOScientific:2025pvj}.
 
-\KM{Add statement the population model used}
-
-With the computation of $\mu_{s}$ and $\sigma_{s}$ performed for the posterior samples of all events and all of the available waveform models, we performed two hierarchical analyses: one in which we measured the memory hyperparameters $\mu_{\Lambda}$ and $\sigma_{\Lambda}$ (see Eq.~\eqref{eq:hierarchicalLLfinal}) independent of all of the other astrophysical parameters, and one in which we measured everything simultaneously.\footnote{Note that for the joint inference since there is a selection criteria restricting the secondary mass to be $>3M_{\odot}$ this reduced our total number of events to 146.} When conducting these analyses, we opted to use the following hierarchy for which waveform model to use. If available, we  ideally used the NR surrogate model, then the EOB model, and then the Phenom model. This choice was made based on the model accuracy results presented in Fig.~2 of Ref.~\cite{LIGOScientific:2025rsn}. Our results for this study are highlighted in Fig.~\ref{fig:TGR}, which shows the $1\sigma$, $2\sigma$, and $3\sigma$ credible regions for the posterior of $\mu_{\Lambda}$ and $\sigma_{\Lambda}$. As can be seen, across all available events, we can currently constrain these hyperparameters to 
+Our results for this study are highlighted in Fig.~\ref{fig:TGR}, which shows the $1\sigma$, $2\sigma$, and $3\sigma$ credible regions for the posterior of $\mu_{\Lambda}$ and $\sigma_{\Lambda}$. As can be seen, across all of the available events that we analyzed, we can currently constrain the memory $\mu_{\Lambda}$ and $\sigma_{\Lambda}$ hyperparameters to \muLambdaconstraint and \sigmaLambdaconstraint, respectively.
 
 \figTGR
 
@@ -287,15 +285,13 @@ With the computation of $\mu_{s}$ and $\sigma_{s}$ performed for the posterior s
 
 \figForecast
 
-\KM{WIP: still trying to figure out how to write this}
-
 To forecast the number of events that will be needed to constrain $\mu_{\Lambda}$ to be away from zero, i.e., to confidently measure memory, we require a representation of each event that is compatible with the hierarchical likelihood that was derived in Eq.~\eqref{eq:hierarchicalLLfinal}. To do this, we compress each current event $i$ to an effective Gaussian approximation. Specifically, starting from the weighted representation
 \begin{align}
 	p(A|d_{i})\propto\sum\limits_{s}w_{s}\mathcal{N}(A|\mu_{s},\sigma_{s}),
 \end{align}
 we define an effective event center $\mu_{i}$ as the mode of this mixture and an effective local width $\sigma_{i}$ from the curvature at the mode via
 \begin{align}
-	\sigma_{i}^{-2}=-\frac{\partial^{2}}{\partial A^2}\log p(A|d_{i})|_{A=\mu_{i}}.
+	\sigma_{i}^{-2}=-\frac{\partial^{2}}{\partial A^2}\log p(A|d_{i})\Big|_{A=\mu_{i}}.
 \end{align}
 This is required because obtaining $\sigma_{i}$ this way preserves the local information content of the event, whereas using a typical sample value of $\sigma_{s}$ would not, since it ignores the spread in $\mu_{s}$. But, because this value of $\sigma_{i}$ need not be consistent with the uncertainty in $\mu_{\Lambda}$, we apply the event-wide calibration
 \begin{align}
@@ -303,27 +299,31 @@ This is required because obtaining $\sigma_{i}$ this way preserves the local inf
 \end{align}
 so that $\sigma_{i}$ reproduces the current uncertainty in $\mu_{\Lambda}$ from the full hierarchical analysis.
 
-To produce mock events to mimic some future catalog, we first construct a $\sigma_{j}$ for some future event $j$ by simply sampling from the previous $\sigma_{i}$ values. With this variance, we then have a representation of this future event through the distribution $\mu_{j}\sim\mathcal{N}(1,\sqrt{\sigma_{j}^{2}+\sigma_{\Lambda,\mathrm{true}}^{2}})$, where we have taken $\mu_{j}=1$ to match the expected value and $\sigma_{\Lambda,\mathrm{true}}$ is drawn from the current posterior conditioned on $\mu_{\Lambda}=1$. Based on this catalog of future events, we then construct weights for samples for the original posterior as
+To produce mock events to mimic some future catalog, we first construct a $\sigma_{j}$ for some future event $j$ by simply sampling from the previous $\sigma_{i}$ values. With this variance, we then have a representation of this future event through the distribution $A_{j}\sim\mathcal{N}(1,\sqrt{\sigma_{j}^{2}+\sigma_{\Lambda,\mathrm{true}}^{2}})$, where we have taken $\mu_{j}=1$ to match the expected $\mu_{\Lambda}$ and $\sigma_{\Lambda,\mathrm{true}}$ is drawn from the current posterior conditioned on $\mu_{\Lambda}=1$. Based on this catalog of future events, we then construct weights for samples for the original posterior as
 \begin{align}
-	w_{i}\propto\prod\limits_{j=1}^{N_{\mathrm{future}}}\mathcal{N}(\mu_{j}|\mu_{\Lambda}^{(i)},\sqrt{\sigma_{j}^{2}+(\sigma_{\Lambda}^{i})^{2}}).
+	w_{i}\propto\prod\limits_{j=1}^{N_{\mathrm{future}}}\mathcal{N}(A_{j}|\mu_{\Lambda}^{(i)},\sqrt{\sigma_{j}^{2}+(\sigma_{\Lambda}^{i})^{2}}).
 \end{align}
 After normalizing these weights based on the weights of the samples from the original posteriors via
 \begin{align}
-	\overline{w}_{k}=\dfrac{w_{k}}{\sum\limits_{i}w_{i}}
+	\overline{w}_{i}=w_{i}\Big/\sum\limits_{k}^{N_{\mathrm{current}}}w_{k}
 \end{align}
 the forecasted posterior is then
 \begin{align}
 	p(\mu_{\Lambda},\sigma_{\Lambda}&|\mathcal{D}_{\mathrm{original}},\mathcal{D}_{\mathrm{mock}})\nonumber\\
-	&\approx\sum\limits_{k}\overline{w}_{k}\delta(\mu_{\Lambda}-\mu_{\Lambda}^{(i)})\delta(\sigma_{\Lambda}-\sigma_{\Lambda}^{(i)}).
+	&\approx\sum\limits_{i}\overline{w}_{i}\delta(\mu_{\Lambda}-\mu_{\Lambda}^{(i)})\delta(\sigma_{\Lambda}-\sigma_{\Lambda}^{(i)}).
 \end{align}
-If we then marginalize over $\sigma_{\Lambda}$, we readily have a forecast for the posterior on $\mu_{\Lambda}$. Furthermore, we can run this analysis for many future catalogs to obtain an uncertainty on our 68\% half-width of $\mu_{\Lambda}$. Also, if we assume that our detectors increase in sensitivity for future observations, then we can account for this by simply scaling $\sigma_{i}$ by the expected gain of the detector. The results of this analysis are shown in Fig.~\ref{fig:Forecast}.
+If we then marginalize over $\sigma_{\Lambda}$, we readily have a forecast for the posterior on $\mu_{\Lambda}$. Furthermore, we can run this analysis for many future catalogs to obtain an uncertainty on our 68\% half-width of $\mu_{\Lambda}$. Also, if we assume that our detectors increase in sensitivity for future observations, then we can account for this by simply scaling $\sigma_{i}$ by the expected gain of the detector, e.g., by a factor of $\sim1.41$ when accounting for the upgrade from O4a to O5a.
 
-\newpage
+The results of this forecast analysis are shown in Fig.~\ref{fig:Forecast}. As can be seen, this analysis yields a very similar number of GW observations required to constrain memory as a naive $1/\sqrt{N}$ estimate, i.e., $\sim$\hatAnumberofevents events. But, if the sensitivity of the LVK detectors in future runs meets the expected O5a gain of $\sim1.41$, then due to the increase in individual event SNRs, we may be able to obtain evidence for memory in as little as $\sim$1,000 events.\footnote{Note though that this is a little misleading because as the detectors become more sensitive, they are expected to observe more low-SNR events (in addition to more high-SNR events).}
 
 \section{Discussion}
 \label{sec:discussion}
 
-\newpage
+In this study, we used hierarchical Bayesian inference to measure the memory enhancement factor---the constant appearing in front of the contribution to the strain from the supermomentum flux, which is 1 in GR---across the population of GW events up to and including the recent GWTC-4.0 catalog. Unsurprisingly, we found that we can constrain this factor to \muLambdaconstraint which does not yield a confident measurement of the memory effect. Nonetheless, this work provides the first attempt to measure memory using hierarchical inference and thus the first analysis to successfully account for potential changes in the inferred BBH population due to the memory. Like previous works, we find that we will likely need $\sim$\hatAnumberofevents GW detections to confidently constrain the memory away from zero. Yet, since this number is expected to be achieved by the fifth observing run by the LVK detectors, we find that it is very likely that we will measure the memory effect for the first time in a population of events in the next few years.
+
+\section{Acknowledgments}
+
+We thank Jann Zosso for insightful discussions about possible detection criteria for memory. K.M. is supported by NASA through the NASA Hubble Fellowship grant \#HST-HF2-51562.001-A awarded by the Space Telescope Science Institute, which is operated by the Association of Universities for Research in Astronomy, Incorporated, under NASA contract NAS5-26555.
 
 \bibliography{refs}
 
