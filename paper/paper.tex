@@ -63,7 +63,7 @@
 			\includegraphics[width=\textwidth
 			]{memory_mean_stddev_from_posteriors.pdf}
 		\end{center}
-		\caption{Values of the memory (\emph{top}) mean $\mu_{s}$ (Eq.~\eqref{eq:mean}), (\emph{middle}) standard deviation $\sigma_{s}$ (Eq.~\eqref{eq:stddev}), and (\emph{bottom}) SNR for the posteriors from the waveform models that are available for five events. Blue markers represent samples obtained by \texttt{NRSur7dq4}~\cite{Varma:2019csw}, while yellow and pink markers present those obtained by \texttt{SEOBNRv5PHM}~\cite{Pompili:2023tna,Ramos-Buades:2023ehm} and the \texttt{IMRPhenom} models~\cite{Hamilton:2021pkf,Thompson:2023ase}. Whisker plots show the 50\% and 90\% credible regions, with the circle marker being the median value.}
+		\caption{Values of the memory (\emph{top}) mean $\mu_{s}$ (Eq.~\eqref{eq:mean}), (\emph{middle}) standard deviation $\sigma_{s}$ (Eq.~\eqref{eq:stddev}), and (\emph{bottom}) SNR for the posteriors from the waveform models that are available for a few events. Blue markers represent samples obtained by \texttt{NRSur7dq4}~\cite{Varma:2019csw}, while yellow and pink markers present those obtained by \texttt{SEOBNRv5PHM}~\cite{Pompili:2023tna,Ramos-Buades:2023ehm} and the \texttt{IMRPhenom} models~\cite{Hamilton:2021pkf,Thompson:2023ase}. Whisker plots show the 50\% and 90\% credible regions, with the circle marker being the median value.}
 		\label{fig:MemoryPosteriors}
 	\end{figure*}
 }
@@ -309,7 +309,7 @@ After normalizing these weights based on the weights of the samples from the ori
 \end{align}
 the forecasted posterior is then
 \begin{align}
-	p(\mu_{\Lambda},\sigma_{\Lambda}&|\mathcal{D}_{\mathrm{original}},\mathcal{D}_{\mathrm{mock}})\nonumber\\
+	p(\mu_{\Lambda},\sigma_{\Lambda}&|\mathcal{D}_{\mathrm{current}},\mathcal{D}_{\mathrm{future}})\nonumber\\
 	&\approx\sum\limits_{i}\overline{w}_{i}\delta(\mu_{\Lambda}-\mu_{\Lambda}^{(i)})\delta(\sigma_{\Lambda}-\sigma_{\Lambda}^{(i)}).
 \end{align}
 If we then marginalize over $\sigma_{\Lambda}$, we readily have a forecast for the posterior on $\mu_{\Lambda}$. Furthermore, we can run this analysis for many future catalogs to obtain an uncertainty on our 68\% half-width of $\mu_{\Lambda}$. Also, if we assume that our detectors increase in sensitivity for future observations, then we can account for this by simply scaling $\sigma_{i}$ by the expected gain of the detector, e.g., by a factor of $\sim1.41$ when accounting for the upgrade from O4a to O5a.
