@@ -44,10 +44,30 @@ def _waveform_sort_key(label):
     return (-calibration, label)
 
 
+def _imrphenom_sort_key(label):
+    """Secondary sort key for IMRPhenom labels: preferred variants rank first.
+
+    Ordering (most to least preferred):
+      IMRPhenomXO4a > IMRPhenomXPHM-SpinTaylor > IMRPhenomXPHM > any other IMRPhenom
+    Within each sub-tier the calibration/alphabetical key applies.
+    """
+    bare = label.split(":", 1)[-1]
+    if "IMRPhenomXO4a" in bare:
+        sub = 0
+    elif "IMRPhenomXPHM-SpinTaylor" in bare:
+        sub = 1
+    elif "IMRPhenomXPHM" in bare:
+        sub = 2
+    else:
+        sub = 3
+    return (sub,) + _waveform_sort_key(label)
+
+
 def _pick_waveform_label(keys):
     """Pick the best available waveform label using the priority hierarchy.
 
-    Priority: NRSur > SEOB > IMRPhenom (any remaining label).
+    Priority: NRSur > SEOB > IMRPhenomXO4a > IMRPhenomXPHM-SpinTaylor >
+              IMRPhenomXPHM > any other IMRPhenom.
     Within each tier, higher calibration versions win (e.g. C01 > C00).
     Ties within calibration version are broken alphabetically.
     """
@@ -58,14 +78,17 @@ def _pick_waveform_label(keys):
     for k in keys_sorted:
         if "SEOB" in k:
             return k
+    imrphenom = [k for k in keys_sorted if "IMRPhenom" in k]
+    if imrphenom:
+        return sorted(imrphenom, key=_imrphenom_sort_key)[0]
     return keys_sorted[0]
 
 
 def _resolve_waveform_label(keys, waveform=None):
     """Resolve *waveform* to the best matching label in *keys*.
 
-    ``None`` or ``"auto"`` uses the default NRSur > SEOB > IMRPhenom
-    hierarchy. A bare waveform name like ``"NRSur7dq4"`` selects the
+    ``None`` or ``"auto"`` uses the default NRSur > SEOB > IMRPhenomXO4a >
+    IMRPhenomXPHM-SpinTaylor > IMRPhenomXPHM > other IMRPhenom hierarchy. A bare waveform name like ``"NRSur7dq4"`` selects the
     highest available ``CXX:NRSur7dq4`` label for that file.
     """
     if not keys:
