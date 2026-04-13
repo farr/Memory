@@ -874,28 +874,18 @@ def main():
         # PPD plot for any astrophysical (astro or joint) results
         ppd_nc_files = []
         ppd_labels = []
-        ppd_n_obs = None
         if run_astro:
             ppd_nc_files.append(os.path.join(outdir, "result_astro.nc"))
             ppd_labels.append("astro")
-            ppd_n_obs = Nobs_astro
         if run_joint:
             ppd_nc_files.append(os.path.join(outdir, "result_joint.nc"))
             ppd_labels.append("joint")
-            if ppd_n_obs is None:
-                # astro not run; use joint event count for rate mode
-                ppd_n_obs = Nobs_joint
-            # When both astro and joint are overlaid, rate mode uses Nobs_astro
-            # (astro event count) for both curves — an approximation since joint
-            # uses fewer events. The shape of p(m1), p(q), p(a) is unaffected.
         if ppd_nc_files:
             logger.info("Generating PPD plot (%s)...", ", ".join(ppd_labels))
             generate_ppd(
                 nc_files=ppd_nc_files,
                 outdir=outdir,
                 labels=ppd_labels,
-                injection_file=injection_file,
-                n_obs=ppd_n_obs,
             )
     else:
         for fit, name in [
