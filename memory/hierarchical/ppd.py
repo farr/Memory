@@ -183,7 +183,11 @@ def compute_ppd_q(q_grid, m1_grid, p_m1_normed, params, chunk=400):
 
 
 def compute_ppd_spin(a_grid, params):
-    """Evaluate the Gaussian spin-magnitude PPD truncated to [0, 1].
+    """Evaluate the truncated Gaussian spin-magnitude PPD on [0, 1].
+
+    Uses the analytic normalization constant
+        Z = Φ((1 − μ)/σ) − Φ((0 − μ)/σ)
+    to match the model exactly.
 
     Returns array of shape (N, A).
     """
@@ -191,13 +195,12 @@ def compute_ppd_spin(a_grid, params):
     mu = params["mu_spin"][:, np.newaxis]
     s  = params["sigma_spin"][:, np.newaxis]
 
-    p_a = scipy_norm.pdf(a, mu, s)
+    trunc_norm = (
+        scipy_norm.cdf((1.0 - mu) / s) - scipy_norm.cdf((0.0 - mu) / s)
+    )
+    p_a = scipy_norm.pdf(a, mu, s) / np.maximum(trunc_norm, 1e-300)
     p_a[:, (a_grid < 0) | (a_grid > 1)] = 0.0
-
-    # Renormalize over [0, 1]
-    da   = np.diff(a_grid)
-    norm = 0.5 * np.sum((p_a[:, :-1] + p_a[:, 1:]) * da, axis=1, keepdims=True)
-    return p_a / np.maximum(norm, 1e-300)
+    return p_a
 
 
 # ---------------------------------------------------------------------------

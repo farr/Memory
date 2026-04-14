@@ -751,7 +751,7 @@ def main():
 
     # astro: all events, uniform weights (no memory reweighting)
     if run_astro:
-        (event_data_astro, inj_data_astro, BW_astro, BW_sel_astro,
+        (event_data_astro, inj_data_astro,
          Nobs_astro, Ndraw_astro, _) = generate_data(
             all_posteriors, memory_data=None, use_tgr=False,
             scale_tgr=False, event_names=_all_event_names, **_gen_kwargs,
@@ -762,7 +762,7 @@ def main():
     #   [m1s, qs, cost1s, cost2s, a1s, a2s, A_hats, A_sigmas,
     #    zs, log_pdraw, log_weights]
     if run_joint or (run_memory and args.enforce_selection):
-        (event_data_joint, inj_data_joint, BW_joint, BW_sel_joint,
+        (event_data_joint, inj_data_joint,
          Nobs_joint, Ndraw_joint, A_scale_joint) = generate_data(
             mem_posteriors, memory_data=memory_data, use_tgr=True,
             scale_tgr=args.scale_tgr, **_gen_kwargs,
@@ -789,7 +789,7 @@ def main():
     # --- MCMC -------------------------------------------------------------
     prng_astro, prng_joint, prng_mem = jax.random.split(prng, 3)
 
-    def _run_joint_mcmc(prng_key, event_data, inj_data, BW, BW_sel,
+    def _run_joint_mcmc(prng_key, event_data, inj_data,
                         Nobs, Ndraw, use_tgr, A_scale):
         # Physically motivated initialization avoids gradient explosion:
         # alpha_1 near the true BBH slope (~3.5) keeps neff_sel above threshold,
@@ -821,7 +821,7 @@ def main():
                       init_strategy=init_to_value(values=_init))
         mcmc = MCMC(kernel, num_warmup=args.n_warmup,
                     num_samples=args.n_sample, num_chains=args.n_chains)
-        mcmc.run(prng_key, event_data, inj_data, BW, BW_sel,
+        mcmc.run(prng_key, event_data, inj_data,
                  Nobs, Ndraw, use_tgr,
                  args.mu_tgr_scale, args.sigma_tgr_scale)
         fit = az.from_numpyro(mcmc)
@@ -833,7 +833,7 @@ def main():
         logger.info("Running astro model (%d events)...", Nobs_astro)
         fit_astro = _run_joint_mcmc(
             prng_astro, event_data_astro, inj_data_astro,
-            BW_astro, BW_sel_astro, Nobs_astro, Ndraw_astro,
+            Nobs_astro, Ndraw_astro,
             use_tgr=False, A_scale=1,
         )
         fname = os.path.join(outdir, "result_astro.nc")
@@ -845,7 +845,7 @@ def main():
         logger.info("Running joint model (%d events)...", Nobs_joint)
         fit_joint = _run_joint_mcmc(
             prng_joint, event_data_joint, inj_data_joint,
-            BW_joint, BW_sel_joint, Nobs_joint, Ndraw_joint,
+            Nobs_joint, Ndraw_joint,
             use_tgr=True, A_scale=A_scale_joint,
         )
         fname = os.path.join(outdir, "result_joint.nc")

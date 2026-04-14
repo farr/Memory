@@ -1124,8 +1124,7 @@ def generate_data(
     """Build per-event data arrays for the joint population model.
 
     Resamples posterior samples with importance weights, assembles arrays of
-    (m1, q, spins, redshift, A_hat, A_sigma) per event, and computes KDE
-    bandwidth matrices via the conditional covariance of the spin dimensions.
+    (m1, q, spins, redshift, A_hat, A_sigma) per event.
     Also loads and processes the injection data for selection effects.
 
     Parameters
@@ -1138,7 +1137,7 @@ def generate_data(
         Per-event memory data from `load_memory_data`.  Required when
         ``use_tgr=True``; ignored when ``use_tgr=False``.
     use_tgr : bool
-        Whether to include the TGR parameter in the KDE.
+        Whether to include the TGR amplitude in the returned data arrays.
     ifar_threshold : float
         IFAR threshold passed to `read_injection_file`.
     min_detector_frame_total_mass : float or None
@@ -1177,8 +1176,7 @@ def generate_data(
     Returns
     -------
     tuple
-        (event_data_array, injection_data_array, BW_matrices,
-        BW_matrices_sel, Nobs, Ndraw, A_scale)
+        (event_data_array, injection_data_array, Nobs, Ndraw, A_scale)
     """
     if use_tgr and memory_data is None:
         raise ValueError(
@@ -1201,9 +1199,6 @@ def generate_data(
     A_hats = []
     A_sigmas = []
     log_weights = []
-
-    BW_matrices = []
-    BW_matrices_sel = []
 
     if prng is None:
         prng = np.random.default_rng(np.random.randint(1 << 32))
@@ -1419,48 +1414,6 @@ def generate_data(
                 "for reweighting."
             )
 
-        # BW_matrices are always 2x2 (spins only); the TGR dimension
-        # is handled analytically in the model.
-        d = 2
-        data_array = np.array(
-            [
-                a1s[-1],
-                a2s[-1],
-                m1s[-1],
-                qs[-1],
-                zs[-1],
-                cost1s[-1],
-                cost2s[-1],
-            ]
-        )
-
-        full_cov_i = np.cov(data_array)
-        try:
-            prec_i = np.linalg.inv(full_cov_i)[:d, :d]
-            cov_i = np.linalg.inv(prec_i)
-        except np.linalg.LinAlgError:
-            logger.warning(
-                "Skipping event %s: singular covariance matrix despite ESS=%.1f",
-                event_label, neff,
-            )
-            m1s.pop()
-            qs.pop()
-            a1s.pop()
-            a2s.pop()
-            A_hats.pop()
-            A_sigmas.pop()
-            log_weights.pop()
-            cost1s.pop()
-            cost2s.pop()
-            zs.pop()
-            log_pdraw.pop()
-            continue
-
-        BW_matrices.append(cov_i * N_samples ** (-2.0 / (4 + d)))
-        BW_matrices_sel.append(cov_i[:2, :2] * N_samples ** (-2.0 / 6))
-
-    BW_matrices = np.array(BW_matrices)
-    BW_matrices_sel = np.array(BW_matrices_sel)
 
     Nobs = len(m1s)
     n_dropped_in_loop = len(event_posteriors) - Nobs
@@ -1502,8 +1455,6 @@ def generate_data(
     return (
         event_data_array,
         injection_data_array,
-        BW_matrices,
-        BW_matrices_sel,
         Nobs,
         Ndraw,
         A_scale,
