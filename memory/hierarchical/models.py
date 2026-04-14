@@ -108,8 +108,6 @@ def make_tgr_only_model(A_hats, A_sigmas, log_weights, Nobs,
 def make_joint_model(
     event_data_array,
     injection_data_array,
-    BW_matrices,
-    BW_matrices_sel,
     Nobs,
     Ndraw,
     use_tgr,
@@ -174,10 +172,12 @@ def make_joint_model(
 
     Spin-magnitude model:
 
-    ``p(a1, a2) approx Normal([mu_spin, mu_spin], Sigma)``
+    ``p(a1, a2) = p_TG(a1 | mu_spin, sigma_spin) p_TG(a2 | mu_spin, sigma_spin)``
 
-    where the current implementation intentionally uses an untruncated Gaussian
-    approximation for simplicity, even though the physical support is ``[0, 1]^2``.
+    where ``p_TG`` is a Gaussian truncated to ``[0, 1]`` and normalized with
+    ``Phi((1 - mu_spin) / sigma_spin) - Phi(-mu_spin / sigma_spin)``.
+    The spin-magnitude dimensions are evaluated pointwise (Monte Carlo integral),
+    like the mass and redshift dimensions.
 
     The azimuthal spin angles ``phi_1`` and ``phi_2`` are implicit and assumed
     to be independent and uniform on ``[0, 2 pi]``, contributing the constant
@@ -192,12 +192,6 @@ def make_joint_model(
     injection_data_array : ndarray
         Shape (8, N_inj): rows are m1, q, cos_tilt_1, cos_tilt_2,
         a_1/spin1z, a_2/spin2z, z, log_prior.
-    BW_matrices : ndarray
-        Per-event KDE bandwidth matrices for spin dimensions,
-        shape (Nobs, 2, 2).
-    BW_matrices_sel : ndarray
-        Per-event KDE bandwidth matrices for spin dimensions (selection),
-        shape (Nobs, 2, 2).
     Nobs : int
         Number of observed events.
     Ndraw : int
@@ -378,37 +372,20 @@ def make_joint_model(
     log_wts += log_tilt_density(cost1s, cost2s)
     log_sel_wts += log_tilt_density(cost1s_sel, cost2s_sel)
 
-    # Spin KDE — always 2×2 (a1, a2).
-    # For simplicity we use untruncated Gaussians here, even though the
-    # physical spin magnitudes are bounded to [0, 1] and the paper model uses
-    # truncated Gaussians on that interval.
-    sigma_evts = BW_matrices + jnp.diag(
-        jnp.array([jnp.square(sigma_spin), jnp.square(sigma_spin)])
-    )
-    sigma_evts = sigma_evts + jnp.eye(2) * 1e-15
-    sigma_sel = jnp.diag(
-        jnp.array([jnp.square(sigma_spin), jnp.square(sigma_spin)])
-    )
-    sigma_sel = sigma_sel + jnp.eye(2) * 1e-15
-    mu_evts = jnp.array([mu_spin, mu_spin])
+    # Spin magnitude model: independent truncated Gaussians on [0, 1].
+    # Evaluated pointwise at each PE sample (Monte Carlo integral).
+    log_trunc_norm_spin = jnp.log(jnp.maximum(
+        ndtr((1.0 - mu_spin) / sigma_spin) - ndtr((0.0 - mu_spin) / sigma_spin),
+        1e-30,
+    ))
 
-    logp_normal_sel = dist.MultivariateNormal(
-        jnp.array([mu_spin, mu_spin]), sigma_sel
-    ).log_prob(a1_a2_sel.T)
-    log_sel_wts += logp_normal_sel
+    def log_spin_magnitude_density(a1, a2):
+        log_p_a1 = dist.Normal(mu_spin, sigma_spin).log_prob(a1) - log_trunc_norm_spin
+        log_p_a2 = dist.Normal(mu_spin, sigma_spin).log_prob(a2) - log_trunc_norm_spin
+        return log_p_a1 + log_p_a2
 
-    logp_normal = (
-        dist.MultivariateNormal(mu_evts, sigma_evts)
-        .log_prob(
-            jnp.array(
-                [
-                    a1_a2s.T,
-                ]
-            )
-        )
-        .T[:, :, 0]
-    )
-    log_wts += logp_normal
+    log_wts += log_spin_magnitude_density(a1_a2s[0], a1_a2s[1])
+    log_sel_wts += log_spin_magnitude_density(a1_a2_sel[0], a1_a2_sel[1])
 
     # TGR: analytic Gaussian convolution over the memory amplitude
     if use_tgr:
