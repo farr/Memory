@@ -63,7 +63,7 @@
 			\includegraphics[width=\textwidth
 			]{memory_mean_stddev_from_posteriors.pdf}
 		\end{center}
-		\caption{Values of the memory (\emph{top}) mean $\mu_{s}$ (Eq.~\eqref{eq:mean}), (\emph{middle}) standard deviation $\sigma_{s}$ (Eq.~\eqref{eq:stddev}), and (\emph{bottom}) SNR for the posteriors from the waveform models that are available for a few events. Blue markers represent samples obtained by \texttt{NRSur7dq4}~\cite{Varma:2019csw}, while yellow and pink markers present those obtained by \texttt{SEOBNRv5PHM}~\cite{Pompili:2023tna,Ramos-Buades:2023ehm} and the \texttt{IMRPhenom} models~\cite{Hamilton:2021pkf,Thompson:2023ase}. Whisker plots show the 50\% and 90\% credible regions, with the circle marker being the median value.}
+		\caption{Values of the memory (\emph{top}) mean $\mu_{s}$ (Eq.~\eqref{eq:mean}), (\emph{middle}) standard deviation $\sigma_{s}$ (Eq.~\eqref{eq:stddev}), and (\emph{bottom}) SNR for the posteriors from the waveform models that are available for a few events. Blue markers represent samples obtained by \texttt{NRSur7dq4}~\cite{Varma:2019csw}, while yellow and pink markers present those obtained by \texttt{SEOBNRv5PHM}~\cite{Pompili:2023tna,Ramos-Buades:2023ehm} and the \texttt{IMRPhenom} models~\cite{Hamilton:2021pkf,Thompson:2023ase}. Whisker plots show the 50\% and 90\% credible regions, with the circle marker being the median value. \KM{Add a note about 250114 not being used in the actual memory analysis}.}
 		\label{fig:MemoryPosteriors}
 	\end{figure*}
 }
@@ -299,7 +299,7 @@ This is required because obtaining $\sigma_{i}$ this way preserves the local inf
 \end{align}
 so that $\sigma_{i}$ reproduces the current uncertainty in $\mu_{\Lambda}$ from the full hierarchical analysis.
 
-To produce mock events to mimic some future catalog, we first construct a $\sigma_{j}$ for some future event $j$ by simply sampling from the previous $\sigma_{i}$ values. With this variance, we then have a representation of this future event through the distribution $A_{j}\sim\mathcal{N}(1,\sqrt{\sigma_{j}^{2}+\sigma_{\Lambda,\mathrm{true}}^{2}})$, where we have taken $\mu_{j}=1$ to match the expected $\mu_{\Lambda}$ and $\sigma_{\Lambda,\mathrm{true}}$ is drawn from the current posterior conditioned on $\mu_{\Lambda}=1$. Based on this catalog of future events, we then construct weights for samples for the original posterior as
+To produce mock events to mimic some future catalog, we first construct a $\sigma_{j}$ for some future event $j$ by simply sampling from the previous $\sigma_{i}$ values. With this variance, we then have a representation of this future event through the distribution $A_{j}\sim\mathcal{N}(1,\sqrt{\sigma_{j}^{2}+\sigma_{\Lambda,\mathrm{true}}^{2}})$, where we have taken $\mu_{j}=1$ to match the expected $\mu_{\Lambda}$ and $\sigma_{\Lambda,\mathrm{true}}$ is drawn from the current posterior conditioned on $\mu_{\Lambda}=1$. Based on this catalog of future events, we then construct weights for the samples defining the original posterior as
 \begin{align}
 	w_{i}\propto\prod\limits_{j=1}^{N_{\mathrm{future}}}\mathcal{N}(A_{j}|\mu_{\Lambda}^{(i)},\sqrt{\sigma_{j}^{2}+(\sigma_{\Lambda}^{i})^{2}}).
 \end{align}
@@ -312,7 +312,7 @@ the forecasted posterior is then
 	p(\mu_{\Lambda},\sigma_{\Lambda}&|\mathcal{D}_{\mathrm{current}},\mathcal{D}_{\mathrm{future}})\nonumber\\
 	&\approx\sum\limits_{i}\overline{w}_{i}\delta(\mu_{\Lambda}-\mu_{\Lambda}^{(i)})\delta(\sigma_{\Lambda}-\sigma_{\Lambda}^{(i)}).
 \end{align}
-If we then marginalize over $\sigma_{\Lambda}$, we readily have a forecast for the posterior on $\mu_{\Lambda}$. Furthermore, we can run this analysis for many future catalogs to obtain an uncertainty on our 68\% half-width of $\mu_{\Lambda}$. Also, if we assume that our detectors increase in sensitivity for future observations, then we can account for this by simply scaling $\sigma_{i}$ by the expected gain of the detector, e.g., by a factor of $\sim1.41$ when accounting for the upgrade from O4a to O5a.
+If we then marginalize over $\sigma_{\Lambda}$, we readily have a forecast for the posterior on $\mu_{\Lambda}$. Furthermore, we can run this analysis for many future catalogs to obtain an uncertainty on our 68\% half-width of $\mu_{\Lambda}$. Also, if we assume that our detectors increase in sensitivity for future observations, then we can account for this by simply dividing $\sigma_{i}$ by the expected gain of the detector, e.g., by a factor of $\sim1.41$ when accounting for the upgrade from O4a to O5a.
 
 The results of this forecast analysis are shown in Fig.~\ref{fig:Forecast}. As can be seen, this analysis yields a very similar number of GW observations required to constrain memory as a naive $1/\sqrt{N}$ estimate, i.e., $\sim$\hatAnumberofevents events. But, if the sensitivity of the LVK detectors in future runs meets the expected O5a gain of $\sim1.41$, then due to the increase in individual event SNRs, we may be able to obtain evidence for memory in as little as $\sim$1,000 events.\footnote{Note though that this is a little misleading because as the detectors become more sensitive, they are expected to observe more low-SNR events (in addition to more high-SNR events).}
 
