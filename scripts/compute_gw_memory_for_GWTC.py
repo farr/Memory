@@ -41,10 +41,10 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--base-dir",
-        type=str,
-        default="/mnt/home/ccalvk/ceph/",
-        help="Base directory containing GWTC subdirectories.",
+        "--base-dirs",
+        type=list,
+        default=["/mnt/home/ccalvk/ceph/"], #,"/mnt/home/misi/ceph/rp.04/catalogs/GWTC-5/GWTC5-Draft_Release-6/15d62fc1_17/bbh_only"],
+        help="Base directories containing GWTC subdirectories.",
     )
 
     parser.add_argument(
@@ -119,11 +119,19 @@ def parse_args():
 # Utility functions
 # ================================================================
 
-def find_gwtc_directories(base_dir):
-    base = Path(base_dir)
-    return sorted(
-        [d for d in base.iterdir() if d.is_dir() and "GWTC" in d.name]
-    )
+def find_gwtc_directories(base_dirs):
+    gwtc_dirs = []
+    for base_dir in base_dirs:
+        base = Path(base_dir)
+        if not "misi" in base_dir:
+            for gwtc_dir in sorted(
+                [d for d in base.iterdir() if d.is_dir() and "GWTC" in d.name]
+            ):
+                gwtc_dirs.append(gwtc_dir)
+        else:
+            gwtc_dirs.append(base)
+            
+    return gwtc_dirs
 
 
 def extract_event_string(filename):
@@ -170,23 +178,23 @@ def find_unique_event_files(gwtc_dir):
     return event_files
 
 
-def get_waveform_labels_from_hdf5(filepath):
+def get_waveform_labels_from_hdf5(filepath, start_string='C'):
     """
-    Return all keys starting with 'C'.
+    Return all keys starting with a string.
     """
     labels = []
     with h5py.File(filepath, "r") as f:
         for key in f.keys():
-            if key.startswith("C"):
+            if key.startswith(start_string):
                 labels.append(key)
     return labels
 
 
-def parse_approximant_from_label(label):
+def parse_approximant_from_label(label, split_char=':'):
     """
     Example: 'C00:NRSur7dq4' -> 'NRSur7dq4'
     """
-    return label.split(":")[1]
+    return label.split(split_char)[1]
 
 
 # ================================================================
@@ -376,10 +384,23 @@ def process_event(filepath, event, args, event_dir, multiprocess):
           * append/replace that label into memory_results.h5
           * write that label's histogram plot
     """
-    if event != "GW250114_082203":
-        labels = get_waveform_labels_from_hdf5(filepath)
+    if not "misi" in filepath:
+        if not "kmitman" in filepath or "GW190521" in filepath:
+            labels = get_waveform_labels_from_hdf5(filepath)
+        else:
+            if event != "GW250114_082203":
+                labels = ['Bilby:NRSur7dq4']
+            else:
+                if "NRSur7dq4" in filepath:
+                    labels = ["bilby-NRSur7dq4_prod-reweighted"]
+                elif "PhenomXO4a" in filepath:
+                    labels = ['bilby-IMRPhenomXO4a_prod-reweighted']
+                elif "PhenomXPHM" in filepath:
+                    labels = ['bilby-IMRPhenomXPHM-SpinTaylor_prod-reweighted']
+                elif "SEOBNRv5PHM" in filepath:
+                    labels = ['bilby-SEOBNRv5PHM-reweighted']
     else:
-        labels = ["bilby-NRSur7dq4_prod-reweighted"]
+        labels = get_waveform_labels_from_hdf5(filepath, "bilby-")
         
     results = {}
     h5_path = Path(event_dir) / "memory_results.h5"
@@ -388,10 +409,23 @@ def process_event(filepath, event, args, event_dir, multiprocess):
         if "Mixed" in label:
             continue
 
-        if event != "GW250114_082203":
-            approximant_name = parse_approximant_from_label(label)
+        if not "misi" in filepath:
+            if not "kmitman" in filepath or "GW190521" in filepath:
+                approximant_name = parse_approximant_from_label(label)
+            else:
+                if event != "GW250114_082203":
+                    approximant_name = "NRSur7dq4"
+                else:
+                    if "NRSur7dq4" in filepath:
+                        approximant_name = "NRSur7dq4"
+                    elif "PhenomXO4a" in filepath:
+                        approximant_name = "IMRPhenomXO4a"
+                    elif "PhenomXPHM" in filepath:
+                        approximant_name = "IMRPhenomXPHM"
+                    elif "SEOBNRv5PHM" in filepath:
+                        approximant_name = "SEOBNRv5PHM"
         else:
-            approximant_name = "NRSur7dq4"
+            approximant_name = parse_approximant_from_label(label, "bilby-").split("-SpinTaylor")[0]
             
         if (not args.overwrite) and label_is_finished(Path(event_dir), label):
             print(f"[{event}] skipping finished model {approximant_name}.", flush=True)
@@ -479,7 +513,7 @@ def process_event_wrapper(task, multiprocess=False):
 def main():
     args = parse_args()
 
-    gwtc_dirs = find_gwtc_directories(args.base_dir)
+    gwtc_dirs = find_gwtc_directories(args.base_dirs)
 
     tasks = []
     for gwtc_dir in gwtc_dirs:
@@ -491,8 +525,17 @@ def main():
             
             tasks.append((str(filepath), event, vars(args)))
 
+    if "GW150914_095045" in args.events:
+        tasks.append(("/mnt/home/kmitman/work/memory_pop/data/GW150914/GW150914_095045_NRSur7dq4.h5", "GW150914_095045", vars(args)))
+
+    if "GW190521_074359" in args.events:
+        tasks.append(("/mnt/home/kmitman/work/memory_pop/data/GW190521/GW190521_074359.h5", "GW190521_074359", vars(args)))
+    
     if "GW250114_082203" in args.events:
-        tasks.append(("/mnt/home/kmitman/work/memory_pop/data/posterior_samples_NRSur7dq4.h5", "GW250114_082203", vars(args)))
+        tasks.append(("/mnt/home/kmitman/work/memory_pop/data/GW250114/posterior_samples_PhenomXO4a.h5", "GW250114_082203", vars(args)))
+        tasks.append(("/mnt/home/kmitman/work/memory_pop/data/GW250114/posterior_samples_PhenomXPHM.h5", "GW250114_082203", vars(args)))
+        tasks.append(("/mnt/home/kmitman/work/memory_pop/data/GW250114/posterior_samples_SEOBNRv5PHM.h5", "GW250114_082203", vars(args)))
+        tasks.append(("/mnt/home/kmitman/work/memory_pop/data/GW250114/posterior_samples_NRSur7dq4.h5", "GW250114_082203", vars(args)))
             
     nproc = min(mp.cpu_count() - 1, len(tasks))
 

@@ -37,6 +37,7 @@ import bilby
 from bilby.gw.detector.psd import PowerSpectralDensity
 from bilby.gw.detector import InterferometerList
 from bilby.gw.waveform_generator import WaveformGenerator, GWSignalWaveformGenerator
+import lal
 import lalsimulation as _lalsim
 
 
@@ -428,7 +429,10 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
     # bilby_pipe: [config] detectors; LALInference: [analysis] ifos
     dets_raw = _first(_flat("detectors"), analysis.get("ifos"))
     if dets_raw is None:
-        detectors_cfg = tuple(sorted(event_detectors(gw_name)))
+        try:
+            detectors_cfg = tuple(sorted(event_detectors(gw_name)))
+        except:
+            detectors_cfg = tuple(sorted(event_detectors(gw_name.split("_")[0])))
     elif isinstance(dets_raw, (list, tuple)):
         detectors_cfg = tuple(str(d).strip() for d in dets_raw if str(d).strip())
     else:
@@ -462,7 +466,10 @@ def _parse_analysis_config(data, label: str, event: str) -> AnalysisConfig:
             df_t = data.samples_dict[label].to_pandas()
             trig = float(df_t["geocent_time"].median())
         except Exception:
-            trig = float(event_gps(gw_name))
+            try:
+                trig = float(event_gps(gw_name))
+            except:
+                trig = float(event_gps(gw_name.split("_")[0]))
 
     def _warn_default(name, value):
         LOGGER.warning(
@@ -967,8 +974,9 @@ def compute_one_sample_fd(
     while True:
         _stderr_cap = _CaptureCStderr()
         try:
-            with _stderr_cap:
-                pols = waveform_generator.frequency_domain_strain(sample_try)
+            with lal.no_swig_redirect_standard_output_error():
+                with _stderr_cap:
+                    pols = waveform_generator.frequency_domain_strain(sample_try)
             break
         except Exception as exc:
             msg = str(exc).lower()
@@ -988,8 +996,11 @@ def compute_one_sample_fd(
             isco_limit = None
             isco_match = re.search(r"the limit is ([\d.]+)", _combined, re.IGNORECASE)
             if isco_match and ("initial frequency is too high" in _combined_lower
-                               or "intitial frequency is too high" in _combined_lower):
+                                or "intitial frequency is too high" in _combined_lower):
                 isco_limit = float(isco_match.group(1))
+            print(isco_limit)
+            print(_combined)
+            print(_combined_lower)
 
             # "internal function call failed" without nyquist/ringdown text signals
             # fRef < f_min (IMRPhenomXO4a, NRSur7dq4, etc.).  Fix by lowering
@@ -1262,7 +1273,7 @@ def compute_bbh_residuals_with_spline_calibration(
 
     # ---- Pre-allocate output arrays ----
     first = compute_one_sample_fd(ifos, wfgen, samples[0])
-
+    
     fd_out: Dict[str, Dict[str, np.ndarray]] = {}
     td_out: Dict[str, Dict[str, np.ndarray]] = {}
 
