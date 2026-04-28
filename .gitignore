@@ -17,3 +17,19 @@ slurm-*.err
 
 # Virtual environments
 .venv
+
+# LaTeX / latexmk (paper/)
+paper/paperNotes.bib
+paper/*.pdf
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.lof
+*.lot
+paper/*.out
+paper/*.toc
+*.loc
+*.soc
