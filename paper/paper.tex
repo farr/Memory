@@ -311,7 +311,7 @@ We assume there is no selection based on the memory parameter $A$, given that we
 The hyperposterior on $\mu_{\Lambda}$ and $\sigma_{\Lambda}$, obtained by sampling Eq.~\eqref{eq:poplike} together with some hyperprior $p(\mu_{\Lambda}, \sigma_{\Lambda})$, encodes our best knowledge of the most likely value of $A$ and the degree of variance consistent with the observed population.}{
 This enables a measurement of $\mu_{\Lambda}$ and $\sigma_{\Lambda}$ across the population of BBH observations via hierarchical inference. The population mean $\mu_{\Lambda}$ provides the preferred value of the memory enhancement factor $A$ across the population, while $\sigma_{\Lambda}$ tells us our uncertainty about the value of $A$. In the following section, we outline our procedure for performing this analysis and quote our findings for these two quantities in relation to their GR values of 1 and 0.}
 
-\added[id=MI]{For the astrophysical part of the model, $p(\lambda \mid \Lambda_\lambda)$, we adopt a parametric form based on the LVK analysis of GWTC-4.0 \cite{LIGOScientific:2025pvj}. We factorize the BBH parameter density for the primary mass $m_1$, mass ratio $q = m_2/m_1$, redshift $z$, spin magnitudes $\chi_{1/2}$ and tilts $\theta_{1/2}$, with each component spin azimuth taken to be uniform on $[0, 2\pi]$. The primary mass $m_{1} \in [3, 300]\,M_{\odot}$ is described by a three-component mixture of a continuous broken power law---joining low- and high-mass slopes $\alpha_{1}$ and $\alpha_{2}$ at a break mass $m_{\mathrm{break}}$---and two Gaussian peaks truncated to the same support, with mixture weights drawn from a flat Dirichlet prior. The mass ratio follows the conditional power law $p(q \mid m_{1}) \propto q^{\beta}$ on $[3\,M_{\odot}/m_{1},\,1]$, while the redshift distribution scales as $(1+z)^{\lambda}\,\mathrm{d}V_{c}/\mathrm{d}z\,(1+z)^{-1}$ with $V_{c}$ the comoving volume in a Planck 2015 cosmology~\cite{Planck:2015fie}. The component spin tilts are modeled as a mixture of an isotropic component (weight $f_{\mathrm{iso}}$) and a Gaussian truncated to $[-1, 1]$ with shared mean $\mu_{\mathrm{tilt}}$ and width $\sigma_{\mathrm{tilt}}$, and the spin magnitudes are described by a Gaussian with shared mean $\mu_{\mathrm{spin}}$ and width $\sigma_{\mathrm{spin}}$. We place broad uniform priors on all of these astrophysical hyperparameters and account for selection effects through the rate-marginalized factor $\alpha(\Lambda)^{-N_{e}}$ above, evaluated as a Monte-Carlo average over the LVK simulated-injection campaign~\cite{Mandel:2018mve}.}
+\added[id=MI]{For the astrophysical part of the model, $p(\lambda \mid \Lambda_\lambda)$, we adopt a parametric form based on the LVK analysis of GWTC-4.0 \cite{LIGOScientific:2025pvj}. We factorize the BBH parameter density for the primary mass $m_1$, mass ratio $q = m_2/m_1$, redshift $z$, spin magnitudes $\chi_{1/2}$ and tilts $\theta_{1/2}$. The primary mass $m_{1} \in [3, 300]\,M_{\odot}$ is described by a three-component mixture of a continuous broken power law and two Gaussian peaks truncated to the same support, with mixture weights drawn from a flat Dirichlet prior. The mass ratio follows the conditional power law $p(q \mid m_{1}) \propto q^{\beta}$ on $[3\,M_{\odot}/m_{1},\,1]$, while the redshift distribution scales as $(1+z)^{\lambda}\,\mathrm{d}V_{c}/\mathrm{d}z\,(1+z)^{-1}$ with $V_{c}$ the comoving volume in a Planck 2015 cosmology~\cite{Planck:2015fie}. The pair of cosine spin tilts $(\cos\theta_{1}, \cos\theta_{2})$ is jointly modeled as a mixture of an isotropic component and a product of truncated Gaussians on $[-1, 1]$ with shared mean and scale, following the non-independently but identically-distributed prescription of GWTC-4.0; each spin magnitude $\chi_{i}$ is independently drawn from a Gaussian truncated to $[0, 1]$ with shared mean and width. We place broad uniform priors on all of these astrophysical hyperparameters and account for selection effects through the rate-marginalized factor $\xi(\Lambda)^{-N_{e}}$ above, estimated as a Monte-Carlo average over the cumulative GWTC-4 LVK simulated-injection campaign~\cite{Essick:2025zed,LVK:GWTC4CumulativeSensitivity}. See Appendix \ref{sec:appendix-popmodel} for details.}
 
 \section{Results}
 \label{sec:results}
@@ -378,6 +378,172 @@ In this study, we used hierarchical Bayesian inference to measure the memory enh
 \section*{Acknowledgments}
 
 We thank Jann Zosso for insightful discussions about possible detection criteria for memory. K.M. is supported by NASA through the NASA Hubble Fellowship grant \#HST-HF2-51562.001-A awarded by the Space Telescope Science Institute, which is operated by the Association of Universities for Research in Astronomy, Incorporated, under NASA contract NAS5-26555.
+
+\appendix
+
+\section{Population model and priors}
+\label{sec:appendix-popmodel}
+
+Here we provide additional details and explicit expressions for the hierarchical population model used in Sec.~\ref{sec:methodology}.
+%
+The starting point is the likelihood in Eq.~\eqref{eq:hierarchicalLLfinal} which contains a factor $p(\lambda \mid \Lambda_\lambda)$ encoding our population model for the astrophysical parameters 
+\begin{equation}
+	\lambda = \left\{ m_1, q, z, \chi_1, \chi_2, \cos\theta_1, \cos \theta_2 \right\} \, ,
+\end{equation}
+for the primary mass $m_1$, the mass ratio $q = m_2/m_1$, the redshift $z$, the spin magnitudes $\chi_{1/2}$ and the spin tilts with respect to the orbital angular momentum $\theta_{1/2}$; the spin angles in the orbital plane $\phi_{1/2}$ are taken to be azimuthally uniform, while the source locations and inclinations are assumed to follow isotropy, so that neither of these parameters appear explicitly in our population model.
+
+We impose a population model on the BBH parameters $\lambda$ that factorizes as
+\begin{align}
+\label{eq:appendix-factorization}
+p(\lambda \mid \Lambda_\lambda)
+&= p(m_{1} \mid \Lambda_{m_{1}})\, p(q \mid m_{1}, \beta)\, p(z \mid \lambda_{z}) \\
+&\quad \times p(\cos \theta_{1}, \cos \theta_{2} \mid \Lambda_{\theta})\,
+p(\chi_{1} \mid \Lambda_{\chi})\, p(\chi_{2} \mid \Lambda_{\chi}) \, , \nonumber
+\end{align}
+with the two component spin azimuths $\phi_{1}, \phi_{2}$ taken to be independent and uniform on $[0, 2\pi]$, contributing the constant factor $(2\pi)^{-2}$ to the joint density. The astrophysical hyperparameters are
+\begin{align}
+\Lambda_{\lambda} = \big\{&\Lambda_{m_{1}},\, \beta,\, \lambda_{z},\, \Lambda_\theta,\, \Lambda_{\chi}\big\} \, ,
+\end{align}
+with $\Lambda_{m_{1}} = \{\alpha_{1}, \alpha_{2}, b, \mu_{1}, \sigma_{1}, \mu_{2}, \sigma_{2}, f_{\mathrm{bpl}}, f_{1}, f_{2}\}$, $\Lambda_\theta = \{f_{\mathrm{iso}}, \mu_{\theta}, \sigma_{\theta}\}$, and $\Lambda_{\chi} = \{\mu_{\chi}, \sigma_{\chi}\}$.
+
+Each factor of the astrophysical model is described below, while
+the memory enhancement factor $A$ is modeled as a Gaussian with uniform hyperpriors on its mean and scale, as discussed in Sec.~\ref{sec:hierarchicalinference} of the main text. 
+All hyperparameters are summarized in Table~\ref{tab:priors}.
+
+\subsection{Primary mass}
+\label{sec:appendix-m1}
+
+The primary mass is supported on $[m_{\min}, m_{\max}] = [3, 300]\, M_{\odot}$ and described by a three-component mixture of a continuous broken power law and two truncated Gaussian peaks,
+\begin{align}
+\label{eq:m1-mixture}
+p(m_{1} \mid \Lambda_{m_{1}})
+&= f_{\mathrm{bpl}}\, p_{\mathrm{bpl}}(m_{1} \mid \alpha_{1}, \alpha_{2}, m_{b}) \nonumber \\
+&\quad + f_{1}\, \mathcal{N}_{[m_{\min}, m_{\max}]}(m_{1} \mid \mu_{1}, \sigma_{1}) \nonumber \\
+&\quad + f_{2}\, \mathcal{N}_{[m_{\min}, m_{\max}]}(m_{1} \mid \mu_{2}, \sigma_{2}) \, ,
+\end{align}
+where $\mathcal{N}_{[a, b]}(x \mid \mu, \sigma)$ denotes a Gaussian with mean $\mu$ and width $\sigma$ truncated and renormalized to $[a, b]$, and the mixture weights $(f_{\mathrm{bpl}}, f_{1}, f_{2})$ are drawn from a flat Dirichlet distribution, $(f_{\mathrm{bpl}}, f_{1}, f_{2}) \sim \mathrm{Dir}(1, 1, 1)$, so they are positive and sum to unity. The broken power law is piecewise on $[m_{\min}, m_{\max}]$ and continuous at the break,
+\begin{align}
+\label{eq:bpl}
+p_{\mathrm{bpl}}(m_{1}) \propto
+\begin{cases}
+m_{1}^{-\alpha_{1}} & m_{\min} \le m_{1} < m_{b}\, , \\[2pt]
+m_{b}^{\alpha_{2} - \alpha_{1}}\, m_{1}^{-\alpha_{2}} & m_{b} \le m_{1} \le m_{\max}\, ,
+\end{cases}
+\end{align}
+normalized to unity over $[m_{\min}, m_{\max}]$. The break mass is reparametrized as
+\begin{align}
+m_{b} = m_{\min} + b\, (m_{\max} - m_{\min}) \, ,
+\end{align}
+restricted by the prior on $b$ to $m_{b} \in [20, 50]\, M_{\odot}$.
+
+\subsection{Mass ratio}
+\label{sec:appendix-q}
+
+The mass ratio $q \equiv m_{2}/m_{1}$ follows a power law conditioned on the primary mass,
+\begin{align}
+\label{eq:q-density}
+p(q \mid m_{1}, \beta) \propto q^{\beta} \quad \text{on}\ q \in [m_{\min}/m_{1},\, 1] \, ,
+\end{align}
+with the lower edge enforcing $m_{2} \ge m_{\min} = 3\, M_{\odot}$.
+
+\subsection{Redshift}
+\label{sec:appendix-z}
+
+The redshift distribution scales as a power law in $1+z$ multiplied by the differential comoving volume per source-frame time,
+\begin{align}
+\label{eq:redshift-density}
+p(z \mid \lambda_{z}) \propto (1 + z)^{\lambda_{z} - 1}\, \frac{\mathrm{d} V_{c}}{\mathrm{d} z} \, ,
+\end{align}
+where the explicit factor of $(1+z)^{-1}$ converts the detector-frame rate of mergers to the source frame. We use a flat $\Lambda$CDM cosmology with $H_{0} = 67.90$~km/s/Mpc and $\Omega_{m} = 0.3065$, consistent with Planck~2015~\cite{Planck:2015fie}, and restrict the support to $z \in [0, 2.5]$.
+
+\subsection{Spin tilts}
+\label{sec:appendix-tilt}
+
+The cosines of the spin tilt angles, $\cos \theta_{1}, \cos \theta_{2} \in [-1, 1]$, are jointly modeled as a mixture between an isotropic component uniform on $[-1, 1]^{2}$ with density $1/4$,and a product of $[-1, 1]$-truncated Gaussians with shared mean $\mu_{\theta}$ and width $\sigma_{\theta}$,
+\begin{align}
+\label{eq:tilt-density}
+p(\cos \theta_{1}, \cos \theta_{2} \mid \Lambda_\theta) =\;& \frac{f_{\mathrm{iso}}}{4}  \\
+&\hspace{-30pt} + (1 - f_{\mathrm{iso}}) \prod_{i=1}^{2} \mathcal{N}_{[-1, 1]}(\cos \theta_{i} \mid \mu_{\theta}, \sigma_{\theta}) \, . \nonumber
+\end{align}
+This is the ``non-independently but identically distributed'' prescription of the GWTC-4.0 \textsc{Gaussian Component Spins} model~\cite{LIGOScientific:2025pvj}. The isotropic-mixture weight $f_{\mathrm{iso}}$ allows for a sub-population of randomly oriented spins, while the shared $(\mu_{\theta}, \sigma_{\theta})$ tie the two component-spin orientations to a common preferred-alignment distribution.
+
+\subsection{Spin magnitudes}
+\label{sec:appendix-spin}
+
+We model the dimensionless spin magnitudes as independent and identically distributed truncated Gaussians on $[0, 1]$,
+\begin{align}
+\label{eq:spin-mag-density}
+p(\chi_{i} \mid \mu_{\chi}, \sigma_{\chi}) = \mathcal{N}_{[0, 1]}(\chi_{i} \mid \mu_{\chi}, \sigma_{\chi}) \, , \quad i \in \{1, 2\} \, ,
+\end{align}
+with shared mean and width across the two components.
+
+\subsection{Selection function}
+\label{sec:appendix-memory-selection}
+
+% The hyperprior is uniform with bounds scaled to the data: writing $\hat{A}_{\max} \equiv \max_{i, s} |\hat{A}_{i, s}|$ for the largest sample-level memory mean across all events,
+% \begin{align}
+% \mu_{\Lambda} \sim U(-1.5\, \hat{A}_{\max},\, 1.5\, \hat{A}_{\max})\, , \quad \sigma_{\Lambda} \sim U(0,\, 1.5\, \hat{A}_{\max}) \, .
+% \end{align}
+Selection effects are captured through the detection efficiency $\xi(\Lambda)$ in Eq.~\eqref{eq:poplike}, evaluated as a Monte-Carlo average over the cumulative O1--O4a LVK simulated-injection campaign~\cite{Essick:2025zed,LVK:GWTC4CumulativeSensitivity}. Both this Monte-Carlo sum and the per-event $N$-sample sums approximating $\mathcal{L}_{i}(\Lambda)$ in Eq.~\eqref{eq:hierarchicalLLfinal} are accompanied by smooth penalties that suppress regions of hyperparameter space where the corresponding effective sample sizes become too small for the estimator to be reliable~\cite{Tiwari:2017ndi,Farr:2019rap,Essick:2022ojx,Talbot:2023pex,Heinzel:2025ogf}. Writing $w_{i,s} \equiv p(\lambda_{i,s} \mid \Lambda_{\lambda})/p_{\mathrm{pe}}(\lambda_{i,s})$ for the importance weight of the $s$-th posterior sample of event $i$ relative to its parameter-estimation prior $p_{\mathrm{pe}}$, and $w_{j}^{\mathrm{sel}} \equiv p(\lambda_{j} \mid \Lambda_{\lambda})/p_{\mathrm{inj}}(\lambda_{j})$ for the analogous weight on the $j$-th of the $N_{\mathrm{draw}}$ recovered injections drawn from the injection distribution $p_{\mathrm{inj}}$, the per-event and selection effective sample sizes are
+\begin{equation}
+\label{eq:neff-event}
+N_{\mathrm{eff}, i}(\Lambda) \equiv \frac{\left(\sum_{s} w_{i,s}\right)^{2}}{\sum_{s} w_{i,s}^{2}}\, 
+\end{equation}
+\begin{equation}
+\label{eq:neff-sel}
+N_{\mathrm{eff,sel}}(\Lambda) \equiv \frac{\left(\sum_{j} w_{j}^{\mathrm{sel}}\right)^{2}}{\sum_{j} \left(w_{j}^{\mathrm{sel}}\right)^{2} - \left(\sum_{j} w_{j}^{\mathrm{sel}}\right)^{2} \! / N_{\mathrm{draw}}} \, .
+\end{equation}
+We add to the log-likelihood a smooth penalty for each $N_{\mathrm{eff}}$ that ramps linearly below a threshold $N_{\mathrm{crit}}$,
+\begin{align}
+\label{eq:neff-penalty}
+\log \Pi(N_{\mathrm{eff}} \mid N_{\mathrm{crit}}) = \min\!\left(0,\; \frac{N_{\mathrm{eff}} - N_{\mathrm{crit}}}{0.05\, N_{\mathrm{crit}}}\right) \, ,
+\end{align}
+applied with $N_{\mathrm{crit}} = N_{\mathrm{obs}}$ to $\min_{i}\, N_{\mathrm{eff}, i}(\Lambda)$ and with $N_{\mathrm{crit}} = 4\, N_{\mathrm{obs}}$ to $N_{\mathrm{eff,sel}}(\Lambda)$.
+% The linear-ramp form has bounded gradient $\left(0.05\, N_{\mathrm{crit}}\right)^{-1}$, which avoids the step-size collapse that higher-power penalties would induce when the NUTS chain transiently visits low-$N_{\mathrm{eff}}$ regions of hyperparameter space.
+
+% \subsection{Hyperpriors}
+% \label{sec:appendix-priors}
+
+% Apart from the Dirichlet prior on the mass-mixture weights, all hyperparameters carry independent uniform priors over the ranges listed in Table~\ref{tab:priors}. The prior on the broken-power-law break is imposed through the unit-interval reparametrization $b$ defined above, with $b \sim U\big((m_{b,\min} - m_{\min})/(m_{\max} - m_{\min}),\, (m_{b,\max} - m_{\min})/(m_{\max} - m_{\min})\big)$ corresponding to $m_{b} \in [20, 50]\, M_{\odot}$.
+
+\begin{table}[t]
+\caption{Hyperpriors. All hyperparameters carry independent uniform priors except for the mass-mixture weights, which are drawn from a flat Dirichlet. The bounds on the memory hyperparameters $\mu_{\Lambda}, \sigma_{\Lambda}$ are auto-scaled by $\hat{A}_{\max} \equiv \max_{i, s} |\hat{A}_{i, s}|$, the largest sample-level memory mean across all events. Mass quantities are in $M_{\odot}$; all other quantities are dimensionless.}
+\label{tab:priors}
+\renewcommand{\arraystretch}{1.15}
+\begin{ruledtabular}
+\begin{tabular}{lll}
+Parameter & Distribution & Range \\
+\hline
+\multicolumn{3}{l}{\textit{Primary mass}} \\
+$\alpha_{1}$, $\alpha_{2}$ & Uniform & $[-4, 12]$ \\
+$m_{b}$ (via $b$) & Uniform & $[20, 50]\,M_{\odot}$ \\
+$(f_{\mathrm{bpl}}, f_{1}, f_{2})$ & Dirichlet & $\mathrm{Dir}(1, 1, 1)$ \\
+$\mu_{1}$ & Uniform & $[5, 20]\,M_{\odot}$ \\
+$\sigma_{1}$ & Uniform & $[0.05, 6]\,M_{\odot}$ \\
+$\mu_{2}$ & Uniform & $[25, 60]\,M_{\odot}$ \\
+$\sigma_{2}$ & Uniform & $[0.05, 10]\,M_{\odot}$ \\[2pt]
+\hline
+\multicolumn{3}{l}{\textit{Mass ratio}} \\
+$\beta$ & Uniform & $[-2, 7]$ \\[2pt]
+\hline
+\multicolumn{3}{l}{\textit{Redshift}} \\
+$\lambda_{z}$ & Uniform & $[-10, 10]$ \\[2pt]
+\hline
+\multicolumn{3}{l}{\textit{Spin tilts}} \\
+$f_{\mathrm{iso}}$ & Uniform & $[0, 1]$ \\
+$\mu_{\theta}$ & Uniform & $[-1, 1]$ \\
+$\sigma_{\theta}$ & Uniform & $[0.05, 10]$ \\[2pt]
+\hline
+\multicolumn{3}{l}{\textit{Spin magnitudes}} \\
+$\mu_{\chi}$ & Uniform & $[0, 0.7]$ \\
+$\sigma_{\chi}$ & Uniform & $[0.01, 1]$ \\[2pt]
+\hline
+\multicolumn{3}{l}{\textit{Memory}} \\
+$\mu_{\Lambda}$ & Uniform & $[-1.5\,\hat{A}_{\max},\, 1.5\,\hat{A}_{\max}]$ \\
+$\sigma_{\Lambda}$ & Uniform & $[0,\, 1.5\,\hat{A}_{\max}]$ \\
+\end{tabular}
+\end{ruledtabular}
+\end{table}
 
 \newpage
 
