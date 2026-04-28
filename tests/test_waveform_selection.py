@@ -2,7 +2,11 @@ import h5py
 import numpy as np
 import pytest
 
-from memory.hierarchical.data import _resolve_waveform_label, load_memory_data
+from memory.hierarchical.data import (
+    _resolve_waveform_label,
+    _write_analyzed_events,
+    load_memory_data,
+)
 
 
 def test_resolve_waveform_label_auto_prefers_highest_priority_waveform():
@@ -28,6 +32,18 @@ def test_resolve_waveform_label_raises_for_missing_waveform():
 
     with pytest.raises(KeyError, match="Waveform 'IMRPhenomXPHM' not found"):
         _resolve_waveform_label(keys, "IMRPhenomXPHM")
+
+
+def test_write_analyzed_events_sorts_event_names(tmp_path):
+    ifar_cache = tmp_path / "event_ifars.txt"
+
+    _write_analyzed_events(ifar_cache, ["GW200129_065458", "GW190521_030229"])
+
+    assert (tmp_path / "analyzed_events.txt").read_text().splitlines() == [
+        "# Final set of events used in hierarchical analysis (post IFAR/mass cuts)",
+        "GW190521_030229",
+        "GW200129_065458",
+    ]
 
 
 def test_load_memory_data_skips_events_missing_requested_waveform(tmp_path):

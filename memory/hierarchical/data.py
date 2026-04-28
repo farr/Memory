@@ -1104,7 +1104,7 @@ def _sample_memory_event(md, idxs, A_scale):
 
 
 def _write_analyzed_events(ifar_cache_file, event_names):
-    """Write *event_names* to ``analyzed_events.txt`` beside *ifar_cache_file*."""
+    """Write *event_names* alphabetically to ``analyzed_events.txt``."""
     if ifar_cache_file is None:
         return
     path = os.path.join(
@@ -1116,7 +1116,7 @@ def _write_analyzed_events(ifar_cache_file, event_names):
             "# Final set of events used in hierarchical analysis"
             " (post IFAR/mass cuts)\n"
         )
-        fh.writelines(name + "\n" for name in event_names)
+        fh.writelines(name + "\n" for name in sorted(event_names))
     logger.info("Wrote analyzed event list to %s", path)
 
 
