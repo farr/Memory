@@ -13,6 +13,7 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 IFAR_THRESHOLD = 1
+SEMIANALYTIC_SNR_THRESHOLD = 10.0
 N_SAMPLES_PER_EVENT = 10000
 NRSUR_MIN_DETECTOR_FRAME_TOTAL_MASS = 66.0
 NRSUR_MIN_MASS_RATIO = 1.0 / 6.0
@@ -909,20 +910,21 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
 def read_injection_file(
     vt_file,
     ifar_threshold=IFAR_THRESHOLD,
+    semianalytic_snr_threshold=SEMIANALYTIC_SNR_THRESHOLD,
     min_detector_frame_total_mass=None,
     min_mass_ratio=None,
     min_mass_2_source=MIN_MASS_2_SOURCE,
 ):
     """Read an HDF5 injection/selection file and extract relevant data.
 
-    Applies IFAR and, when requested, detector-frame total-mass,
-    mass-ratio, and minimum secondary mass cuts to determine which
-    injections were "found", then extracts source-frame masses, spins,
-    redshifts, and draw priors. Official polar-spin releases are
-    converted from tilt angle to cos(tilt), while legacy Cartesian files
-    retain the corresponding spin-coordinate Jacobian. Also computes
-    derived spin quantities (chi_eff, chi_p) and converts the analysis
-    time to years.
+    Applies search-pipeline IFAR and semi-analytic observed-SNR cuts, plus
+    detector-frame total-mass, mass-ratio, and minimum secondary-mass cuts
+    when requested, to determine which injections were "found". It then
+    extracts source-frame masses, spins, redshifts, and draw priors.
+    Official polar-spin releases are converted from tilt angle to
+    cos(tilt), while legacy Cartesian files retain the corresponding
+    spin-coordinate Jacobian. Also computes derived spin quantities
+    (chi_eff, chi_p) and converts the analysis time to years.
 
     Sources:
     - https://iopscience.iop.org/article/10.3847/2515-5172/ac2ba7
@@ -938,6 +940,11 @@ def read_injection_file(
     ifar_threshold : float
         Inverse false-alarm rate threshold (yr); injections with min FAR
         below 1/ifar_threshold are considered found.
+    semianalytic_snr_threshold : float or None
+        Network observed-SNR threshold for semi-analytic injections. If the
+        release contains ``semianalytic_observed_phase_maximized_snr_net``,
+        injections above this threshold are also considered found. If None,
+        this cut is disabled.
     min_detector_frame_total_mass : float or None
         Minimum detector-frame total mass threshold in solar masses.
         Injections with ``(m1_source + m2_source) * (1 + z)`` below this
@@ -965,6 +972,14 @@ def read_injection_file(
         fars = [events[key] for key in events.dtype.names if "far" in key]
         min_fars = np.min(fars, axis=0)
         found = min_fars < 1 / ifar_threshold
+        if (
+            semianalytic_snr_threshold is not None
+            and "semianalytic_observed_phase_maximized_snr_net" in events.dtype.names
+        ):
+            semianalytic_snr = events[
+                "semianalytic_observed_phase_maximized_snr_net"
+            ][()]
+            found |= semianalytic_snr >= semianalytic_snr_threshold
         redshift = _get_injection_redshift(events)
         detector_frame_total_mass = (
             (events["mass1_source"] + events["mass2_source"])
@@ -1111,6 +1126,7 @@ def generate_data(
     memory_data=None,
     use_tgr=True,
     ifar_threshold=IFAR_THRESHOLD,
+    semianalytic_snr_threshold=SEMIANALYTIC_SNR_THRESHOLD,
     min_detector_frame_total_mass=None,
     min_mass_ratio=None,
     min_mass_2_source=MIN_MASS_2_SOURCE,
@@ -1140,6 +1156,8 @@ def generate_data(
         Whether to include the TGR amplitude in the returned data arrays.
     ifar_threshold : float
         IFAR threshold passed to `read_injection_file`.
+    semianalytic_snr_threshold : float or None
+        Semi-analytic observed-SNR threshold passed to `read_injection_file`.
     min_detector_frame_total_mass : float or None
         Minimum detector-frame total mass cut passed to
         `read_injection_file`. If None, the cut is disabled.
@@ -1432,6 +1450,7 @@ def generate_data(
     injection_data = read_injection_file(
         injection_file,
         ifar_threshold=ifar_threshold,
+        semianalytic_snr_threshold=semianalytic_snr_threshold,
         min_detector_frame_total_mass=min_detector_frame_total_mass,
         min_mass_ratio=min_mass_ratio,
         min_mass_2_source=min_mass_2_source,
