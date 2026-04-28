@@ -92,6 +92,7 @@ from memory.hierarchical import (  # noqa: E402
 from memory.hierarchical.data import (  # noqa: E402
     NRSUR_MIN_DETECTOR_FRAME_TOTAL_MASS,
     NRSUR_MIN_MASS_RATIO,
+    SEMIANALYTIC_SNR_THRESHOLD,
     _pick_waveform_label,
     _resolve_waveform_label,
     validate_posterior_prior_consistency,
@@ -116,6 +117,11 @@ def _resolve_injection_file(args):
         return os.path.join(
             REPO_DIR,
             "data/selection/mixture-real_o3_o4a-polar_spins_20250503134659UTC.hdf",
+        )
+    if args.injection_runs == "o1+o2+o3+o4a":
+        return os.path.join(
+            REPO_DIR,
+            "data/selection/mixture-semi_o1_o2-real_o3_o4a-cartesian_spins_20250503134659UTC.hdf",
         )
     raise ValueError(f"Unrecognized injection runs: {args.injection_runs}")
 
@@ -413,7 +419,7 @@ def _build_parser():
     parser.add_argument(
         "--injection-runs",
         default="o4a",
-        choices=["o4a", "o3+o4a"],
+        choices=["o4a", "o3+o4a", "o1+o2+o3+o4a"],
         help="Which injection campaign to use (default: o4a)",
     )
     parser.add_argument(
@@ -421,7 +427,10 @@ def _build_parser():
         type=str,
         nargs="+",
         default=[],
-        help="Substrings of event filenames to exclude (e.g. GW15 GW17)",
+        help=(
+            "Substrings of event filenames to exclude (default: none). "
+            "Pass e.g. 'GW15 GW17' to drop O1/O2 events."
+        ),
     )
 
     # -- MCMC configuration -------------------------------------------------
@@ -494,6 +503,16 @@ def _build_parser():
         type=float,
         default=1,
         help="Inverse false-alarm rate threshold in years (default: 1)",
+    )
+    parser.add_argument(
+        "--semianalytic-snr-threshold",
+        type=float,
+        default=SEMIANALYTIC_SNR_THRESHOLD,
+        help=(
+            "Observed network SNR threshold for semi-analytic selection "
+            f"injections (default: {SEMIANALYTIC_SNR_THRESHOLD:g}; use a "
+            "negative value to disable)"
+        ),
     )
     parser.add_argument(
         "--enforce-selection",
@@ -579,7 +598,7 @@ def main():
     logger.info("Running in output directory: %s", outdir)
 
     # --- Discover event files and load all posteriors ---------------------
-    exclude = args.exclude + ["GW15", "GW17"]
+    exclude = list(args.exclude)
     event_files, discarded_files = _collect_event_files(args.data_paths, exclude)
 
     logger.info("Discarded %d files", len(discarded_files))
@@ -736,6 +755,11 @@ def main():
     _gen_kwargs = dict(
         injection_file=injection_file,
         ifar_threshold=args.ifar_threshold,
+        semianalytic_snr_threshold=(
+            None
+            if args.semianalytic_snr_threshold < 0
+            else args.semianalytic_snr_threshold
+        ),
         min_detector_frame_total_mass=(
             NRSUR_MIN_DETECTOR_FRAME_TOTAL_MASS
             if apply_nrsur_injection_cuts else None
