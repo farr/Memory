@@ -149,7 +149,7 @@ Until recently, numerical relativity (NR) simulations of BBH mergers could not r
 \noindent In particular, motivated by the BMS \comment[id=MI]{undefined acronym; define here or above (``asymptotic symmetries'')} symmetry group and its corresponding conserved charges~\cite{Wald:1999wa,Flanagan:2015pxa,Mitman:2020pbt}, one can write the real part of the GW strain \comment[id=MI]{``strain'' can mean different things; should define $h=h_+ - i h_\times$}, which is the only part that contains memory \comment[id=MI]{this is surely an artifact of the canonical frame choice?}, as
 \begin{align}
 	\label{eq:restrain}
-	\mathrm{Re}\left[h(u,\theta,\phi)\right]=\bar{\eth}^{2}\mathfrak{D}^{-1}\left[m+\frac{1}{4}\int_{-\infty}^{u}|\dot{h}|^{2}\,du\right],
+	\mathrm{Re}\left[h(u,\theta,\phi)\right]=\bar{\eth}^{2}\mathfrak{D}^{-1}\left[m+\frac{1}{4}\int_{-\infty}^{u}|\dot{h}|^{2}\,{\rm d}u\right],
 \end{align}
 \added[id=MI]{at a given point in the sphere defined by the polar and azimuthal angles $\theta$ and $\phi$}, where $\eth$ is the \deleted[id=MI, comment={usual for you maybe, most LIGO readers will have no idea what this is, avoid editorializing.}]{usual} spin-weight \added[id=MI]{$s$} operator~\cite{Newman:1961qr,Goldberg:1966uu,Geroch:1973am}, whose action on spin-weighted spherical harmonics~\cite{Goldberg:1966uu} is
 \begin{align}
@@ -162,17 +162,17 @@ $\mathfrak{D}$ is an operator whose action on spherical harmonics is
 $m$ is the Bondi mass aspect~\cite{Bondi:1962px}, and the coordinate $u\equiv t-r$ is the Bondi time (or the retarded time) with overdots representing derivatives with respect to $u$. Thus, since the null memory contribution to the strain is sourced by the supermomentum flux, i.e., the second term in Eq.~\eqref{eq:restrain}, one can compute the memory as
 \begin{align}
 	\label{eq:memory}
-	h_{\mathrm{mem}}(u,\theta,\phi)=\frac{1}{4}\bar{\eth}^{2}\mathfrak{D}^{-1}\int_{-\infty}^{u}|\dot{h}|^{2}\,du.
+	h_{\mathrm{mem}}(u,\theta,\phi)=\frac{1}{4}\bar{\eth}^{2}\mathfrak{D}^{-1}\int_{-\infty}^{u}|\dot{h}|^{2}\,{\rm d}u.
 \end{align}
 Critically, the computation of $h_{\mathrm{mem}}$ requires knowledge of $h$ over the entire two-sphere \comment[id=MI]{make that clearer in Eq.~\eqref{eq:memory}, spell out $\dot{h}$} \cite{PhysRevD.45.520}. To express $h_{\mathrm{mem}}$ in terms of the angular basis of spin-weighted spherical harmonics, one can use the integral formula
 \begin{align}
-	\int_{S^{2}}\phantom{}_{s_{1}}Y_{\ell_{1},m_{1}}\phantom{}_{s_{2}}Y_{\ell_{2},m_{2}}\phantom{}_{s_{3}}Y_{\ell_{3},m_{3}}\,d\Omega=\sqrt{\dfrac{(2\ell_{1}+1)(2\ell_{2}+1)(2\ell_{3}+1)}{4\pi}}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\m_{1}&m_{2}&m_{3}\end{pmatrix}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\-s_{1}&-s_{2}&-s_{3}\end{pmatrix} ,
+	\int_{S^{2}}\phantom{}_{s_{1}}Y_{\ell_{1},m_{1}}\phantom{}_{s_{2}}Y_{\ell_{2},m_{2}}\phantom{}_{s_{3}}Y_{\ell_{3},m_{3}}\,{\rm d}\Omega=\sqrt{\dfrac{(2\ell_{1}+1)(2\ell_{2}+1)(2\ell_{3}+1)}{4\pi}}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\m_{1}&m_{2}&m_{3}\end{pmatrix}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\-s_{1}&-s_{2}&-s_{3}\end{pmatrix} ,
 \end{align}
-\added[id=MI]{for an angular element $d\Omega$ integrated over the entire two-sphere, and}
+\added[id=MI]{for an angular element ${\rm d}\Omega$ integrated over the entire two-sphere, and}
 where the right-most objects are the Wigner-3j symbols with $s_{1}+s_{2}+s_{3}=0$, to obtain the memory contribution to the individual $(\ell,m)$ spin-weight $s =-2$ modes as
 \begin{align}
 	\label{eq:memorymodes}
-	h_{\mathrm{mem}}^{\ell,m}(u)&=\sum\limits_{\substack{\ell_{1},\ell_{2}\\m_{2}}}(-1)^{m_{2}}\sqrt{\dfrac{(2\ell_{1}+1)(2\ell_{2}+1)(2\ell+1)}{4\pi(\ell+2)(\ell+1)\ell(\ell-1)}}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell\\m-m_{2}&m_{2}&-m\end{pmatrix}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell\\-2&2&0\end{pmatrix}\int_{-\infty}^{u}\dot{\overline{h}}_{\ell_{1},m-m_{2}}\dot{h}_{\ell_{2},m_{2}}\,du.
+	h_{\mathrm{mem}}^{\ell,m}(u)&=\sum\limits_{\substack{\ell_{1},\ell_{2}\\m_{2}}}(-1)^{m_{2}}\sqrt{\dfrac{(2\ell_{1}+1)(2\ell_{2}+1)(2\ell+1)}{4\pi(\ell+2)(\ell+1)\ell(\ell-1)}}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell\\m-m_{2}&m_{2}&-m\end{pmatrix}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell\\-2&2&0\end{pmatrix}\int_{-\infty}^{u}\dot{\overline{h}}_{\ell_{1},m-m_{2}}\dot{h}_{\ell_{2},m_{2}}\,{\rm d}u.
 \end{align}
 \end{widetext}
 \comment[id=MI]{the overbar is conjugation? say so. In data literature, $*$ is more common}
@@ -207,42 +207,51 @@ As stated in Sec.~\ref{sec:memory}, \replaced[id=MI]{standard LVK analyses do}{t
 	&=-\frac{1}{2}\left\|d-\tilde{h}(\lambda)\right\|^2+C\, ,
 \end{align}
 where $d$ is the observed data, $h(\lambda)$ is the waveform model evaluated at parameters $\lambda$, $R(\lambda)$ is the detector response including calibration \comment[id=MI]{and antenna patterns?}, $\tilde{h}(\lambda)\equiv R(\lambda)h(\lambda)$ is the signal at the detector, $\langle x | y \rangle = 4 \mathrm{Re}[\int_0^\infty  {\rm d} f\, x(f) y(f)/S(f)]$ is a noise-weighted inner product for a noise power spectral density $S(f)$, $\left\| \cdot \right\|^2\equiv\langle \cdot | \cdot \rangle$, and $C$ is a parameter-independent constant.
-Letting $r(\lambda)\equiv d-\tilde{h}(\lambda)$ denote the residual between the data and the template, the likelihood simplifies to
+Letting $r(\lambda)\equiv d-\tilde{h}(\lambda)$ denote the residual between the data and the template, the log-likelihood simplifies to
 \begin{align}
 	\log\mathcal{L}=-\frac{1}{2}\left\|r(\lambda)\right\|^2+C\, .
 \end{align}
 
-If we wish to include the effects of memory, as was outlined in Sec.~\ref{sec:memory}, since the memory can be computed directly from the usual waveform models using Eqs.~\eqref{eq:memorymodes} and~\eqref{eq:memory}, the likelihood becomes
+If we wish to include the effects of memory, as was outlined in Sec.~\ref{sec:memory}, since the memory can be computed directly from the usual waveform models using Eqs.~\eqref{eq:memorymodes} and~\eqref{eq:memory}, the log-likelihood becomes
 \begin{align}
-	\log\mathcal{L}=-\frac{1}{2}|| r(\lambda)-\tilde{h}_{\mathrm{mem}}(\lambda)||^{2}+C
+	\log\mathcal{L}=-\frac{1}{2}\left\| r(\lambda)-\tilde{h}_{\mathrm{mem}}(\lambda)\right\|^2+C\, .
 \end{align}
 and requires no new waveform model. But, if we wish to instead \emph{detect} the memory, then we want to include the memory enhancement factor via
 \begin{align}
 	\label{eq:memoryLL}
-	\log\mathcal{L}=-\frac{1}{2}|| r(\lambda)-A_{\mathrm{mem}}\tilde{h}_{\mathrm{mem}}(\lambda)||^{2}+C.
+	\log\mathcal{L}=-\frac{1}{2}\left\| r(\lambda)-A_{\mathrm{mem}}\tilde{h}_{\mathrm{mem}}(\lambda)\right\|^2+C\, .
 \end{align}
-Computing the posterior on $A_{\mathrm{mem}}$ allows us to easily test the consistency of the observed memory effect with the predictions of GR, and to determine whether the data prefer a non-zero memory effect at all. Conveniently, Eq.~\eqref{eq:memoryLL} takes the form of a Gaussian on $A_{\mathrm{mem}}$, which peaks at the value
+Computing the posterior on $A_{\mathrm{mem}}$ allows us to easily test the consistency of the observed memory effect with the predictions of GR, and to determine whether the data prefer a non-zero memory effect at all.
+Rather than sampling this parameter directly, which would require re analyzing the data from scratch, we can take advantage of the structure of Eq.~\eqref{eq:memoryLL} to do this efficiently.
+
+Conveniently, Eq.~\eqref{eq:memoryLL} takes the form of a Gaussian on $A_{\mathrm{mem}}$, which peaks at the value
 \begin{align}
 	\label{eq:mean}
-	\hat{A}_{\mathrm{mem}}=\dfrac{\mathrm{Re}\left[\langle\tilde{h}_{\mathrm{mem}}(\lambda)|r(\lambda)\rangle\right]}{||\tilde{h}_{\mathrm{mem}}(\lambda)||^{2}},
+	\hat{A}_{\mathrm{mem}}=\dfrac{\mathrm{Re}\left[\langle\tilde{h}_{\mathrm{mem}}(\lambda)|r(\lambda)\rangle\right]}{\left\|\tilde{h}_{\mathrm{mem}}(\lambda)\right\|^2}\, ,
 \end{align}
 with standard deviation
 \begin{align}
 	\label{eq:stddev}
-	\sigma_{A_{\mathrm{mem}}}=||\tilde{h}_{\mathrm{mem}}(\lambda)||^{-1}.
+	\sigma_{A_{\mathrm{mem}}}=\left\|\tilde{h}_{\mathrm{mem}}(\lambda)\right\|^{-1}\, .
 \end{align}
-Marginalizing out the memory enhancement factor of the likelihood with a completely agnostic (improper) flat prior yields the marginal likelihood
+Marginalizing out the memory enhancement factor of the likelihood with a \deleted[id=MI,comment={no such thing as a completely agnostic prior}]{completely agnostic (improper)} flat prior thus yields the marginal log-likelihood
 \begin{align}
 	\label{eq:marginalLL}
-	\log\overline{\mathcal{L}}&=\log\int\exp(\log\mathcal{L})\,dA_{\mathrm{mem}}\nonumber\\&=-\frac{1}{2}\left(||r(\lambda)||^{2}-\sigma_{A_{\mathrm{mem}}}^{-2}\hat{A}_{\mathrm{mem}}^{2}\right)\nonumber\\
-	&\phantom{=.}+\log\sigma_{A_{\mathrm{mem}}}+C.
+	\log\overline{\mathcal{L}}&=\log\int\exp(\log\mathcal{L})\,{\rm d} A_{\mathrm{mem}}\nonumber\\&=-\frac{1}{2}\left(||r(\lambda)||^{2}-\sigma_{A_{\mathrm{mem}}}^{-2}\hat{A}_{\mathrm{mem}}^{2}\right)\nonumber\\
+	&\phantom{=.}+\log\sigma_{A_{\mathrm{mem}}}+C\, .
 \end{align}
-The sample-level hyperparameters $\hat{A}_{\mathrm{mem}}$ and $\sigma_{A_{\mathrm{mem}}}$ yield the preferred $A_{\mathrm{mem}}$ value (through $\hat{A}_{\mathrm{mem}}$) as well as our uncertainty about this value (through $\sigma_{A_{\mathrm{mem}}}$). Meanwhile, the marginal likelihood $\overline{\mathcal{L}}$ from tells us how much better the data is explained when we include a memory signal in the analysis with the usual waveform model evaluation. Therefore, if we have a set of samples drawn from a posterior based on the original, no-memory likelihood $\mathcal{L}$, then the ratio of the marginal likelihood in Eq.~\eqref{eq:marginalLL} to the original likelihood serves as an importance weight that can be applied to the samples to obtain a new set of samples drawn from the posterior that is based on the marginal likelihood $\overline{\mathcal{L}}$, i.e.,
+\added[id=MI]{Thus, starting from posterior samples from the standard memoryless LVK analysis, we can easily derive a conditional and marginal posterior for the memory amplitude parameter $A_{\rm mem}$.}
+
+\comment[id=MI]{multiple unmarked edits in following 2 pars, fyi}
+The sample-level hyperparameters $\hat{A}_{\mathrm{mem}}$ and $\sigma_{A_{\mathrm{mem}}}$ respectively yield the preferred $A_{\mathrm{mem}}$ value and our uncertainty about this value, conditioned on the corresponding $\lambda$ sample. Meanwhile, the marginal likelihood $\overline{\mathcal{L}}$ from Eq.~\eqref{eq:marginalLL} encodes the goodness of fit achieved by incorporating memory in the analysis. Therefore, if we have a set of samples drawn from a posterior based on the original, no-memory likelihood $\mathcal{L}$, then the ratio of the marginal likelihood in Eq.~\eqref{eq:marginalLL} to the original likelihood serves as an importance weight to reseample draws from the memoryless posterior into the posterior that would have been obtained with memory.
+The log-weight is simply
 \begin{align}
 	\label{eq:weight}
 	\log w&=\log\overline{\mathcal{L}}(\lambda)-\log\mathcal{L}(\lambda)\nonumber\\&=\frac{1}{2}\sigma_{A_{\mathrm{mem}}}^{-2}\hat{A}_{\mathrm{mem}}^{2}+\log\sigma_{A_{\mathrm{mem}}}.
 \end{align}
-If the memory is not very strong in any individual event, then the importance weights will be very close to 1, and the re-weighted samples will remain very similar to the original samples. Furthermore, each sample can also be augmented by a value of $A_{\mathrm{mem}}$ that is drawn from the Gaussian distribution described by Eqs.~\eqref{eq:mean} and~\eqref{eq:stddev} to obtain a new set of samples that were drawn from the posterior on $A_{\mathrm{mem}}$. With the values of $\hat{A}_{\mathrm{mem}}$ and $\sigma_{A_{\mathrm{mem}}}$ obtained for each sample, we can then combine them in a hierarchical way to obtain an overall posterior on the population distribution of $A_{\mathrm{mem}}$ across the entire catalog of GW events to determine whether the data prefer a non-zero memory effect in the population as a whole~\cite{Isi:2022cii}.
+\comment[id=MI]{I wonder if we should cite Isobel's paper on reweighting posteriors for eccentricity, or other examples of reweighting posteriors from one waveform to another (Isobel's is the first example I'm aware of---we used to call it ``Isobel's trick''---but should check with Will)}
+
+If the memory is not very strong in any individual event, then the importance weights will be very close to 1, and the re-weighted samples will remain similar to the original samples. Furthermore, each sample can also be augmented by a value of $A_{\mathrm{mem}}$ that is drawn from the Gaussian distribution described by Eqs.~\eqref{eq:mean} and~\eqref{eq:stddev} to obtain a new set of samples that were drawn from the posterior on $A_{\mathrm{mem}}$. With the values of $\hat{A}_{\mathrm{mem}}$ and $\sigma_{A_{\mathrm{mem}}}$ obtained for each sample, we can then combine them in a hierarchical way to obtain an overall posterior on the population distribution of $A_{\mathrm{mem}}$ across the entire catalog of GW events to determine whether the data prefer a non-zero memory effect in the population as a whole~\cite{Isi:2022cii}.
 
 \subsection{Hierarchical Inference}
 \label{sec:hierarchicalinference}
