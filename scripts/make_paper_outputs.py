@@ -22,12 +22,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+import h5py
 import arviz as az
+import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import numpy as np
 from corner import corner
-
 
 TGR_VARS = ("mu_tgr", "sigma_tgr")
 SIGMA_LEVELS_2D = tuple(1.0 - np.exp(-0.5 * np.arange(1, 4) ** 2))
@@ -36,7 +37,16 @@ REPO_DIR = Path(__file__).resolve().parent.parent
 # Paper data provenance: update this checked-in path when refreshing results.
 RESULTS_DIR = Path("results") / "prod_20260428b"
 DEFAULT_MACROS_OUTPUT = Path("paper") / "results_macros.tex"
-DEFAULT_PLOT_OUTPUT = Path("figures") / "tgr_comparison_corner.pdf"
+DEFAULT_PLOT_OUTPUT = Path("figures")
+
+plt.style.use(REPO_DIR / "style.mplstyle")
+
+pt = 1./72.27 # Hundreds of years of history... 72.27 points to an inch.
+
+jour_sizes = {"PRD": {"onecol": 246.*pt, "twocol": 510.*pt}}
+
+width1 = jour_sizes["PRD"]["onecol"]
+width2 = jour_sizes["PRD"]["twocol"]
 
 
 @dataclass(frozen=True)
@@ -280,6 +290,151 @@ def write_macros(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
 
+def make_memory_mean_and_uncertainty(
+    path: Path,
+    memory_analysis: Path,
+    dpi: int,
+) -> None:
+    events = ['GW150914_095045', 'GW190521_074359', 'GW230627_015337', 'GW230814_230901', 'GW231123_135430', 'GW250114_082203']
+
+    memory_values = {}
+    for event in events:
+        memory_values[event] = {}
+        with h5py.File(memory_analysis / f"{event}/memory_results.h5") as input_file:
+            if np.any(['IMRPhenomXO4a' in x for x in input_file.keys()]):
+                preferred_phenom_key = 'IMRPhenomXO4a'
+            elif np.any(['IMRPhenomXPHM-SpinTaylor' in x for x in input_file.keys()]):
+                preferred_phenom_key = 'IMRPhenomXPHM-SpinTaylor'
+            elif np.any(['IMRPhenomXPHM' in x for x in input_file.keys()]):
+                preferred_phenom_key = 'IMRPhenomXPHM'
+            else:
+                preferred_phenom_key = 'Phenom'
+                
+            break_me = False
+            for label in input_file.keys():
+                if 'Phenom' in label:
+                    if break_me:
+                        continue
+                    if preferred_phenom_key in label:
+                        break_me = True
+                    else:
+                        continue
+    
+                if 'NRSur' in label:
+                    waveform_name = 'NRSur'
+                elif 'EOB' in label:
+                    waveform_name = 'EOB'
+                else:
+                    waveform_name = 'Phenom'
+        
+                memory_values[event][waveform_name] = {}
+                for key in input_file[label].keys():
+                    memory_values[event][waveform_name][key] = np.array(input_file[label][key])
+
+    def ci(x):
+        q05, q25, q50, q75, q95 = np.percentile(x, [5, 25, 50, 75, 95])
+        return q50, q25, q75, q05, q95
+    
+    events = list(memory_values.keys())
+    
+    model_order = ["NRSur", "EOB", "Phenom"]
+    models = [m for m in model_order if any(m in ev for ev in memory_values.values())]
+    
+    # Colorblind-friendly, high-contrast qualitative colors
+    # Chosen to be distinct and aesthetically balanced
+    colors = {
+        "NRSur": "#0072B2",   # blue
+        "EOB":   "#E69F00",   # orange
+        "Phenom":"#CC79A7",   # reddish purple
+    }
+    
+    fig, axes = plt.subplots(
+        3, 1,
+        figsize=(width2, 0.3 * width2),
+        sharex=True,
+        constrained_layout=True
+    )
+    
+    row_defs = [
+        ("A_hat", r"$\mu_{s}$"),
+        ("A_sigma", r"$\sigma_{s}$"),
+        ("A_sample", r"$\mathcal{N}(\mu_{s},\sigma_{s})$"),
+    ]
+    
+    event_gap = 0.5
+    centers = np.arange(len(events)) * event_gap
+    
+    offset_scale = 0.10
+    if len(models) == 1:
+        offsets = {models[0]: 0.0}
+    else:
+        base = np.arange(len(models)) - 0.5 * (len(models) - 1)
+        offsets = {m: offset_scale * base[i] for i, m in enumerate(models)}
+    
+    for ax, (key, ylabel) in zip(axes, row_defs):
+        for i, event in enumerate(events):
+            xc = centers[i]
+    
+            for model in models:
+                if model not in memory_values[event]:
+                    continue
+    
+                d = memory_values[event][model]
+    
+                if key == "A_hat":
+                    x = np.asarray(d["A_hat"])
+                elif key == "A_sigma":
+                    x = np.asarray(d["A_sigma"])
+                else:
+                    x = np.asarray(d["A_sample"])
+    
+                med, lo50, hi50, lo90, hi90 = ci(x)
+                xpos = xc + offsets[model]
+                color = colors[model]
+    
+                ax.errorbar(
+                    xpos, med,
+                    yerr=[[med - lo90], [hi90 - med]],
+                    fmt='none', color=color, lw=1.5, alpha=0.7, capsize=4
+                )
+    
+                ax.errorbar(
+                    xpos, med,
+                    yerr=[[med - lo50], [hi50 - med]],
+                    fmt='none', color=color, lw=3, capsize=0
+                )
+                ax.plot(xpos, med, "o", color=color, ms=4)
+    
+        ax.set_ylabel(ylabel)
+        ax.grid(alpha=0.25)
+    
+    axes[-1].set_xticks(centers)
+    axes[-1].set_xticklabels([x.split("_")[0] for x in events], rotation=0, ha="center")
+    
+    # Add horizontal padding so first/last labels stay inside the plot border
+    edge_pad = 0.15
+    axes[-1].set_xlim(centers[0] - edge_pad, centers[-1] + edge_pad)
+    
+    axes[2].axhline(1, color='k', ls='--', zorder=-1, label='GR')
+    
+    axes[2].legend(loc='upper right', frameon=True, framealpha=1, fontsize=6)
+    
+    axes[0].set_yscale('symlog', linthresh=10)
+    axes[1].set_yscale('log')
+    axes[2].set_yscale('symlog', linthresh=10)
+    
+    handles = [Line2D([0], [0], color=colors[m], lw=1.5, label=m) for m in models]
+    fig.legend(
+        handles=handles,
+        loc="upper center",
+        ncol=len(models),
+        bbox_to_anchor=(0.5, 1.12),
+        frameon=False,
+    )
+    fig.align_ylabels()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(path / "memory_mean_stddev_from_posteriors.pdf", dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
 
 def make_tgr_corner(
     path: Path,
@@ -287,62 +442,167 @@ def make_tgr_corner(
     joint_run: ResultRun | None,
     dpi: int,
 ) -> None:
-    plot_runs = [(memory_run, "memory only", "C0")]
-    if joint_run is not None:
-        plot_runs.append((joint_run, "joint", "C1"))
+    data_memory = az.from_netcdf(memory_run.nc_file)
+    data_joint = az.from_netcdf(joint_run.nc_file)
+    
+    color_memory = "#0072B2"
+    color_joint  = "#E69F00"
+    
+    fig = plt.figure(figsize=(width1, width1))
+    
+    fig = corner(
+        data_memory,
+        var_names=["mu_tgr", "sigma_tgr"],
+        figsize=(width1, width1),
+        plot_density=False,
+        plot_contours=True,
+        plot_datapoints=False,
+        fill_contours=False,
+        color=color_memory,
+        levels=SIGMA_LEVELS_2D,
+        fig=fig,
+    )
+    
+    fig = corner(
+        data_joint,
+        var_names=["mu_tgr", "sigma_tgr"],
+        labels=[r"memory $\mu_{\Lambda}$", r"memory $\sigma_{\Lambda}$"],
+        figsize=(width1, width1),
+        plot_density=False,
+        plot_contours=True,
+        plot_datapoints=False,
+        fill_contours=False,
+        color=color_joint,
+        levels=SIGMA_LEVELS_2D,
+        truths=[1, 0],
+        truth_color="k",
+        fig=fig,
+    )
+    
+    axes = np.array(fig.axes).reshape((2, 2))
+    for ax in axes[-1, :]:  # bottom row
+        ax.xaxis.set_label_coords(0.5, -0.2)
+    for ax in axes[:, 0]:  # left column
+        ax.yaxis.set_label_coords(-0.2, 0.5)
 
-    rc_params = {
-        "font.family": "serif",
-        "mathtext.fontset": "cm",
-        "axes.labelsize": 14,
-        "xtick.labelsize": 11,
-        "ytick.labelsize": 11,
+    ax.set_xlim(-18, 18)
+    ax.set_ylim(0, 18)
+    
+    mem_line = Line2D([], [], lw=1.5, color=color_memory, label='memory only')
+    joint_line = Line2D([], [], lw=1.5, color=color_joint, label='joint')
+    truth_line = Line2D([], [], lw=1.5, color='k', linestyle='-', label='GR')
+    
+    ax_empty = axes[0, 1]
+    ax_empty.axis("off")
+    ax_empty.legend(
+        handles=[mem_line, joint_line, truth_line],
+        loc="upper right",
+        frameon=False,
+        handlelength=1.2
+    )
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(path / "tgr_comparison_corner.pdf", dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+
+def make_forecast(
+    path: Path,
+    forecast_run: Path,
+    dpi: int,
+) -> None:
+    df = pd.read_csv(forecast_run / "fisher_forecast_summary.csv").sort_values(["scenario", "n_total"])
+    assumptions = pd.read_csv(forecast_run / "fisher_forecast_assumptions.csv").set_index("key")["value"]
+    
+    target = float(assumptions["target_halfwidth"])
+    current = float(assumptions["current_mu_halfwidth68"])
+    n_current = int(float(assumptions["current_catalog_size"]))
+    quick_guess = n_current * (current/target)**(2)
+    
+    rate_O4 = 180   # events/year
+    rate_O5 = 500   # events/year
+    
+    fig, ax = plt.subplots(figsize=(width2, 0.35 * width2))
+    
+    color_O4 = "#0072B2"
+    color_O5 = "#E69F00"
+    colors = {
+        "current": color_O4,
+        "O5a": color_O5
     }
+    labels = {
+        "current": "O4a-like observations",
+        "O5a": "O5a-like observations"
+    }
+    
+    for i, (scenario, g) in enumerate(df.groupby("scenario", sort=False)):
+        if scenario != "current":
+            continue
+        x = g["n_total"].to_numpy()
+        idx2 = np.argmin(abs(x - 3000)) + 1
+        y50 = g["mu_halfwidth68_p50"].to_numpy()
+        y16 = g["mu_halfwidth68_p16"].to_numpy()
+        y84 = g["mu_halfwidth68_p84"].to_numpy()
+    
+        ax.fill_between(x[:idx2], y16[:idx2], y84[:idx2], alpha=0.15, color=colors[scenario])
+        ax.plot(x[:idx2], y50[:idx2], label=labels[scenario], color=colors[scenario])
+    
+    ax.axhline(target, ls="--", lw=1.5, label=fr"$1\sigma$ away from zero", color="k")
+    ax.axvline(n_current, ls=":", lw=1.5, color="k")
+    ax.axvline(
+        quick_guess,
+        ls="-.",
+        lw=1.5,
+        color="0.35",
+        label=fr"$1/\sqrt{{N}}$ estimate = {quick_guess:,.0f}",
+    )
+    
+    ax.set_ylim(0)
+    
+    ax.text(
+        n_current + 35,
+        0.42,
+        fr"$N={n_current}$",
+        transform=ax.get_xaxis_transform(),
+        rotation=90,
+        fontsize=8.2,
+        ha="right",
+        va="center",
+        bbox=dict(boxstyle="round,pad=0.15", facecolor="white", edgecolor="white", alpha=1.0),
+    )
+    
+    ax.set_xlabel("Number of GW observations")
+    ax.set_ylabel(r"68\% half-width on $\mu_{\Lambda}$")
+    ax.grid(alpha=0.3)
+    ax.legend(frameon=True, framealpha=1)
+    
+    # --- Conversion functions: number of events <-> observing time since current catalog ---
+    def N_to_time_O4(N):
+        return (np.asarray(N) - n_current) / rate_O4
+    
+    def time_to_N_O4(t):
+        return n_current + np.asarray(t) * rate_O4
+    
+    def N_to_time_O5(N):
+        return (np.asarray(N) - n_current) / rate_O5
+    
+    def time_to_N_O5(t):
+        return n_current + np.asarray(t) * rate_O5
+    
+    # First top axis: O4a runtime since current catalog
+    secax_O4 = ax.secondary_xaxis("top", functions=(N_to_time_O4, time_to_N_O4))
+    secax_O4.set_xlabel("Time from current catalog [yr] at O4a sensitivity", labelpad=5)
+    secax_O4.tick_params(axis="x", colors=color_O4)
+    secax_O4.xaxis.label.set_color(color_O4)
+    
+    # Second top axis: O5a runtime since current catalog
+    secax_O5 = ax.secondary_xaxis(1.25, functions=(N_to_time_O5, time_to_N_O5))
+    secax_O5.set_xlabel("Time from current catalog [yr] at O5a sensitivity", labelpad=5)
+    secax_O5.tick_params(axis="x", colors=color_O5)
+    secax_O5.xaxis.label.set_color(color_O5)
 
-    with plt.rc_context(rc_params):
-        fig = None
-        for run, _label, color in plot_runs:
-            samples = load_tgr_samples(run.nc_file)
-            fig = corner(
-                samples,
-                labels=[r"memory $\mu_\Lambda$", r"memory $\sigma_\Lambda$"],
-                color=color,
-                fig=fig,
-                figsize=(5.0, 5.0),
-                levels=SIGMA_LEVELS_2D,
-                plot_datapoints=False,
-                plot_density=False,
-                plot_contours=True,
-                fill_contours=False,
-                hist_kwargs={"density": True, "linewidth": 1.5},
-                contour_kwargs={"linewidths": 1.0},
-                truths=[1.0, 0.0],
-                truth_color="k",
-                label_kwargs={"fontsize": 15},
-            )
-
-        assert fig is not None
-        axes = np.asarray(fig.axes).reshape(2, 2)
-        axes[0, 1].axis("off")
-        legend_handles = [
-            Line2D([0], [0], color=color, lw=1.8, label=label)
-            for _run, label, color in plot_runs
-        ]
-        legend_handles.append(Line2D([0], [0], color="k", lw=1.8, label="GR"))
-        axes[0, 1].legend(
-            handles=legend_handles,
-            loc="upper left",
-            frameon=False,
-            fontsize=13,
-            handlelength=1.4,
-        )
-        axes[1, 0].set_ylim(bottom=0)
-        axes[1, 1].set_xlim(left=0)
-
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(path, dpi=dpi, bbox_inches="tight")
-        plt.close(fig)
-
+    path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(path / "forecast_w_time.pdf", dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -423,6 +683,10 @@ def main() -> None:
         runs, args.memory_run, args.joint_run, args.memory_count_run
     )
 
+    memory_analysis = REPO_DIR / "analysis"
+    
+    forecast_run = results_dir / "forecast_fisher"
+
     write_macros(
         macros_output,
         memory_run=memory_run,
@@ -439,13 +703,27 @@ def main() -> None:
         print(f"  joint run:          {joint_run.label}")
 
     if not args.no_plot:
+        make_memory_mean_and_uncertainty(
+            plot_output,
+            memory_analysis=memory_analysis,
+            dpi=args.dpi,
+        )
+        print(f"Wrote memory mean and uncertainty plot.")
+        
         make_tgr_corner(
             plot_output,
             memory_run=memory_run,
             joint_run=joint_run,
             dpi=args.dpi,
         )
-        print(f"Wrote plot:   {plot_output}")
+        print(f"Wrote TGR corner plot.")
+
+        make_forecast(
+            plot_output,
+            forecast_run=forecast_run,
+            dpi=args.dpi,
+        )
+        print(f"Wrote forecast plot.")
 
 
 if __name__ == "__main__":
