@@ -345,14 +345,16 @@ Our results for this study are highlighted in Fig.~\ref{fig:TGR}, which shows th
 \figForecast
 
 To forecast the number of events that will be needed to constrain $\mu_{\Lambda}$ to be away from zero, i.e., to confidently measure memory, we require a representation of each event that is compatible with the hierarchical likelihood that was derived in Eq.~\eqref{eq:hierarchicalLLfinal}. To do this, we compress each current event $i$ to an effective Gaussian approximation. Specifically, starting from the weighted representation
-\begin{align}
-	p(A|d_{i})\propto\sum\limits_{s}w_{s}\mathcal{N}(A|\mu_{s},\sigma_{s}),
+\begin{align} \label{eq:gaussrep}
+	p(A \mid d_{i}) = \sum\limits_{s}w_{s}\mathcal{N}(A \mid \mu_{s},\sigma_{s}),
 \end{align}
+\comment[id=MI]{made this an equal sign since that's just a redefinition of $w$}
 we define an effective event center $\mu_{i}$ as the mode of this mixture and an effective local width $\sigma_{i}$ from the curvature at the mode via
 \begin{align}
 	\label{eq:effectivesigma}
 	\sigma_{i}^{-2}=-\frac{\partial^{2}}{\partial A^2}\log p(A|d_{i})\Big|_{A=\mu_{i}}.
 \end{align}
+\comment[id=MI]{we know what this is analytically, right? it's just a weighted sum of the precisions per Eq.~\eqref{eq:gaussrep}, and similar for $\mu_i$}
 This is required because obtaining $\sigma_{i}$ this way preserves the local information content of the event, whereas using a typical sample value of $\sigma_{s}$ would not, since it ignores the overall spread in $\mu_{s}$. Now, as outlined in Appendix A of Ref.~\cite{Isi:2022cii}, the uncertainty on $\mu_{\Lambda}$---denoted as $\Delta\mu_{\Lambda}$---for some set of event-level uncertainties $\{\sigma_{i}\}_{i}^{N}$ is\footnote{Really, Appendix A of Ref.~\cite{Isi:2022cii} stated the homoskedastic version of this in their Eq.~(A8), but the heteroskedastic version shown in our Eq.~\eqref{eq:heteroskedasticmean} is straightforward to work out.}
 \begin{align}
 	\label{eq:heteroskedasticmean}
