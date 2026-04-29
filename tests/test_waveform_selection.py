@@ -70,11 +70,25 @@ def test_load_event_ifars_writes_cache_sorted_by_event_name(tmp_path, monkeypatc
 def test_save_provenance_writes_event_files_sorted(tmp_path):
     from scripts.run_hierarchical_analysis import _save_provenance
 
-    _save_provenance(tmp_path, "injections.h5", ["z-event.h5", "a-event.h5"], "memory")
+    _save_provenance(
+        tmp_path,
+        "injections.h5",
+        ["z-event.h5", "a-event.h5"],
+        "memory",
+        event_waveforms={
+            "GW200129_065458": "C01:NRSur7dq4",
+            "GW190521_030229": "C00:IMRPhenomXPHM",
+        },
+    )
 
     assert (tmp_path / "event_files.txt").read_text().splitlines() == [
         "a-event.h5",
         "z-event.h5",
+    ]
+    assert (tmp_path / "event_waveforms.txt").read_text().splitlines() == [
+        "# event_name waveform_label",
+        "GW190521_030229 C00:IMRPhenomXPHM",
+        "GW200129_065458 C01:NRSur7dq4",
     ]
 
 

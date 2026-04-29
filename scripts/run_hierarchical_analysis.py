@@ -30,7 +30,7 @@ Outputs (written to ``--outdir``):
     joint_model_corner.png
         Full corner plot including TGR parameters (joint run only).
     All plots are skipped with ``--no-plots``.
-    injection_file.txt, event_files.txt, memory_dir.txt, command.txt
+    injection_file.txt, event_files.txt, event_waveforms.txt, memory_dir.txt, command.txt
         Provenance files recording the exact inputs and command line.
 
 Environment variables:
@@ -192,13 +192,26 @@ def _filter_to_memory_events(event_files, memory_dir):
     return kept, skipped
 
 
-def _save_provenance(outdir, injection_file, event_files, memory_dir):
+def _event_name_from_path(path):
+    """Extract the GW event name from an event file path."""
+    match = re.search(r"(GW\d{6}_\d{6})", os.path.basename(path))
+    return match.group(1) if match else os.path.basename(path)
+
+
+def _save_provenance(
+    outdir, injection_file, event_files, memory_dir, event_waveforms=None
+):
     """Write small text files recording inputs for reproducibility."""
     with open(os.path.join(outdir, "injection_file.txt"), "w") as f:
         f.write(f"{injection_file}\n")
     with open(os.path.join(outdir, "event_files.txt"), "w") as f:
         for ef in sorted(event_files):
             f.write(f"{ef}\n")
+    if event_waveforms is not None:
+        with open(os.path.join(outdir, "event_waveforms.txt"), "w") as f:
+            f.write("# event_name waveform_label\n")
+            for event_name in sorted(event_waveforms):
+                f.write(f"{event_name} {event_waveforms[event_name]}\n")
     with open(os.path.join(outdir, "command.txt"), "w") as f:
         f.write(" ".join(sys.argv) + "\n")
     with open(os.path.join(outdir, "memory_dir.txt"), "w") as f:
@@ -213,7 +226,7 @@ def _load_event_posteriors(event_files, waveform, per_event_labels=None):
 
     Selection priority (highest to lowest):
     1. *per_event_labels* — exact group name keyed by event name
-       (GW\d{6}_\d{6}); used to match PE posteriors to pre-computed memory
+       (GW\\d{6}_\\d{6}); used to match PE posteriors to pre-computed memory
        data that was generated from a specific waveform run.
     2. *waveform* — resolve the highest available ``CXX:<waveform>`` label
        in each file.
@@ -720,10 +733,24 @@ def main():
         mem_files, mem_posteriors = [], []
 
     # --- Provenance -------------------------------------------------------
+    if need_memory_data:
+        memory_names = {md["event_name"] for md in memory_data}
+        provenance_event_files = [
+            path for path in mem_files
+            if _event_name_from_path(path) in memory_names
+        ]
+    else:
+        provenance_event_files = all_event_files
+    provenance_waveforms = {
+        name: used_labels[name]
+        for name in (_event_name_from_path(path) for path in provenance_event_files)
+        if name in used_labels
+    }
     _save_provenance(
         outdir, injection_file,
-        mem_files if need_memory_data else all_event_files,
+        provenance_event_files,
         args.memory_dir,
+        event_waveforms=provenance_waveforms,
     )
 
     # --- Build data arrays ------------------------------------------------
