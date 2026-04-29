@@ -197,7 +197,7 @@ def _save_provenance(outdir, injection_file, event_files, memory_dir):
     with open(os.path.join(outdir, "injection_file.txt"), "w") as f:
         f.write(f"{injection_file}\n")
     with open(os.path.join(outdir, "event_files.txt"), "w") as f:
-        for ef in event_files:
+        for ef in sorted(event_files):
             f.write(f"{ef}\n")
     with open(os.path.join(outdir, "command.txt"), "w") as f:
         f.write(" ".join(sys.argv) + "\n")

@@ -755,8 +755,8 @@ def load_event_ifars(event_names, cache_file=None):
         os.makedirs(os.path.dirname(os.path.abspath(cache_file)), exist_ok=True)
         with open(cache_file, "w") as fh:
             fh.write("# event_name IFAR_yr\n")
-            for ev, ifar in ifars.items():
-                fh.write(f"{ev} {ifar}\n")
+            for ev in sorted(ifars):
+                fh.write(f"{ev} {ifars[ev]}\n")
         logger.info("Saved IFAR cache to %s", cache_file)
 
     return ifars

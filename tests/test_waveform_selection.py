@@ -1,3 +1,6 @@
+import sys
+import types
+
 import h5py
 import numpy as np
 import pytest
@@ -5,6 +8,7 @@ import pytest
 from memory.hierarchical.data import (
     _resolve_waveform_label,
     _write_analyzed_events,
+    load_event_ifars,
     load_memory_data,
 )
 
@@ -43,6 +47,34 @@ def test_write_analyzed_events_sorts_event_names(tmp_path):
         "# Final set of events used in hierarchical analysis (post IFAR/mass cuts)",
         "GW190521_030229",
         "GW200129_065458",
+    ]
+
+
+def test_load_event_ifars_writes_cache_sorted_by_event_name(tmp_path, monkeypatch):
+    ifar_cache = tmp_path / "event_ifars.txt"
+    gwosc = types.ModuleType("gwosc")
+    gwosc.api = types.SimpleNamespace(
+        fetch_event_json=lambda name: {"events": {name: {"far": 0.5}}}
+    )
+    monkeypatch.setitem(sys.modules, "gwosc", gwosc)
+
+    load_event_ifars(["GW200129_065458", "GW190521_030229"], ifar_cache)
+
+    assert ifar_cache.read_text().splitlines() == [
+        "# event_name IFAR_yr",
+        "GW190521_030229 2.0",
+        "GW200129_065458 2.0",
+    ]
+
+
+def test_save_provenance_writes_event_files_sorted(tmp_path):
+    from scripts.run_hierarchical_analysis import _save_provenance
+
+    _save_provenance(tmp_path, "injections.h5", ["z-event.h5", "a-event.h5"], "memory")
+
+    assert (tmp_path / "event_files.txt").read_text().splitlines() == [
+        "a-event.h5",
+        "z-event.h5",
     ]
 
 
