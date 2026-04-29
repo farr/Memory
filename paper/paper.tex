@@ -50,14 +50,16 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Macros for important numbers
 
-\newcommand{\Nmemoryevents}{{\color{red}148}\xspace}
-\newcommand{\Nevents}{{\color{red}146}\xspace}
+\providecommand{\Nmemoryevents}{{\color{red}148}\xspace}
+\providecommand{\Nevents}{{\color{red}146}\xspace}
 \newcommand{\SqrtNEstimate}{1,792\xspace}
 \newcommand{\NSigmaDraws}{4,000\xspace}
-\newcommand{\muLambdaconstraint}{{\color{red}$0.682\pm4.17$}\xspace}
-\newcommand{\sigmaLambdaconstraint}{{\color{red}$4.24\pm3.21$\xspace}}
+\providecommand{\muLambdaconstraint}{{\color{red}$0.682\pm4.17$}\xspace}
+\providecommand{\sigmaLambdaconstraint}{{\color{red}$4.24\pm3.21$\xspace}}
 \newcommand{\hatAnumberofevents}{{\color{red}2,000}\xspace}
 \newcommand{\alphavalue}{{\color{red}1.40}\xspace}
+
+\IfFileExists{results_macros.tex}{\input{results_macros.tex}}{}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -331,7 +333,9 @@ As we will show in the subsequent section, even though no single event yields a 
 \subsection{Memory Constraints}
 \label{sec:memoryconstraints}
 
-With the computation of $\mu_{s}$ and $\sigma_{s}$ performed for the posterior samples of all events and all of the available waveform models, we performed two hierarchical analyses: one in which we measured the memory hyperparameters $\mu_{\Lambda}$ and $\sigma_{\Lambda}$ (see Eq.~\eqref{eq:hierarchicalLLfinal}) independent of all of the other astrophysical parameters, and one in which we measured everything simultaneously.\footnote{Note that, for the joint inference, the selection criterion restricting the secondary mass to be $>3M_{\odot}$ reduced our total number of events to \Nevents (instead of \Nmemoryevents).}
+With the computation of $\mu_{s}$ and $\sigma_{s}$ performed for the posterior samples of all events and all of the available waveform models, we performed two hierarchical analyses: one in which we measured the memory hyperparameters $\mu_{\Lambda}$ and $\sigma_{\Lambda}$ (see Eq.~\eqref{eq:hierarchicalLLfinal}) independent of all of the other astrophysical parameters, and one in which we measured everything simultaneously.
+% \footnote{Note that, for the joint inference, the selection criterion restricting the secondary mass to be $>3M_{\odot}$ reduced our total number of events to \Nevents (instead of \Nmemoryevents).}
+% MI: I've replaced the default memory-only run to have the same events as the joint run, just to keep things simple.
 \comment[id=MI]{I would say that our primary analyisis is the joint astro+memory one, since that is the most complete, but that we also run a simpler memory-only analysis as a control; the latter has the disadvantage of inherting an assumed astrophysical distribution imposed by the LVK PE sampling prior, which is not physical}
  When conducting these analyses, we opted to use the following hierarchy for which waveform model to use. If available, we  ideally used the NR surrogate model, then the EOB models, and then the Phenom models \comment[id=MI]{NR $=$ numerical relativity, EOB $=$ equivalent-one-body and Phenom $=$ phenomenological should all be defined}.\footnote{For certain samples, we found that the waveforms produced by the Phenom models had unphysical spikes at low frequencies that caused \replaced[id=MI]{anomalosly}{incredibly} large $\mu_{s}$ values. Because of this, when using the Phenom models, if the value of $|\mu_{s}/\sigma_{s}|$ was $>10$ for any sample, we simply removed that sample from the analysis. This amounts to removing only a few tens of samples from the whole analysis.} This choice was made based on the model accuracy results presented in Fig.~2 of Ref.~\cite{LIGOScientific:2025rsn}. When we used an EOB model, we used \texttt{SEOBNRv5PHM} if available, and otherwise \texttt{SEOBNRv4PHM}~\cite{Bohe:2016gbl,Ossokine:2020kjp,Pompili:2023tna,Ramos-Buades:2023ehm}. When we used a Phenom model, we used \texttt{IMRPhenomXO4a} if available, and otherwise \texttt{IMRPhenomPHM\_SpinTaylor}, or \texttt{IMRPhenomPHM}~\cite{Pratten:2020ceb,Colleoni:2024knd,Hamilton:2021pkf,Thompson:2023ase}.
  \deleted[id=MI]{We used the same population model as was used in Ref.~\cite{LIGOScientific:2025pvj}.}
