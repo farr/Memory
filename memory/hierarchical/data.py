@@ -19,8 +19,15 @@ NRSUR_MIN_DETECTOR_FRAME_TOTAL_MASS = 66.0
 NRSUR_MIN_MASS_RATIO = 1.0 / 6.0
 MIN_MASS_2_SOURCE = 3.0
 
+# Quantile of the source-frame component-mass posteriors compared against
+# ``MIN_MASS_2_SOURCE`` when applying the BBH-population mass cut.  This
+# matches the GWTC-4 populations paper (arXiv:2508.18083, Section 6), which
+# requires the 1% lower limit on both component-mass posteriors (under the PE
+# priors) to lie above 3 solar masses.
+MIN_MASS_QUANTILE = 0.01
+
 # Events explicitly excluded from the memory analysis (outside the population
-# model's scope; also caught by the min_mass_2_source cut).
+# model's scope; also caught by the min_mass_2_source 1%-quantile cut).
 _EXCLUDED_EVENTS = frozenset({
     "GW200105_162426",  # NSBH O3b
     "GW200115_042309",  # NSBH O3b
@@ -1165,10 +1172,14 @@ def generate_data(
         Minimum mass-ratio cut passed to `read_injection_file`. If None,
         the cut is disabled.
     min_mass_2_source : float or None
-        Minimum source-frame secondary mass (solar masses) applied to both
-        injections and observed events. Events whose median posterior
-        ``m2_source = m1_source * mass_ratio`` falls below this threshold
-        are excluded with a warning. If None, the cut is disabled.
+        Minimum source-frame component-mass threshold (solar masses).  For
+        injections, samples with ``m2_source`` below this threshold are
+        excluded.  For observed events, an event is excluded when the
+        ``MIN_MASS_QUANTILE`` lower limit on either ``m1_source`` or
+        ``m2_source`` posterior falls at or below this threshold (matching
+        the GWTC-4 populations paper, Section 6 of arXiv:2508.18083, which
+        requires the 1% lower limit on both component masses to be strictly
+        above 3 Msun). If None, the cut is disabled.
     N_samples : int
         Number of posterior samples to draw per event.
     prng : None, int, or numpy.random.Generator
@@ -1280,13 +1291,23 @@ def generate_data(
             if not excluded and min_mass_2_source is not None:
                 m1 = np.asarray(ep["mass_1_source"], dtype=float)
                 q = np.asarray(ep["mass_ratio"], dtype=float)
-                median_m2 = float(np.median(m1 * q))
-                if median_m2 < min_mass_2_source:
+                m2 = m1 * q
+                m1_q = float(np.nanquantile(m1, MIN_MASS_QUANTILE))
+                m2_q = float(np.nanquantile(m2, MIN_MASS_QUANTILE))
+                # Match the GWTC-4 populations paper (Section 6 of
+                # arXiv:2508.18083): keep an event only when the 1% lower
+                # limit on *both* component-mass posteriors is strictly above
+                # the threshold.
+                if m1_q <= min_mass_2_source or m2_q <= min_mass_2_source:
                     logger.warning(
-                        "Excluding observed event %s: median source-frame "
-                        "secondary mass %.2f Msun is below the threshold "
-                        "%.2f Msun",
-                        event_label_pre, median_m2, min_mass_2_source,
+                        "Excluding observed event %s: %g%% lower limits "
+                        "(m1=%.2f Msun, m2=%.2f Msun) are not both above the "
+                        "threshold %.2f Msun",
+                        event_label_pre,
+                        100.0 * MIN_MASS_QUANTILE,
+                        m1_q,
+                        m2_q,
+                        min_mass_2_source,
                     )
                     excluded = True
 
