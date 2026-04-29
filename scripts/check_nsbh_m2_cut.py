@@ -1,8 +1,9 @@
 """Check whether NSBH events are caught by the min_mass_2_source cut.
 
 Mimics the exact logic in generate_data:
-    median_m2 = median(m1_source * mass_ratio)
-    excluded if median_m2 < MIN_MASS_2_SOURCE
+    m1_q = quantile(m1_source, MIN_MASS_QUANTILE)
+    m2_q = quantile(m1_source * mass_ratio, MIN_MASS_QUANTILE)
+    excluded if either m1_q or m2_q is at or below MIN_MASS_2_SOURCE
 
 Fetches posteriors from GWOSC and applies the exact same logic.
 """
@@ -14,7 +15,7 @@ import tempfile
 import os
 
 from gwosc.api import fetch_event_json
-from memory.hierarchical.data import MIN_MASS_2_SOURCE
+from memory.hierarchical.data import MIN_MASS_2_SOURCE, MIN_MASS_QUANTILE
 
 NSBH_EVENTS = [
     "GW200105_162426",
@@ -100,22 +101,27 @@ def load_m1_q_from_url(url):
         os.unlink(tmp_path)
 
 
-print(f"MIN_MASS_2_SOURCE threshold: {MIN_MASS_2_SOURCE} Msun\n")
-print(f"{'Event':<25} {'median m2 [Msun]':>18} {'cut?':>8}")
-print("-" * 55)
+qpct = 100.0 * MIN_MASS_QUANTILE
+print(f"MIN_MASS_2_SOURCE threshold: {MIN_MASS_2_SOURCE} Msun"
+      f" (applied as a {qpct:g}%-quantile cut on both component masses)\n")
+print(f"{'Event':<25} {'m1_q [Msun]':>14} {'m2_q [Msun]':>14} {'cut?':>20}")
+print("-" * 80)
 
 all_cut = True
 for event in NSBH_EVENTS:
     try:
         url = get_preferred_pe_url(event)
         if url is None:
-            print(f"{event:<25} {'no PE URL found':>18}")
+            print(f"{event:<25} {'no PE URL found':>14}")
             continue
         m1, q = load_m1_q_from_url(url)
-        median_m2 = float(np.median(m1 * q))  # same as generate_data
-        cut = median_m2 < MIN_MASS_2_SOURCE
+        m2 = m1 * q
+        m1_q = float(np.nanquantile(m1, MIN_MASS_QUANTILE))
+        m2_q = float(np.nanquantile(m2, MIN_MASS_QUANTILE))
+        cut = (m1_q <= MIN_MASS_2_SOURCE) or (m2_q <= MIN_MASS_2_SOURCE)
         all_cut = all_cut and cut
-        print(f"{event:<25} {median_m2:>18.3f} {'YES (excluded)' if cut else 'NO (passes!)':>8}")
+        verdict = "YES (excluded)" if cut else "NO (passes!)"
+        print(f"{event:<25} {m1_q:>14.3f} {m2_q:>14.3f} {verdict:>20}")
     except Exception as e:
         all_cut = False
         print(f"{event:<25} ERROR: {e}")

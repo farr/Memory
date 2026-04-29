@@ -30,7 +30,7 @@ Outputs (written to ``--outdir``):
     joint_model_corner.png
         Full corner plot including TGR parameters (joint run only).
     All plots are skipped with ``--no-plots``.
-    injection_file.txt, event_files.txt, memory_dir.txt, command.txt
+    injection_file.txt, event_files.txt, event_waveforms.txt, memory_dir.txt, command.txt
         Provenance files recording the exact inputs and command line.
 
 Environment variables:
@@ -92,6 +92,7 @@ from memory.hierarchical import (  # noqa: E402
 from memory.hierarchical.data import (  # noqa: E402
     NRSUR_MIN_DETECTOR_FRAME_TOTAL_MASS,
     NRSUR_MIN_MASS_RATIO,
+    SEMIANALYTIC_SNR_THRESHOLD,
     _pick_waveform_label,
     _resolve_waveform_label,
     validate_posterior_prior_consistency,
@@ -116,6 +117,11 @@ def _resolve_injection_file(args):
         return os.path.join(
             REPO_DIR,
             "data/selection/mixture-real_o3_o4a-polar_spins_20250503134659UTC.hdf",
+        )
+    if args.injection_runs == "o1+o2+o3+o4a":
+        return os.path.join(
+            REPO_DIR,
+            "data/selection/mixture-semi_o1_o2-real_o3_o4a-cartesian_spins_20250503134659UTC.hdf",
         )
     raise ValueError(f"Unrecognized injection runs: {args.injection_runs}")
 
@@ -186,13 +192,26 @@ def _filter_to_memory_events(event_files, memory_dir):
     return kept, skipped
 
 
-def _save_provenance(outdir, injection_file, event_files, memory_dir):
+def _event_name_from_path(path):
+    """Extract the GW event name from an event file path."""
+    match = re.search(r"(GW\d{6}_\d{6})", os.path.basename(path))
+    return match.group(1) if match else os.path.basename(path)
+
+
+def _save_provenance(
+    outdir, injection_file, event_files, memory_dir, event_waveforms=None
+):
     """Write small text files recording inputs for reproducibility."""
     with open(os.path.join(outdir, "injection_file.txt"), "w") as f:
         f.write(f"{injection_file}\n")
     with open(os.path.join(outdir, "event_files.txt"), "w") as f:
-        for ef in event_files:
+        for ef in sorted(event_files):
             f.write(f"{ef}\n")
+    if event_waveforms is not None:
+        with open(os.path.join(outdir, "event_waveforms.txt"), "w") as f:
+            f.write("# event_name waveform_label\n")
+            for event_name in sorted(event_waveforms):
+                f.write(f"{event_name} {event_waveforms[event_name]}\n")
     with open(os.path.join(outdir, "command.txt"), "w") as f:
         f.write(" ".join(sys.argv) + "\n")
     with open(os.path.join(outdir, "memory_dir.txt"), "w") as f:
@@ -207,7 +226,7 @@ def _load_event_posteriors(event_files, waveform, per_event_labels=None):
 
     Selection priority (highest to lowest):
     1. *per_event_labels* — exact group name keyed by event name
-       (GW\d{6}_\d{6}); used to match PE posteriors to pre-computed memory
+       (GW\\d{6}_\\d{6}); used to match PE posteriors to pre-computed memory
        data that was generated from a specific waveform run.
     2. *waveform* — resolve the highest available ``CXX:<waveform>`` label
        in each file.
@@ -413,7 +432,7 @@ def _build_parser():
     parser.add_argument(
         "--injection-runs",
         default="o4a",
-        choices=["o4a", "o3+o4a"],
+        choices=["o4a", "o3+o4a", "o1+o2+o3+o4a"],
         help="Which injection campaign to use (default: o4a)",
     )
     parser.add_argument(
@@ -421,7 +440,10 @@ def _build_parser():
         type=str,
         nargs="+",
         default=[],
-        help="Substrings of event filenames to exclude (e.g. GW15 GW17)",
+        help=(
+            "Substrings of event filenames to exclude (default: none). "
+            "Pass e.g. 'GW15 GW17' to drop O1/O2 events."
+        ),
     )
 
     # -- MCMC configuration -------------------------------------------------
@@ -494,6 +516,16 @@ def _build_parser():
         type=float,
         default=1,
         help="Inverse false-alarm rate threshold in years (default: 1)",
+    )
+    parser.add_argument(
+        "--semianalytic-snr-threshold",
+        type=float,
+        default=SEMIANALYTIC_SNR_THRESHOLD,
+        help=(
+            "Observed network SNR threshold for semi-analytic selection "
+            f"injections (default: {SEMIANALYTIC_SNR_THRESHOLD:g}; use a "
+            "negative value to disable)"
+        ),
     )
     parser.add_argument(
         "--enforce-selection",
@@ -579,7 +611,7 @@ def main():
     logger.info("Running in output directory: %s", outdir)
 
     # --- Discover event files and load all posteriors ---------------------
-    exclude = args.exclude + ["GW15", "GW17"]
+    exclude = list(args.exclude)
     event_files, discarded_files = _collect_event_files(args.data_paths, exclude)
 
     logger.info("Discarded %d files", len(discarded_files))
@@ -701,10 +733,24 @@ def main():
         mem_files, mem_posteriors = [], []
 
     # --- Provenance -------------------------------------------------------
+    if need_memory_data:
+        memory_names = {md["event_name"] for md in memory_data}
+        provenance_event_files = [
+            path for path in mem_files
+            if _event_name_from_path(path) in memory_names
+        ]
+    else:
+        provenance_event_files = all_event_files
+    provenance_waveforms = {
+        name: used_labels[name]
+        for name in (_event_name_from_path(path) for path in provenance_event_files)
+        if name in used_labels
+    }
     _save_provenance(
         outdir, injection_file,
-        mem_files if need_memory_data else all_event_files,
+        provenance_event_files,
         args.memory_dir,
+        event_waveforms=provenance_waveforms,
     )
 
     # --- Build data arrays ------------------------------------------------
@@ -736,6 +782,11 @@ def main():
     _gen_kwargs = dict(
         injection_file=injection_file,
         ifar_threshold=args.ifar_threshold,
+        semianalytic_snr_threshold=(
+            None
+            if args.semianalytic_snr_threshold < 0
+            else args.semianalytic_snr_threshold
+        ),
         min_detector_frame_total_mass=(
             NRSUR_MIN_DETECTOR_FRAME_TOTAL_MASS
             if apply_nrsur_injection_cuts else None
@@ -751,7 +802,7 @@ def main():
 
     # astro: all events, uniform weights (no memory reweighting)
     if run_astro:
-        (event_data_astro, inj_data_astro, BW_astro, BW_sel_astro,
+        (event_data_astro, inj_data_astro,
          Nobs_astro, Ndraw_astro, _) = generate_data(
             all_posteriors, memory_data=None, use_tgr=False,
             scale_tgr=False, event_names=_all_event_names, **_gen_kwargs,
@@ -762,7 +813,7 @@ def main():
     #   [m1s, qs, cost1s, cost2s, a1s, a2s, A_hats, A_sigmas,
     #    zs, log_pdraw, log_weights]
     if run_joint or (run_memory and args.enforce_selection):
-        (event_data_joint, inj_data_joint, BW_joint, BW_sel_joint,
+        (event_data_joint, inj_data_joint,
          Nobs_joint, Ndraw_joint, A_scale_joint) = generate_data(
             mem_posteriors, memory_data=memory_data, use_tgr=True,
             scale_tgr=args.scale_tgr, **_gen_kwargs,
@@ -789,7 +840,7 @@ def main():
     # --- MCMC -------------------------------------------------------------
     prng_astro, prng_joint, prng_mem = jax.random.split(prng, 3)
 
-    def _run_joint_mcmc(prng_key, event_data, inj_data, BW, BW_sel,
+    def _run_joint_mcmc(prng_key, event_data, inj_data,
                         Nobs, Ndraw, use_tgr, A_scale):
         # Physically motivated initialization avoids gradient explosion:
         # alpha_1 near the true BBH slope (~3.5) keeps neff_sel above threshold,
@@ -821,7 +872,7 @@ def main():
                       init_strategy=init_to_value(values=_init))
         mcmc = MCMC(kernel, num_warmup=args.n_warmup,
                     num_samples=args.n_sample, num_chains=args.n_chains)
-        mcmc.run(prng_key, event_data, inj_data, BW, BW_sel,
+        mcmc.run(prng_key, event_data, inj_data,
                  Nobs, Ndraw, use_tgr,
                  args.mu_tgr_scale, args.sigma_tgr_scale)
         fit = az.from_numpyro(mcmc)
@@ -833,7 +884,7 @@ def main():
         logger.info("Running astro model (%d events)...", Nobs_astro)
         fit_astro = _run_joint_mcmc(
             prng_astro, event_data_astro, inj_data_astro,
-            BW_astro, BW_sel_astro, Nobs_astro, Ndraw_astro,
+            Nobs_astro, Ndraw_astro,
             use_tgr=False, A_scale=1,
         )
         fname = os.path.join(outdir, "result_astro.nc")
@@ -845,7 +896,7 @@ def main():
         logger.info("Running joint model (%d events)...", Nobs_joint)
         fit_joint = _run_joint_mcmc(
             prng_joint, event_data_joint, inj_data_joint,
-            BW_joint, BW_sel_joint, Nobs_joint, Ndraw_joint,
+            Nobs_joint, Ndraw_joint,
             use_tgr=True, A_scale=A_scale_joint,
         )
         fname = os.path.join(outdir, "result_joint.nc")

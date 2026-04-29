@@ -13,18 +13,32 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 IFAR_THRESHOLD = 1
+SEMIANALYTIC_SNR_THRESHOLD = 10.0
 N_SAMPLES_PER_EVENT = 10000
 NRSUR_MIN_DETECTOR_FRAME_TOTAL_MASS = 66.0
 NRSUR_MIN_MASS_RATIO = 1.0 / 6.0
 MIN_MASS_2_SOURCE = 3.0
 
-# Events explicitly excluded from the memory analysis (outside the population
-# model's scope; also caught by the min_mass_2_source cut).
+# Quantile of the source-frame component-mass posteriors compared against
+# ``MIN_MASS_2_SOURCE`` when applying the BBH-population mass cut.  This
+# matches the GWTC-4 populations paper (arXiv:2508.18083, Section 6), which
+# requires the 1% lower limit on both component-mass posteriors (under the PE
+# priors) to lie above 3 solar masses.
+MIN_MASS_QUANTILE = 0.01
+
+# Events excluded from the memory analysis: NSBH (outside the BBH population
+# scope) and the three O3a events whose most-significant GWOSC FAR comes from
+# a non-LVK pipeline (IAS / 3-OGC) not covered by our injection selection set.
+# The latter match the GWTC-3 populations paper's 69-event BBH sample
+# (arXiv:2111.03634, Sec. VIII / Fig. 22).
 _EXCLUDED_EVENTS = frozenset({
-    "GW200105_162426",  # NSBH O3b
-    "GW200115_042309",  # NSBH O3b
-    "GW230518_125908",  # NSBH O4a
-    "GW230529_181500",  # NSBH O4a
+    "GW200105_162426",  # NSBH
+    "GW200115_042309",  # NSBH
+    "GW230518_125908",  # NSBH
+    "GW230529_181500",  # NSBH
+    "GW190514_065416",  # IAS / GWTC-2.1 only
+    "GW190916_200658",  # 3-OGC / GWTC-2.1 only
+    "GW190926_050336",  # 3-OGC / GWTC-2.1 only
 })
 
 # Per-sample sanity threshold: individual samples with |A_hat / A_sigma|
@@ -741,8 +755,8 @@ def load_event_ifars(event_names, cache_file=None):
         os.makedirs(os.path.dirname(os.path.abspath(cache_file)), exist_ok=True)
         with open(cache_file, "w") as fh:
             fh.write("# event_name IFAR_yr\n")
-            for ev, ifar in ifars.items():
-                fh.write(f"{ev} {ifar}\n")
+            for ev in sorted(ifars):
+                fh.write(f"{ev} {ifars[ev]}\n")
         logger.info("Saved IFAR cache to %s", cache_file)
 
     return ifars
@@ -909,20 +923,21 @@ def load_memory_data(event_files, memory_dir, waveform_label=None):
 def read_injection_file(
     vt_file,
     ifar_threshold=IFAR_THRESHOLD,
+    semianalytic_snr_threshold=SEMIANALYTIC_SNR_THRESHOLD,
     min_detector_frame_total_mass=None,
     min_mass_ratio=None,
     min_mass_2_source=MIN_MASS_2_SOURCE,
 ):
     """Read an HDF5 injection/selection file and extract relevant data.
 
-    Applies IFAR and, when requested, detector-frame total-mass,
-    mass-ratio, and minimum secondary mass cuts to determine which
-    injections were "found", then extracts source-frame masses, spins,
-    redshifts, and draw priors. Official polar-spin releases are
-    converted from tilt angle to cos(tilt), while legacy Cartesian files
-    retain the corresponding spin-coordinate Jacobian. Also computes
-    derived spin quantities (chi_eff, chi_p) and converts the analysis
-    time to years.
+    Applies search-pipeline IFAR and semi-analytic observed-SNR cuts, plus
+    detector-frame total-mass, mass-ratio, and minimum secondary-mass cuts
+    when requested, to determine which injections were "found". It then
+    extracts source-frame masses, spins, redshifts, and draw priors.
+    Official polar-spin releases are converted from tilt angle to
+    cos(tilt), while legacy Cartesian files retain the corresponding
+    spin-coordinate Jacobian. Also computes derived spin quantities
+    (chi_eff, chi_p) and converts the analysis time to years.
 
     Sources:
     - https://iopscience.iop.org/article/10.3847/2515-5172/ac2ba7
@@ -938,6 +953,11 @@ def read_injection_file(
     ifar_threshold : float
         Inverse false-alarm rate threshold (yr); injections with min FAR
         below 1/ifar_threshold are considered found.
+    semianalytic_snr_threshold : float or None
+        Network observed-SNR threshold for semi-analytic injections. If the
+        release contains ``semianalytic_observed_phase_maximized_snr_net``,
+        injections above this threshold are also considered found. If None,
+        this cut is disabled.
     min_detector_frame_total_mass : float or None
         Minimum detector-frame total mass threshold in solar masses.
         Injections with ``(m1_source + m2_source) * (1 + z)`` below this
@@ -965,6 +985,14 @@ def read_injection_file(
         fars = [events[key] for key in events.dtype.names if "far" in key]
         min_fars = np.min(fars, axis=0)
         found = min_fars < 1 / ifar_threshold
+        if (
+            semianalytic_snr_threshold is not None
+            and "semianalytic_observed_phase_maximized_snr_net" in events.dtype.names
+        ):
+            semianalytic_snr = events[
+                "semianalytic_observed_phase_maximized_snr_net"
+            ][()]
+            found |= semianalytic_snr >= semianalytic_snr_threshold
         redshift = _get_injection_redshift(events)
         detector_frame_total_mass = (
             (events["mass1_source"] + events["mass2_source"])
@@ -1089,7 +1117,7 @@ def _sample_memory_event(md, idxs, A_scale):
 
 
 def _write_analyzed_events(ifar_cache_file, event_names):
-    """Write *event_names* to ``analyzed_events.txt`` beside *ifar_cache_file*."""
+    """Write *event_names* alphabetically to ``analyzed_events.txt``."""
     if ifar_cache_file is None:
         return
     path = os.path.join(
@@ -1101,7 +1129,7 @@ def _write_analyzed_events(ifar_cache_file, event_names):
             "# Final set of events used in hierarchical analysis"
             " (post IFAR/mass cuts)\n"
         )
-        fh.writelines(name + "\n" for name in event_names)
+        fh.writelines(name + "\n" for name in sorted(event_names))
     logger.info("Wrote analyzed event list to %s", path)
 
 
@@ -1111,6 +1139,7 @@ def generate_data(
     memory_data=None,
     use_tgr=True,
     ifar_threshold=IFAR_THRESHOLD,
+    semianalytic_snr_threshold=SEMIANALYTIC_SNR_THRESHOLD,
     min_detector_frame_total_mass=None,
     min_mass_ratio=None,
     min_mass_2_source=MIN_MASS_2_SOURCE,
@@ -1124,8 +1153,7 @@ def generate_data(
     """Build per-event data arrays for the joint population model.
 
     Resamples posterior samples with importance weights, assembles arrays of
-    (m1, q, spins, redshift, A_hat, A_sigma) per event, and computes KDE
-    bandwidth matrices via the conditional covariance of the spin dimensions.
+    (m1, q, spins, redshift, A_hat, A_sigma) per event.
     Also loads and processes the injection data for selection effects.
 
     Parameters
@@ -1138,9 +1166,11 @@ def generate_data(
         Per-event memory data from `load_memory_data`.  Required when
         ``use_tgr=True``; ignored when ``use_tgr=False``.
     use_tgr : bool
-        Whether to include the TGR parameter in the KDE.
+        Whether to include the TGR amplitude in the returned data arrays.
     ifar_threshold : float
         IFAR threshold passed to `read_injection_file`.
+    semianalytic_snr_threshold : float or None
+        Semi-analytic observed-SNR threshold passed to `read_injection_file`.
     min_detector_frame_total_mass : float or None
         Minimum detector-frame total mass cut passed to
         `read_injection_file`. If None, the cut is disabled.
@@ -1148,10 +1178,14 @@ def generate_data(
         Minimum mass-ratio cut passed to `read_injection_file`. If None,
         the cut is disabled.
     min_mass_2_source : float or None
-        Minimum source-frame secondary mass (solar masses) applied to both
-        injections and observed events. Events whose median posterior
-        ``m2_source = m1_source * mass_ratio`` falls below this threshold
-        are excluded with a warning. If None, the cut is disabled.
+        Minimum source-frame component-mass threshold (solar masses).  For
+        injections, samples with ``m2_source`` below this threshold are
+        excluded.  For observed events, an event is excluded when the
+        ``MIN_MASS_QUANTILE`` lower limit on either ``m1_source`` or
+        ``m2_source`` posterior falls at or below this threshold (matching
+        the GWTC-4 populations paper, Section 6 of arXiv:2508.18083, which
+        requires the 1% lower limit on both component masses to be strictly
+        above 3 Msun). If None, the cut is disabled.
     N_samples : int
         Number of posterior samples to draw per event.
     prng : None, int, or numpy.random.Generator
@@ -1177,8 +1211,7 @@ def generate_data(
     Returns
     -------
     tuple
-        (event_data_array, injection_data_array, BW_matrices,
-        BW_matrices_sel, Nobs, Ndraw, A_scale)
+        (event_data_array, injection_data_array, Nobs, Ndraw, A_scale)
     """
     if use_tgr and memory_data is None:
         raise ValueError(
@@ -1201,9 +1234,6 @@ def generate_data(
     A_hats = []
     A_sigmas = []
     log_weights = []
-
-    BW_matrices = []
-    BW_matrices_sel = []
 
     if prng is None:
         prng = np.random.default_rng(np.random.randint(1 << 32))
@@ -1267,13 +1297,23 @@ def generate_data(
             if not excluded and min_mass_2_source is not None:
                 m1 = np.asarray(ep["mass_1_source"], dtype=float)
                 q = np.asarray(ep["mass_ratio"], dtype=float)
-                median_m2 = float(np.median(m1 * q))
-                if median_m2 < min_mass_2_source:
+                m2 = m1 * q
+                m1_q = float(np.nanquantile(m1, MIN_MASS_QUANTILE))
+                m2_q = float(np.nanquantile(m2, MIN_MASS_QUANTILE))
+                # Match the GWTC-4 populations paper (Section 6 of
+                # arXiv:2508.18083): keep an event only when the 1% lower
+                # limit on *both* component-mass posteriors is strictly above
+                # the threshold.
+                if m1_q <= min_mass_2_source or m2_q <= min_mass_2_source:
                     logger.warning(
-                        "Excluding observed event %s: median source-frame "
-                        "secondary mass %.2f Msun is below the threshold "
-                        "%.2f Msun",
-                        event_label_pre, median_m2, min_mass_2_source,
+                        "Excluding observed event %s: %g%% lower limits "
+                        "(m1=%.2f Msun, m2=%.2f Msun) are not both above the "
+                        "threshold %.2f Msun",
+                        event_label_pre,
+                        100.0 * MIN_MASS_QUANTILE,
+                        m1_q,
+                        m2_q,
+                        min_mass_2_source,
                     )
                     excluded = True
 
@@ -1419,48 +1459,6 @@ def generate_data(
                 "for reweighting."
             )
 
-        # BW_matrices are always 2x2 (spins only); the TGR dimension
-        # is handled analytically in the model.
-        d = 2
-        data_array = np.array(
-            [
-                a1s[-1],
-                a2s[-1],
-                m1s[-1],
-                qs[-1],
-                zs[-1],
-                cost1s[-1],
-                cost2s[-1],
-            ]
-        )
-
-        full_cov_i = np.cov(data_array)
-        try:
-            prec_i = np.linalg.inv(full_cov_i)[:d, :d]
-            cov_i = np.linalg.inv(prec_i)
-        except np.linalg.LinAlgError:
-            logger.warning(
-                "Skipping event %s: singular covariance matrix despite ESS=%.1f",
-                event_label, neff,
-            )
-            m1s.pop()
-            qs.pop()
-            a1s.pop()
-            a2s.pop()
-            A_hats.pop()
-            A_sigmas.pop()
-            log_weights.pop()
-            cost1s.pop()
-            cost2s.pop()
-            zs.pop()
-            log_pdraw.pop()
-            continue
-
-        BW_matrices.append(cov_i * N_samples ** (-2.0 / (4 + d)))
-        BW_matrices_sel.append(cov_i[:2, :2] * N_samples ** (-2.0 / 6))
-
-    BW_matrices = np.array(BW_matrices)
-    BW_matrices_sel = np.array(BW_matrices_sel)
 
     Nobs = len(m1s)
     n_dropped_in_loop = len(event_posteriors) - Nobs
@@ -1479,6 +1477,7 @@ def generate_data(
     injection_data = read_injection_file(
         injection_file,
         ifar_threshold=ifar_threshold,
+        semianalytic_snr_threshold=semianalytic_snr_threshold,
         min_detector_frame_total_mass=min_detector_frame_total_mass,
         min_mass_ratio=min_mass_ratio,
         min_mass_2_source=min_mass_2_source,
@@ -1502,8 +1501,6 @@ def generate_data(
     return (
         event_data_array,
         injection_data_array,
-        BW_matrices,
-        BW_matrices_sel,
         Nobs,
         Ndraw,
         A_scale,

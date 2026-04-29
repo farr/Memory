@@ -1,8 +1,16 @@
+import sys
+import types
+
 import h5py
 import numpy as np
 import pytest
 
-from memory.hierarchical.data import _resolve_waveform_label, load_memory_data
+from memory.hierarchical.data import (
+    _resolve_waveform_label,
+    _write_analyzed_events,
+    load_event_ifars,
+    load_memory_data,
+)
 
 
 def test_resolve_waveform_label_auto_prefers_highest_priority_waveform():
@@ -28,6 +36,60 @@ def test_resolve_waveform_label_raises_for_missing_waveform():
 
     with pytest.raises(KeyError, match="Waveform 'IMRPhenomXPHM' not found"):
         _resolve_waveform_label(keys, "IMRPhenomXPHM")
+
+
+def test_write_analyzed_events_sorts_event_names(tmp_path):
+    ifar_cache = tmp_path / "event_ifars.txt"
+
+    _write_analyzed_events(ifar_cache, ["GW200129_065458", "GW190521_030229"])
+
+    assert (tmp_path / "analyzed_events.txt").read_text().splitlines() == [
+        "# Final set of events used in hierarchical analysis (post IFAR/mass cuts)",
+        "GW190521_030229",
+        "GW200129_065458",
+    ]
+
+
+def test_load_event_ifars_writes_cache_sorted_by_event_name(tmp_path, monkeypatch):
+    ifar_cache = tmp_path / "event_ifars.txt"
+    gwosc = types.ModuleType("gwosc")
+    gwosc.api = types.SimpleNamespace(
+        fetch_event_json=lambda name: {"events": {name: {"far": 0.5}}}
+    )
+    monkeypatch.setitem(sys.modules, "gwosc", gwosc)
+
+    load_event_ifars(["GW200129_065458", "GW190521_030229"], ifar_cache)
+
+    assert ifar_cache.read_text().splitlines() == [
+        "# event_name IFAR_yr",
+        "GW190521_030229 2.0",
+        "GW200129_065458 2.0",
+    ]
+
+
+def test_save_provenance_writes_event_files_sorted(tmp_path):
+    from scripts.run_hierarchical_analysis import _save_provenance
+
+    _save_provenance(
+        tmp_path,
+        "injections.h5",
+        ["z-event.h5", "a-event.h5"],
+        "memory",
+        event_waveforms={
+            "GW200129_065458": "C01:NRSur7dq4",
+            "GW190521_030229": "C00:IMRPhenomXPHM",
+        },
+    )
+
+    assert (tmp_path / "event_files.txt").read_text().splitlines() == [
+        "a-event.h5",
+        "z-event.h5",
+    ]
+    assert (tmp_path / "event_waveforms.txt").read_text().splitlines() == [
+        "# event_name waveform_label",
+        "GW190521_030229 C00:IMRPhenomXPHM",
+        "GW200129_065458 C01:NRSur7dq4",
+    ]
 
 
 def test_load_memory_data_skips_events_missing_requested_waveform(tmp_path):
