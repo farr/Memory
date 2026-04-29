@@ -24,6 +24,7 @@ from typing import Iterable
 
 import arviz as az
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import numpy as np
 from corner import corner
 
@@ -286,42 +287,61 @@ def make_tgr_corner(
     joint_run: ResultRun | None,
     dpi: int,
 ) -> None:
-    plot_runs = [(memory_run, "memory", "C0")]
+    plot_runs = [(memory_run, "memory only", "C0")]
     if joint_run is not None:
         plot_runs.append((joint_run, "joint", "C1"))
 
-    fig = None
-    for run, label, color in plot_runs:
-        samples = load_tgr_samples(run.nc_file)
-        fig = corner(
-            samples,
-            labels=[r"$\mu_{\Lambda}$", r"$\sigma_{\Lambda}$"],
-            color=color,
-            fig=fig,
-            figsize=(6, 6),
-            levels=SIGMA_LEVELS_2D,
-            plot_datapoints=False,
-            plot_density=False,
-            plot_contours=True,
-            fill_contours=False,
-            hist_kwargs={"density": True, "linewidth": 1.5},
-            contour_kwargs={"linewidths": 1.2},
-            truths=[1.0, 0.0],
-            truth_color="k",
-            label_kwargs={"fontsize": 13},
-        )
+    rc_params = {
+        "font.family": "serif",
+        "mathtext.fontset": "cm",
+        "axes.labelsize": 14,
+        "xtick.labelsize": 11,
+        "ytick.labelsize": 11,
+    }
+
+    with plt.rc_context(rc_params):
+        fig = None
+        for run, _label, color in plot_runs:
+            samples = load_tgr_samples(run.nc_file)
+            fig = corner(
+                samples,
+                labels=[r"memory $\mu_\Lambda$", r"memory $\sigma_\Lambda$"],
+                color=color,
+                fig=fig,
+                figsize=(5.0, 5.0),
+                levels=SIGMA_LEVELS_2D,
+                plot_datapoints=False,
+                plot_density=False,
+                plot_contours=True,
+                fill_contours=False,
+                hist_kwargs={"density": True, "linewidth": 1.5},
+                contour_kwargs={"linewidths": 1.0},
+                truths=[1.0, 0.0],
+                truth_color="k",
+                label_kwargs={"fontsize": 15},
+            )
+
+        assert fig is not None
         axes = np.asarray(fig.axes).reshape(2, 2)
-        axes[0, 0].plot([], [], color=color, label=label)
+        axes[0, 1].axis("off")
+        legend_handles = [
+            Line2D([0], [0], color=color, lw=1.8, label=label)
+            for _run, label, color in plot_runs
+        ]
+        legend_handles.append(Line2D([0], [0], color="k", lw=1.8, label="GR"))
+        axes[0, 1].legend(
+            handles=legend_handles,
+            loc="upper left",
+            frameon=False,
+            fontsize=13,
+            handlelength=1.4,
+        )
+        axes[1, 0].set_ylim(bottom=0)
+        axes[1, 1].set_xlim(left=0)
 
-    assert fig is not None
-    axes = np.asarray(fig.axes).reshape(2, 2)
-    axes[0, 0].legend(loc="upper right", fontsize=10, framealpha=0.8)
-    axes[1, 0].set_ylim(bottom=0)
-    axes[1, 1].set_xlim(left=0)
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, dpi=dpi, bbox_inches="tight")
-    plt.close(fig)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(path, dpi=dpi, bbox_inches="tight")
+        plt.close(fig)
 
 
 def parse_args() -> argparse.Namespace:
