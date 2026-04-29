@@ -26,13 +26,19 @@ MIN_MASS_2_SOURCE = 3.0
 # priors) to lie above 3 solar masses.
 MIN_MASS_QUANTILE = 0.01
 
-# Events explicitly excluded from the memory analysis (outside the population
-# model's scope; also caught by the min_mass_2_source 1%-quantile cut).
+# Events excluded from the memory analysis: NSBH (outside the BBH population
+# scope) and the three O3a events whose most-significant GWOSC FAR comes from
+# a non-LVK pipeline (IAS / 3-OGC) not covered by our injection selection set.
+# The latter match the GWTC-3 populations paper's 69-event BBH sample
+# (arXiv:2111.03634, Sec. VIII / Fig. 22).
 _EXCLUDED_EVENTS = frozenset({
-    "GW200105_162426",  # NSBH O3b
-    "GW200115_042309",  # NSBH O3b
-    "GW230518_125908",  # NSBH O4a
-    "GW230529_181500",  # NSBH O4a
+    "GW200105_162426",  # NSBH
+    "GW200115_042309",  # NSBH
+    "GW230518_125908",  # NSBH
+    "GW230529_181500",  # NSBH
+    "GW190514_065416",  # IAS / GWTC-2.1 only
+    "GW190916_200658",  # 3-OGC / GWTC-2.1 only
+    "GW190926_050336",  # 3-OGC / GWTC-2.1 only
 })
 
 # Per-sample sanity threshold: individual samples with |A_hat / A_sigma|
