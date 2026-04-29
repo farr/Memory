@@ -34,7 +34,7 @@ SIGMA_LEVELS_2D = tuple(1.0 - np.exp(-0.5 * np.arange(1, 4) ** 2))
 REPO_DIR = Path(__file__).resolve().parent.parent
 
 # Paper data provenance: update this checked-in path when refreshing results.
-RESULTS_DIR = Path("results") / "prod_20260428"
+RESULTS_DIR = Path("results") / "prod_20260428b"
 DEFAULT_MACROS_OUTPUT = Path("paper") / "results_macros.tex"
 DEFAULT_PLOT_OUTPUT = Path("figures") / "tgr_comparison_corner.pdf"
 
