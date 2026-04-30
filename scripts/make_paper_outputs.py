@@ -85,9 +85,70 @@ def count_events(run_dir: Path) -> int:
     )
 
 
+def summarize_gaussian_draws(
+    samples: np.ndarray,
+) -> tuple[float, float, float]:
+    """Draw from Normal(mu_tgr, sigma_tgr) and return mean, q05, q95.
+
+    Each synthetic draw first selects one posterior hyperparameter sample,
+    then draws one value from N(mu_tgr, sigma_tgr). This gives draws from the
+    posterior-predictive mixture implied by the hyperposterior.
+    """
+
+    n_draws = len(samples[:,0])
+
+    rng = np.random.default_rng()
+
+    mu = np.asarray(samples[:, 0])
+    sigma = np.asarray(samples[:, 1])
+
+    if np.any(~np.isfinite(mu)) or np.any(~np.isfinite(sigma)):
+        raise ValueError("mu_tgr/sigma_tgr samples contain non-finite values")
+
+    if np.any(sigma < 0):
+        raise ValueError("sigma_tgr contains negative values; cannot use as a Gaussian scale")
+
+    sample_idx = rng.integers(0, len(samples), size=n_draws)
+    gaussian_draws = rng.normal(
+        loc=mu[sample_idx],
+        scale=sigma[sample_idx],
+    )
+
+    q05, q95 = np.quantile(gaussian_draws, [0.05, 0.95])
+    return float(np.mean(gaussian_draws)), float(q05), float(q95)
+
+
+def format_mean_ci(summary: tuple[float, float, float], precision: int) -> str:
+    """Format mean and 5th--95th percentile interval for LaTeX."""
+
+    mean, q05, q95 = summary
+    return (
+        f"{mean:.{precision}f}"
+        f"\\,[{q05:.{precision}f},\\,{q95:.{precision}f}]"
+    )
+
+
+def gaussian_draw_macros(
+    stem: str,
+    summary: tuple[float, float, float],
+    precision: int,
+) -> list[str]:
+    """Return separate and combined macros for Gaussian-draw summaries.
+
+    Use letter-only macro names because TeX command names do not naturally
+    include digits.
+    """
+
+    mean, q05, q95 = summary
+    return [
+        latex_macro(f"{stem}", f"${format_mean_ci(summary, precision)}$"),
+    ]
+
+
 def load_tgr_samples(nc_file: Path) -> np.ndarray:
     """Return a flat ``(sample, 2)`` array for ``mu_tgr`` and ``sigma_tgr``."""
 
+    print(nc_file)
     idata = az.from_netcdf(nc_file)
     missing = [name for name in TGR_VARS if name not in idata.posterior]
     if missing:
@@ -230,10 +291,23 @@ def write_macros(
 ) -> None:
     memory_samples = load_tgr_samples(memory_run.nc_file)
     memory_summary = summarize(memory_samples)
+    joint_samples = load_tgr_samples(joint_run.nc_file)
     joint_summary = (
-        summarize(load_tgr_samples(joint_run.nc_file)) if joint_run is not None else None
+        summarize(joint_samples) if joint_run is not None else None
     )
     primary_summary = joint_summary or memory_summary
+
+    memory_gaussian_summary = summarize_gaussian_draws(
+        memory_samples,
+    )
+    joint_gaussian_summary = (
+        summarize_gaussian_draws(
+            joint_samples,
+        )
+        if joint_samples is not None
+        else None
+    )
+    primary_gaussian_summary = joint_gaussian_summary or memory_gaussian_summary
 
     memory_count = count_events(memory_count_run.directory)
     selected_count = count_events(memory_run.directory)
@@ -254,6 +328,7 @@ def write_macros(
             latex_macro("NMemorySelectedEvents", format_int(selected_count)),
             latex_macro("NMemoryOnlyEvents", format_int(memory_count)),
             latex_macro("NJointEvents", format_int(joint_count)),
+            latex_macro("NLambdaGaussianDraws", format_int(len(joint_samples))),
             latex_macro(
                 "muLambdaconstraint",
                 f"${format_constraint(primary_summary['mu_tgr'], precision)}$",
@@ -272,6 +347,20 @@ def write_macros(
             ),
         ]
     )
+    lines.extend(
+        gaussian_draw_macros(
+            "Aconstraint",
+            primary_gaussian_summary,
+            precision,
+        )
+    )
+    lines.extend(
+        gaussian_draw_macros(
+            "MemoryAconstraint",
+            memory_gaussian_summary,
+            precision,
+        )
+    )
 
     if joint_summary is not None:
         lines.extend(
@@ -285,6 +374,13 @@ def write_macros(
                     f"${format_constraint(joint_summary['sigma_tgr'], precision)}$",
                 ),
             ]
+        )
+        lines.extend(
+            gaussian_draw_macros(
+                "JointAconstraint",
+                joint_gaussian_summary,
+                precision,
+            )
         )
 
     path.parent.mkdir(parents=True, exist_ok=True)
