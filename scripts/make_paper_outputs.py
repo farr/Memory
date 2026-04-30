@@ -114,17 +114,17 @@ def summarize_gaussian_draws(
         scale=sigma[sample_idx],
     )
 
-    q05, q95 = np.quantile(gaussian_draws, [0.05, 0.95])
-    return float(np.mean(gaussian_draws)), float(q05), float(q95)
+    low, median, high = np.quantile(gaussian_draws, [0.05, 0.5, 0.95])
+    return (median, high - median, median - low)
 
 
 def format_mean_ci(summary: tuple[float, float, float], precision: int) -> str:
     """Format mean and 5th--95th percentile interval for LaTeX."""
 
-    mean, q05, q95 = summary
+    median, plus, minus = summary
     return (
-        f"{mean:.{precision}f}"
-        f"\\,[{q05:.{precision}f},\\,{q95:.{precision}f}]"
+        f"{median:.{precision}f}"
+        f"^{{+{plus:.{precision}f}}}_{{-{minus:.{precision}f}}}"
     )
 
 
@@ -139,7 +139,7 @@ def gaussian_draw_macros(
     include digits.
     """
 
-    mean, q05, q95 = summary
+    median, plus, minus = summary
     return [
         latex_macro(f"{stem}", f"${format_mean_ci(summary, precision)}$"),
     ]
