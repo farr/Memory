@@ -697,7 +697,10 @@ def make_forecast(
     secax_O5.xaxis.label.set_color(color_O5)
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(path / "forecast_w_time.pdf", dpi=dpi, bbox_inches="tight")
+    if not "joint" in forecast_run.as_posix():
+        plt.savefig(path / "forecast_w_time.pdf", dpi=dpi, bbox_inches="tight")
+    else:
+        plt.savefig(path / "forecast_w_time_joint.pdf", dpi=dpi, bbox_inches="tight")
     plt.close(fig)
 
 def parse_args() -> argparse.Namespace:
@@ -783,6 +786,8 @@ def main() -> None:
     
     forecast_run = results_dir / "forecast_fisher"
 
+    forecast_run_joint = results_dir / "forecast_fisher_joint"
+
     write_macros(
         macros_output,
         memory_run=memory_run,
@@ -817,6 +822,13 @@ def main() -> None:
         make_forecast(
             plot_output,
             forecast_run=forecast_run,
+            dpi=args.dpi,
+        )
+        print(f"Wrote forecast plot.")
+
+        make_forecast(
+            plot_output,
+            forecast_run=forecast_run_joint,
             dpi=args.dpi,
         )
         print(f"Wrote forecast plot.")
