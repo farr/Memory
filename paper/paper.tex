@@ -71,7 +71,7 @@
 			\includegraphics[width=\textwidth
 			]{memory_mean_stddev_from_posteriors.pdf}
 		\end{center}
-		\caption{Values of the (\emph{top}) memory mean $\mu_{s}$ (Eq.~\eqref{eq:mean}), (\emph{middle}) memory standard deviation $\sigma_{s}$ (Eq.~\eqref{eq:stddev}), and (\emph{bottom}) and a draw from the $\mathcal{N}(\mu_{s},\sigma_{s})$ Gaussian for the waveform models that are available for a few events. Blue markers represent samples obtained by \texttt{NRSur7dq4} model~\cite{Varma:2019csw}, while yellow and pink markers present those obtained by  \texttt{SEOBNRv(4/5)PHM}~\cite{Bohe:2016gbl,Ossokine:2020kjp,Pompili:2023tna,Ramos-Buades:2023ehm} and the \texttt{IMRPhenomX(PHM/PHM-SpinTaylor/O4a)} models~\cite{Pratten:2020ceb,Colleoni:2024knd,Hamilton:2021pkf,Thompson:2023ase}. Each whisker shows the 50\% and 90\% credible regions, with the circle marker being the median value. The horizontal dashed line in the last row represents the GR $A=1$ value, showing that all events are consistent with GR at the 90\% level. The surrogate posterior for GW150914 is from Ref.~\cite{Islam:2023zzj}.}
+		\caption{Values of the (\emph{top}) memory mean $\mu_{s}$ (Eq.~\eqref{eq:mean}), (\emph{middle}) memory standard deviation $\sigma_{s}$ (Eq.~\eqref{eq:stddev}), and (\emph{bottom}) a draw from the $\mathcal{N}(\mu_{s},\sigma_{s})$ Gaussian for the waveform models that are available for a few events. Blue markers represent samples obtained by the \texttt{NRSur7dq4} model~\cite{Varma:2019csw}, while yellow and pink markers represent those obtained by the \texttt{SEOBNRv(4/5)PHM}~\cite{Bohe:2016gbl,Ossokine:2020kjp,Pompili:2023tna,Ramos-Buades:2023ehm} and \texttt{IMRPhenomX(PHM/PHM-SpinTaylor/O4a)} models~\cite{Pratten:2020ceb,Colleoni:2024knd,Hamilton:2021pkf,Thompson:2023ase}. Each whisker shows the 50\% and 90\% credible regions, with the circle marker being the median value. The horizontal dashed line in the last row represents the GR $A=1$ value, showing that all events are consistent with GR at the 90\% level. The surrogate posterior for GW150914 is from Ref.~\cite{Islam:2023zzj}.}
 		\label{fig:MemoryPosteriors}
 	\end{figure*}
 }
@@ -91,7 +91,7 @@
 		\begin{center}
 			\includegraphics[width=\textwidth]{forecast_w_time.pdf}
 		\end{center}
-		\caption{Evolution of the $1\sigma$ uncertainty on $\mu_{\Lambda}$ as a function of the number of future GW observations. Blue shows the projection for future O4a-like observations, while yellow shows the projection for future O5a-like observations (i.e., a gain factor of 1.41 in detector sensitivity). The vertical dotted line shows the current number of events analyzed: \Nmemoryevents. The horizontal dashed line shows the point at which $\mu_{\Lambda}$ is measured away from 0 at a 68\% credible level. The vertical dot-dashed line shows the naive $1/\sqrt{N}$ estimate (based on the current catalog) of how many total events are required to reach the 68\% credible level: \SqrtNEstimate. Light bands around each curve show the uncertainty after performing \NSigmaDraws $\sigma_{\Lambda}$ draws. The top axes show the observing time required to hit the number of GW observations shown based on the O4a and O5a rates of \OFiveRates and \OFiveRates events per year~\cite{IGWN:ObservingCapabilities:2026}.
+		\caption{Evolution of the $1\sigma$ uncertainty on $\mu_{\Lambda}$ as a function of the number of future GW observations. Blue shows the projection for future O4a-like observations, while yellow shows the projection for future O5a-like observations (i.e., a gain factor of 1.41 in detector sensitivity). The vertical dotted line shows the current number of events analyzed: \Nmemoryevents. The horizontal dashed line shows the point at which $\mu_{\Lambda}$ is measured away from 0 at a 68\% credible level. The vertical dot-dashed line shows the naive $1/\sqrt{N}$ estimate (based on the current catalog) of how many total events are required to reach the 68\% credible level: \SqrtNEstimate. Light bands around each curve show the uncertainty after performing \NSigmaDraws $\sigma_{\Lambda}$ draws. The top axes show the observing time required to hit the number of GW observations shown based on the O4a and O5a rates of \OFourRates and \OFiveRates events per year~\cite{IGWN:ObservingCapabilities:2026}.
 		}
 		\label{fig:Forecast}
 	\end{figure*}
@@ -140,7 +140,7 @@ In this work, we do exactly that. Namely, we utilize hierarchical Bayesian infer
 \section{Computation of memory}
 \label{sec:memory}
 
-Until recently, numerical relativity (NR) simulations of BBH mergers could not resolve the memory effect~\cite{Favata:2010zu,Pollney:2010hs,Mitman:2020pbt}. This was largely because the way the strain waveforms were extracted to future null infinity in NR, a technique known as extrapolation~\cite{Boyle:2019kee}, was insufficient for resolving the low-frequency memory effect.\footnote{The more robust method of using Cauchy-characteristic evolution (CCE) for obtaining waveforms at future null infinity, however, does resolve memory effects~\cite{Bishop:1996gt,Bishop:1997ik,Bishop:1998uk,Reisswig:2009rx,Reisswig:2009us,Babiuc:2010ze,Pollney:2010hs,Handmer:2014qha,Handmer:2015dsa,Handmer:2016mls,Moxon:2020gha,Moxon:2021gbv,Mitman:2020pbt}.} As a result of this--- at least in part---the majority of strain waveform models do not contain memory~\cite{Taracchini:2013rva,Pan:2013rra,Hannam:2013oca,Bohe:2016gbl,Ossokine:2020kjp,Varma:2019csw,Pratten:2020ceb,Colleoni:2024knd,Pompili:2023tna,Ramos-Buades:2023ehm,Hamilton:2021pkf,Thompson:2023ase}.\footnote{See Ref.~\cite{Yoo:2023spi} for a model trained on CCE waveforms which does contain memory effects.} Fortunately, due to the way in which the memory is sourced, for any model of the GW strain $h=h_{+}-ih_{\times}$, the memory can be computed from that model in a straight-forward manner~\cite{Talbot:2018sgr,Mitman:2020pbt,Mitman:2020bjf}.
+Until recently, numerical relativity (NR) simulations of BBH mergers could not resolve the memory effect~\cite{Favata:2010zu,Pollney:2010hs,Mitman:2020pbt}. This was largely because the way the strain waveforms were extracted to future null infinity in NR, a technique known as extrapolation~\cite{Boyle:2019kee}, was insufficient for resolving the low-frequency memory effect.\footnote{The more robust method of using Cauchy-characteristic evolution (CCE) for obtaining waveforms at future null infinity, however, does resolve memory effects~\cite{Bishop:1996gt,Bishop:1997ik,Bishop:1998uk,Reisswig:2009rx,Reisswig:2009us,Babiuc:2010ze,Pollney:2010hs,Handmer:2014qha,Handmer:2015dsa,Handmer:2016mls,Moxon:2020gha,Moxon:2021gbv,Mitman:2020pbt}.} As a result of this--- at least in part---the majority of strain waveform models do not contain memory~\cite{Taracchini:2013rva,Pan:2013rra,Hannam:2013oca,Bohe:2016gbl,Ossokine:2020kjp,Varma:2019csw,Pratten:2020ceb,Colleoni:2024knd,Pompili:2023tna,Ramos-Buades:2023ehm,Hamilton:2021pkf,Thompson:2023ase}.\footnote{See Ref.~\cite{Yoo:2023spi} for a model trained on CCE waveforms which does contain memory effects.} Fortunately, due to the way in which the memory is sourced, for any model of the GW strain $h=h_{+}-ih_{\times}$, the memory can be computed from that model in a straightforward manner~\cite{Talbot:2018sgr,Mitman:2020pbt,Mitman:2020bjf}.
 \begin{widetext}
 \noindent In particular, motivated by the Bondi-van der Burg-Metzner-Sachs (BMS) symmetry group and its corresponding charges and fluxes~\cite{Wald:1999wa,Flanagan:2015pxa,Mitman:2020pbt}, one can write the real part of the GW strain as
 \begin{align}
@@ -162,9 +162,9 @@ $m$ the Bondi mass aspect~\cite{Bondi:1962px}, and overdots representing derivat
 \end{align}
 Critically, the computation of $h_{\mathrm{mem}}$ requires knowledge of $h$ (or really its time derivative $\dot{h}$) over the entire two-sphere~\cite{PhysRevD.45.520}. To express $h_{\mathrm{mem}}$ in terms of the basis of spin-weight $s=-2$ spherical harmonics, one can use the integral formula
 \begin{align}
-	\int_{S^{2}}\phantom{}_{s_{1}}Y_{\ell_{1},m_{1}}\phantom{}_{s_{2}}Y_{\ell_{2},m_{2}}\phantom{}_{s_{3}}Y_{\ell_{3},m_{3}}\,{\rm d}\Omega=\sqrt{\dfrac{(2\ell_{1}+1)(2\ell_{2}+1)(2\ell_{3}+1)}{4\pi}}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\m_{1}&m_{2}&m_{3}\end{pmatrix}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\-s_{1}&-s_{2}&-s_{3}\end{pmatrix} ,
+	\int_{S^{2}}\phantom{}_{s_{1}}Y_{\ell_{1},m_{1}}\phantom{}_{s_{2}}Y_{\ell_{2},m_{2}}\phantom{}_{s_{3}}Y_{\ell_{3},m_{3}}\,{\rm d}\Omega=\sqrt{\dfrac{(2\ell_{1}+1)(2\ell_{2}+1)(2\ell_{3}+1)}{4\pi}}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\m_{1}&m_{2}&m_{3}\end{pmatrix}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell_{3}\\-s_{1}&-s_{2}&-s_{3}\end{pmatrix},
 \end{align}
-for ${\rm d}\Omega$ the volume form on the two-sphere and the right-most objects the Wigner-3j symbols with $s_{1}+s_{2}+s_{3}=0$. Equipped with this, one can compute the memory contribution to the individual $(\ell,m)$ spin-weight $s =-2$ modes as
+for ${\rm d}\Omega$ the volume form on the two-sphere and the rightmost objects the Wigner-3j symbols with $s_{1}+s_{2}+s_{3}=0$. Equipped with this, one can compute the memory contribution to the individual $(\ell,m)$ spin-weight $s =-2$ modes as
 \begin{align}
 	\label{eq:memorymodes}
 	h_{\mathrm{mem}}^{\ell,m}(u)&=\sum\limits_{\substack{\ell_{1},\ell_{2}\\m_{2}}}(-1)^{m_{2}}\sqrt{\dfrac{(2\ell_{1}+1)(2\ell_{2}+1)(2\ell+1)}{4\pi(\ell+2)(\ell+1)\ell(\ell-1)}}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell\\m-m_{2}&m_{2}&-m\end{pmatrix}\begin{pmatrix}\ell_{1}&\ell_{2}&\ell\\-2&2&0\end{pmatrix}\int_{-\infty}^{u}\dot{h}^{*}_{\ell_{1},m-m_{2}}\dot{h}_{\ell_{2},m_{2}}\,{\rm d}u,
@@ -196,7 +196,7 @@ As stated in Sec.~\ref{sec:memory}, standard LVK analyses do not use waveform mo
 \begin{align}
 	\log\mathcal{L}&=-\frac{1}{2}\left\langle d- R(\lambda)\, h(\lambda) \mid d-R(\lambda)\, h(\lambda)\right\rangle+C\nonumber\\
 	&=-\frac{1}{2}\left\langle d-\tilde{h}(\lambda) \mid d-\tilde{h}(\lambda)\right\rangle+C\nonumber\\
-	&=-\frac{1}{2}\left\|d-\tilde{h}(\lambda)\right\|^2+C\, ,
+	&=-\frac{1}{2}\left\|d-\tilde{h}(\lambda)\right\|^2+C,
 \end{align}
 where $d$ is the observed data, $h(\lambda)$ is the waveform model evaluated at parameters $\lambda$, $R(\lambda)$ is the detector response including calibration, $\tilde{h}(\lambda)\equiv R(\lambda)h(\lambda)$ is the signal at the detector,
 \begin{align}
@@ -204,17 +204,17 @@ where $d$ is the observed data, $h(\lambda)$ is the waveform model evaluated at 
 \end{align}
 is the frequency-domain noise-weighted inner product with some noise power spectral density $S(f)$, $\left\| \cdot \right\|^2\equiv\langle \cdot | \cdot \rangle$, and $C$ is a constant independent of the $\lambda$ parameters. Letting $r(\lambda)\equiv d-\tilde{h}(\lambda)$ denote the residual between the data and the template, the log-likelihood simplifies to
 \begin{align}
-	\log\mathcal{L}=-\frac{1}{2}\left\|r(\lambda)\right\|^2+C\, .
+	\log\mathcal{L}=-\frac{1}{2}\left\|r(\lambda)\right\|^2+C.
 \end{align}
 
 If we wish to include the missing contribution to the waveform models and thus also the effects of memory, since the memory can be computed directly from the usual waveform models using Eqs.~\eqref{eq:memorymodes} and~\eqref{eq:memory}, the log-likelihood becomes
 \begin{align}
-	\log\mathcal{L}=-\frac{1}{2}\left\| r(\lambda)-\tilde{h}_{\mathrm{mem}}(\lambda)\right\|^2+C\, .
+	\log\mathcal{L}=-\frac{1}{2}\left\| r(\lambda)-\tilde{h}_{\mathrm{mem}}(\lambda)\right\|^2+C.
 \end{align}
 and requires no new waveform model. But, if we wish to instead \emph{detect} the memory, then we want to include the memory enhancement factor via
 \begin{align}
 	\label{eq:memoryLL}
-	\log\mathcal{L}=-\frac{1}{2}\left\| r(\lambda)-A\,\tilde{h}_{\mathrm{mem}}(\lambda)\right\|^2+C\, .
+	\log\mathcal{L}=-\frac{1}{2}\left\| r(\lambda)-A\,\tilde{h}_{\mathrm{mem}}(\lambda)\right\|^2+C.
 \end{align}
 Computing the posterior on $A$ allows us to easily test the consistency of the observed memory effect with the predictions of GR, and to determine whether the data prefer a non-zero memory effect at all.
 Rather than sampling this parameter directly, which would require reanalyzing the data from scratch, we can take advantage of the structure of Eq.~\eqref{eq:memoryLL} to do this efficiently.
@@ -222,21 +222,21 @@ Rather than sampling this parameter directly, which would require reanalyzing th
 Conveniently, Eq.~\eqref{eq:memoryLL} takes the form of a Gaussian on $A$, which peaks at the value
 \begin{align}
 	\label{eq:mean}
-	\mu=\dfrac{\mathrm{Re}\left[\langle\tilde{h}_{\mathrm{mem}}(\lambda)|r(\lambda)\rangle\right]}{\left\|\tilde{h}_{\mathrm{mem}}(\lambda)\right\|^2}\, ,
+	\mu=\dfrac{\mathrm{Re}\left[\langle\tilde{h}_{\mathrm{mem}}(\lambda)|r(\lambda)\rangle\right]}{\left\|\tilde{h}_{\mathrm{mem}}(\lambda)\right\|^2},
 \end{align}
 with uncertainty
 \begin{align}
 	\label{eq:stddev}
-	\sigma=\left\|\tilde{h}_{\mathrm{mem}}(\lambda)\right\|^{-1}\, .
+	\sigma=\left\|\tilde{h}_{\mathrm{mem}}(\lambda)\right\|^{-1}.
 \end{align}
 Marginalizing out the memory enhancement factor of the likelihood in Eq.~\eqref{eq:memoryLL} with a flat prior therefore yields the marginal log-likelihood
 \begin{align}
 	\label{eq:marginalLL}
-	\log\overline{\mathcal{L}}&=\log\int\exp(\log\mathcal{L})\,{\rm d} A_{\mathrm{mem}}\nonumber\\&=-\frac{1}{2}\left(||r(\lambda)||^{2}-\sigma^{-2}\mu^{2}\right)+\log\sigma+C\, .
+	\log\overline{\mathcal{L}}&=\log\int\exp(\log\mathcal{L})\,{\rm d} A_{\mathrm{mem}}\nonumber\\&=-\frac{1}{2}\left(||r(\lambda)||^{2}-\sigma^{-2}\mu^{2}\right)+\log\sigma+C.
 \end{align}
 Thus, starting from posterior samples from the standard memoryless LVK analysis, we can derive a conditional and marginal posterior for the memory parameter $A$.
 
-The sample-level hyperparameters $\mu$ and $\sigma$ respectively yield the preferred $A$ value as well as our uncertainty about this value, conditioned on the corresponding $\lambda$ sample. Meanwhile, the marginal likelihood $\overline{\mathcal{L}}$ in Eq.~\eqref{eq:marginalLL} encodes the goodness of fit achieved by incorporating memory in the analysis. Therefore, if we have a set of samples drawn from a posterior based on the original, no-memory likelihood $\mathcal{L}$, then the ratio of the marginal likelihood to the original likelihood serves as an importance weight to reseample draws from the memoryless posterior into the posterior that would have been obtained with memory.
+The sample-level hyperparameters $\mu$ and $\sigma$ respectively yield the preferred $A$ value as well as our uncertainty about this value, conditioned on the corresponding $\lambda$ sample. Meanwhile, the marginal likelihood $\overline{\mathcal{L}}$ in Eq.~\eqref{eq:marginalLL} encodes the goodness of fit achieved by incorporating memory in the analysis. Therefore, if we have a set of samples drawn from a posterior based on the original, no-memory likelihood $\mathcal{L}$, then the ratio of the marginal likelihood to the original likelihood serves as an importance weight to resample draws from the memoryless posterior into the posterior that would have been obtained with memory.
 The log-weight is simply
 \begin{align}
 	\label{eq:weight}
@@ -250,7 +250,7 @@ With the values of $\mu$ and $\sigma$ obtained for each sample, we can then comb
 \subsection{Hierarchical inference}
 \label{sec:hierarchicalinference}
 
-Following the work of Ref.~\cite{Payne:2023kwj}, we simultaneously model the population distribution of the memory and all of the usual BBH merger astrophysical parameters. We assume that we have regular parameter estimation samples $\lambda_{s}$ that have been enhanced to include the both $\mu$ and $\sigma$ from Eqs.~\eqref{eq:mean} and~\eqref{eq:stddev}, which we will hereafter call $\mu_{s}$ and $\sigma_{s}$ when referring to the sample $s$. For each of our samples, this defines the conditional distribution on the memory enhancement factor $A$ given $\lambda_{s}$, which is
+Following the work of Ref.~\cite{Payne:2023kwj}, we simultaneously model the population distribution of the memory and all of the usual BBH merger astrophysical parameters. We assume that we have regular parameter estimation samples $\lambda_{s}$ that have been enhanced to include both $\mu$ and $\sigma$ from Eqs.~\eqref{eq:mean} and~\eqref{eq:stddev}, which we will hereafter call $\mu_{s}$ and $\sigma_{s}$ when referring to the sample $s$. For each of our samples, this defines the conditional distribution on the memory enhancement factor $A$ given $\lambda_{s}$, which is
 \begin{align}
 	\label{eq:Aconditionaldistribution}
 	p(A|\lambda_{s})=\mathcal{N}(A \mid \mu_{s},\sigma_{s}),
@@ -265,7 +265,7 @@ The hierarchical likelihood for population parameters $\Lambda$ for the $i^{\mat
 where $p(A,\lambda)$ is the sample posterior and $W(\lambda)$ is the importance weight that encodes the sampling prior from the original analysis and any of the necessary Jacobians, as well as the inverse of the importance weight that was derived in Eq.~\eqref{eq:weight}; we will assume that the prior on $A$ is flat so the weight $W$ in Eq.~\eqref{eq:hierarchicalLL} is independent of $A$. Because $p(A,\lambda)=p(A | \lambda)\, p(\lambda)$, Eq.~\eqref{eq:hierarchicalLL} becomes
 \begin{align}
 	\label{eq:hierarchicalLLpartial}
-	\mathcal{L}_{i}=\int \dfrac{p(A \mid \lambda)\, p(\lambda)}{W(\lambda)}\, p(A,\lambda\mid\Lambda)\,{\rm d}A {\rm d}\lambda \, .
+	\mathcal{L}_{i}=\int \dfrac{p(A \mid \lambda)\, p(\lambda)}{W(\lambda)}\, p(A,\lambda\mid\Lambda)\,{\rm d}A {\rm d}\lambda.
 \end{align}
 At this point, we can use the fact that we have $N$ samples from the posterior $\lambda_{s}$, i.e.,
 \begin{align}
@@ -295,23 +295,23 @@ Under this Gaussian population model for the memory, the integral over the memor
 \end{align}
 where we used Eq.~\eqref{eq:Aconditionaldistribution} to replace $p(A \mid \lambda_{s})$ in Eq.~\eqref{eq:hierarchicalLLsimplified}. Equation~\eqref{eq:hierarchicalLLfinal} thus provides a straightforward way to evaluate the hierarchical likelihood \emph{without sampling the latent variable $A$} for each sample. Instead, each sample contributes to the likelihood through a Gaussian term that compares its sample-level memory mean $\mu_{s}$, Eq.~\eqref{eq:mean}, with the memory population mean $\mu_{\Lambda}$, with a variance that is a sum in quadrature of the sample-level memory measurement uncertainty $\sigma_{s}$, Eq.~\eqref{eq:stddev}, and the overall memory population uncertainty $\sigma_{\Lambda}$.
 
-Finally, while Eq.~\eqref{eq:hierarchicalLLfinal} is the log-likelihood for an individual event, the log-likelihood for a catalog of $N_{e}$ events is, up to a constant, given by 
+Finally, while Eq.~\eqref{eq:hierarchicalLLfinal} provides the likelihood for an individual event, the log-likelihood for a catalog of $N_{e}$ events is, up to a constant, given by 
 \begin{align}
 	\label{eq:poplike}
-	\log\mathcal{L}(\Lambda) = \sum_{i=1}^{N_e}\log\mathcal{L}_{i}(\Lambda) - N_e \log \xi(\Lambda) \, 
+	\log\mathcal{L}(\Lambda) = \sum_{i=1}^{N_e}\log\mathcal{L}_{i}(\Lambda) - N_e \log \xi(\Lambda),
 \end{align}
 where $\xi(\Lambda)$ is the detection efficiency, which encodes the detection biases \cite{Mandel:2018mve}.
 We assume there is no selection based on the memory parameter $A$, given that we expect the memory piece to have a particularly small effect on the signal-to-noise ratio \cite{Magee:2023muf}.
 The hyperposterior on both $\mu_{\Lambda}$ and $\sigma_{\Lambda}$, obtained by sampling Eq.~\eqref{eq:poplike} together with some hyperprior $p(\mu_{\Lambda}, \sigma_{\Lambda})$, encodes our best knowledge of the most likely value of $A$ and the degree of variance consistent with the observed population.
 
-For the astrophysical part of the model, i.e., $p(\lambda \mid \Lambda_\lambda)$, we adopt a parametric form based on the LVK analysis of GWTC-4 that was performed in Ref.~\cite{LIGOScientific:2025pvj}. We factorize the BBH parameter density for the primary mass $m_1$, mass ratio $q = m_2/m_1$, redshift $z$, spin magnitudes $\chi_{1/2}$ and spin tilts $\theta_{1/2}$. The primary mass $m_{1} \in [3, 300]\,M_{\odot}$ is described by a three-component mixture of a continuous broken power law and two Gaussian peaks truncated to the same support, with mixture weights drawn from a flat Dirichlet prior. The mass ratio follows the conditional power law $p(q \mid m_{1}) \propto q^{\beta}$ on $[3\,M_{\odot}/m_{1},\,1]$, while the redshift distribution scales as $(1+z)^{\lambda}\,\mathrm{d}V_{c}/\mathrm{d}z\,(1+z)^{-1}$ for $V_{c}$ the comoving volume in a Planck 2015 cosmology~\cite{Planck:2015fie}. The cosine spin tilts $(\cos\theta_{1}, \cos\theta_{2})$ are jointly modeled as a mixture of an isotropic component and a product of truncated Gaussians on $[-1, 1]$ with shared means and widths, which follows the non-independently, but identically-distributed prescription used for GWTC-4; each spin magnitude $\chi_{i}$ is independently drawn from a Gaussian truncated to $[0, 1]$ with shared mean and width. We place broad uniform priors on these hyperparameters and account for potential selection effects through the rate-marginalized factor $\xi(\Lambda)^{-N_{e}}$ (see Eq.~\eqref{eq:poplike}), which is estimated as a Monte-Carlo average over the cumulative LVK simulated-injection campaign for GWTC-4~\cite{Essick:2025zed,LVK:GWTC4CumulativeSensitivity}. See Appendix \ref{sec:appendix-popmodel} for more details.
+For the astrophysical part of the model, i.e., $p(\lambda \mid \Lambda_\lambda)$, we adopt a parametric form based on the LVK analysis of GWTC-4 that was performed in Ref.~\cite{LIGOScientific:2025pvj}. We factorize the BBH parameter density for the primary mass $m_1$, mass ratio $q = m_2/m_1$, redshift $z$, spin magnitudes $\chi_{1/2}$ and spin tilts $\theta_{1/2}$. The primary mass $m_{1} \in [3, 300]\,M_{\odot}$ is described by a three-component mixture of a continuous broken power law and two Gaussian peaks truncated to the same support, with mixture weights drawn from a flat Dirichlet prior. The mass ratio follows the conditional power law $p(q \mid m_{1}) \propto q^{\beta}$ on $[3\,M_{\odot}/m_{1},\,1]$, while the redshift distribution scales as $(1+z)^{\lambda_{z}}\,\mathrm{d}V_{c}/\mathrm{d}z\,(1+z)^{-1}$ for $V_{c}$ the comoving volume in a Planck 2015 cosmology~\cite{Planck:2015fie}. The cosine spin tilts $(\cos\theta_{1}, \cos\theta_{2})$ are jointly modeled as a mixture of an isotropic component and a product of truncated Gaussians on $[-1, 1]$ with shared means and widths, which follows the non-independently but identically-distributed prescription used for GWTC-4; each spin magnitude $\chi_{i}$ is independently drawn from a Gaussian truncated to $[0, 1]$ with shared mean and width. We place broad uniform priors on these hyperparameters and account for potential selection effects through the rate-marginalized factor $\xi(\Lambda)^{-N_{e}}$ (see Eq.~\eqref{eq:poplike}), which is estimated as a Monte-Carlo average over the cumulative LVK simulated-injection campaign for GWTC-4~\cite{Essick:2025zed,LVK:GWTC4CumulativeSensitivity}. See Appendix \ref{sec:appendix-popmodel} for more details.
 
 We draw samples from the hyperposterior by using the No-U-Turn Hamiltonian Monte Carlo algorithm~\cite{Hoffman:2014NUTS} as implemented in \textsc{Numpyro}~\cite{bingham2019pyro,Phan:2019NumPyro}.
 
 \section{Results}
 \label{sec:results}
 
-For our memory analysis, we consider all BBH events observed by the LVK Collaboration which had an inverse false alarm rate above one year, up to and including the GWTC-4.0 catalog. This amounted to \Nmemoryevents events in total. For each event, each available waveform model, and its corresponding posterior samples, we computed the memory mean $\mu_{s}$ and standard deviation $\sigma_{s}$ using Eqs.~\eqref{eq:mean} and~\eqref{eq:stddev}. The waveform models used are those described in Refs.~\cite{Varma:2019csw,Pratten:2020ceb,Colleoni:2024knd,Pompili:2023tna,Ramos-Buades:2023ehm,Hamilton:2021pkf,Thompson:2023ase}. Because the computation of the memory requires the strain modes per Eq.~\eqref{eq:memorymodes}, each waveform model was always used to provide as many modes as available. For the phenomenological models, which output waveforms in the frequency domain, we first transformed the output waveform to the time domain before computing the memory.
+For our memory analysis, we consider all BBH events observed by the LVK Collaboration that had an inverse false alarm rate above one year, up to and including the GWTC-4.0 catalog. This amounted to \Nmemoryevents events in total. For each event, each available waveform model, and its corresponding posterior samples, we computed the memory mean $\mu_{s}$ and standard deviation $\sigma_{s}$ using Eqs.~\eqref{eq:mean} and~\eqref{eq:stddev}. The waveform models used are those described in Refs.~\cite{Varma:2019csw,Pratten:2020ceb,Colleoni:2024knd,Pompili:2023tna,Ramos-Buades:2023ehm,Hamilton:2021pkf,Thompson:2023ase}. Because the computation of the memory requires the strain modes per Eq.~\eqref{eq:memorymodes}, each waveform model was always used to provide as many modes as available. For the phenomenological models, which output waveforms in the frequency domain, we first transformed the output waveform to the time domain before computing the memory.
 
 In Fig.~\ref{fig:MemoryPosteriors} we show the distribution of $\mu_{s}$ and $\sigma_{s}$ across all posterior samples for six of the more informative and popular BBH detections. As shown (especially by the third row of the figure), of these more significant events, none of them yield a confident measurement of memory and every event has a preferred memory enhancement factor consistent with the GR value of $A = 1$, at least at the 90\% credible level. Across all of the analyzed events, we find that GW230814~\cite{LIGOScientific:2025cmm} has the most influence on the inference of the memory in the sense that when we remove this event from the hierarchical inference the posterior on $(\mu_{\Lambda},\sigma_{\Lambda})$ changes the most. Note that while in Fig.~\ref{fig:MemoryPosteriors} we show results for the event GW250114~\cite{LIGOScientific:2025rid,LIGOScientific:2025wao}, this event is not included in our hierarchical inference since the sensitivity estimates have yet to be released by the LVK Collaboration via their GWTC-5.0. As we will show in the subsequent section, even though no single event yields a confident measurement of memory, by instead inferring the memory hyperparameters across all events, we can obtain much better memory constraints.
 
@@ -361,16 +361,16 @@ i.e.,
 \end{align}
 Equation~\eqref{eq:uncertaintyestimator} provides a Fisher-matrix motivated way to estimate the number of future events required to reach some uncertainty $\Delta\mu_{\Lambda}$ provided some sensitivity gain $g$ and population-wide $\sigma_{\Lambda}$, which again can simply be drawn from the current $\sigma_{\Lambda}$ posterior.
 
-The results of this forecast analysis are shown in Fig.~\ref{fig:Forecast}. Each curve corresponds to computing $\Delta\mu_{\Lambda}$ through Eq.~\eqref{eq:uncertaintyestimator} for some future number of GW observations. The blue curve represents O4a-like observations ($g=1$), while yellow represents O5a-like observations ($g=1.41$). Bands around each curve show the half-widths obtained across \NSigmaDraws $\sigma_{\Lambda}$ values, taken as draws from the current $\sigma_{\Lambda}$ posterior. The horizontal axes on top of the figure show the time that is required to reach the number of observations shown on the lower horizontal axis for the events rates of \OFourRates and \OFiveRates per year for O4a and O5a~\cite{IGWN:ObservingCapabilities:2026}. As can be seen, this analysis yields a very similar number of GW observations required to constrain memory as a naive $1/\sqrt{N}$ estimate, i.e., $\sim$\hatAnumberofevents events. But, if the sensitivity of the LVK detectors in future runs meets the expected O5a gain of $\sim1.41$, then due to the increase in individual event SNRs, we may be able to obtain evidence for memory in as little as $\sim$1,000 events.\footnote{Note though that this is a bit misleading because as the detectors become more sensitive, they are expected to observe many more low-SNR events (as well as more high-SNR events). A better way to view the sensitivity gain is that we will reach $\sim$2,000 events \emph{much faster} with an O5a-like detector, than an O4a-like one.}
+The results of this forecast analysis are shown in Fig.~\ref{fig:Forecast}. Each curve corresponds to computing $\Delta\mu_{\Lambda}$ through Eq.~\eqref{eq:uncertaintyestimator} for some future number of GW observations. The blue curve represents O4a-like observations ($g=1$), while yellow represents O5a-like observations ($g=1.41$). Bands around each curve show the half-widths obtained across \NSigmaDraws $\sigma_{\Lambda}$ values, taken as draws from the current $\sigma_{\Lambda}$ posterior. The horizontal axes on top of the figure show the time that is required to reach the number of observations shown on the lower horizontal axis for the event rates of \OFourRates and \OFiveRates per year for O4a and O5a~\cite{IGWN:ObservingCapabilities:2026}. As can be seen, this analysis yields a very similar number of GW observations required to constrain memory as a naive $1/\sqrt{N}$ estimate, i.e., $\sim$\hatAnumberofevents events. But, if the sensitivity of the LVK detectors in future runs meets the expected O5a gain of $\sim1.41$, then due to the increase in individual event SNRs, we may be able to obtain evidence for memory in as little as $\sim$1,000 events.\footnote{Note though that this is a bit misleading because as the detectors become more sensitive, they are expected to observe many more low-SNR events (as well as more high-SNR events). A better way to view the sensitivity gain is that we will reach $\sim$2,000 events \emph{much faster} with an O5a-like detector than an O4a-like one.}
 
 \section{Discussion}
 \label{sec:discussion}
 
 Gravitational wave memory is a key prediction of GR that is a natural target for ground-based GW detectors. It is of immense theoretical interest due to its connection to asymptotic symmetries and soft theorems and for its role in formulating a consistent theory of quantum gravity. Unfortunately, due to its low-frequency nature, it is an incredibly challenging effect to observe in individual events with the current LVK detectors. However, there is reason to believe that with enough observations, we can observe memory in a population of GW detections.
 
-In this study, we used hierarchical Bayesian inference to measure the memory enhancement factor---the constant appearing in front of the contribution to the strain from the supermomentum flux, which is 1 in GR---across the population of GW events up to and including the recent GWTC-4.0 catalog. Unsurprisingly, we found that we can constrain this factor to \muLambdaconstraint, which does not yield a confident measurement of the memory effect. Nonetheless, this work provides the first attempt to measure memory using hierarchical inference and thus the first analysis to successfully account for potential changes in the inferred BBH population due to the memory. Like previous works, we find that we will likely need $\sim$\hatAnumberofevents GW detections to confidently constrain the memory away from zero. Yet, since this number is expected to be achieved with the fifth observing run of the LVK detectors, we find that it is likely that we will measure the memory effect for the first time in a population of events in the next few years.
+In this study, we used hierarchical Bayesian inference to measure the memory enhancement factor---the constant appearing in front of the contribution to the strain from the supermomentum flux, which is 1 in GR---across the population of GW events up to and including the recent GWTC-4.0 catalog. Unsurprisingly, we found that we can constrain this factor to \Aconstraint, which does not yield a confident measurement of the memory effect. Nonetheless, this work provides the first attempt to measure memory using hierarchical inference and thus the first analysis to successfully account for potential changes in the inferred BBH population due to the memory. Like previous works, we find that we will likely need $\sim$\hatAnumberofevents GW detections to confidently constrain the memory away from zero. Yet, since this number is expected to be achieved with the fifth observing run of the LVK detectors, we find that it is likely that we will measure the memory effect for the first time in a population of events in the next few years.
 
-The code used for this analysis and the data that was produced are available at \added[id=KM]{ZENODO\_URL} under an open source license. This includes our estimates of the memory-augmented posteriors for each analyzed event.
+The code used for this analysis and the data that were produced are available at \added[id=KM]{ZENODO\_URL} under an open source license. This includes our estimates of the memory-augmented posteriors for each analyzed event.
 
 \section*{Acknowledgments}
 
@@ -390,7 +390,7 @@ The starting point is the likelihood in Eq.~\eqref{eq:hierarchicalLLfinal} which
 \begin{equation}
 	\lambda = \left\{ m_1, q, z, \chi_1, \chi_2, \cos\theta_1, \cos \theta_2 \right\},
 \end{equation}
-for the primary mass $m_1$, the mass ratio $q = m_2/m_1$, the redshift $z$, and the spin magnitudes $\chi_{1/2}$ and tilts with respect to the orbital angular momentum $\theta_{1/2}$; the spin angles in the orbital plane $\phi_{1/2}$ are taken to be azimuthally uniform, while the source locations and the inclinations are taken to follow isotropy, so that neither appear explicitly in our population model.
+for the primary mass $m_1$, the mass ratio $q = m_2/m_1$, the redshift $z$, and the spin magnitudes $\chi_{1/2}$ and tilts with respect to the orbital angular momentum $\theta_{1/2}$; the spin angles in the orbital plane $\phi_{1/2}$ are taken to be azimuthally uniform, while the source locations and the inclinations are taken to follow isotropy, so that neither appears explicitly in our population model.
 
 We impose a population model on the BBH parameters $\lambda$ that factorizes as
 \begin{align}
@@ -512,7 +512,7 @@ This is the ``non-independently but identically distributed'' prescription of th
 The two dimensionless spin magnitudes $\chi_{i}$ are modeled using independent and identically distributed truncated Gaussians on $[0, 1]$,
 \begin{align}
 \label{eq:spin-mag-density}
-p(\chi_{i} \mid \mu_{\chi}, \sigma_{\chi}) = \mathcal{N}_{[0, 1]}(\chi_{i} \mid \mu_{\chi}, \sigma_{\chi}) \, , \quad i \in \{1, 2\} \, ,
+p(\chi_{i} \mid \mu_{\chi}, \sigma_{\chi}) = \mathcal{N}_{[0, 1]}(\chi_{i} \mid \mu_{\chi}, \sigma_{\chi}) \, , \quad i \in \{1, 2\},
 \end{align}
 with shared mean and width across the two components.
 
@@ -520,18 +520,16 @@ with shared mean and width across the two components.
 \label{sec:appendix-memory-selection}
 
 Possible selection effects are accounted for through the detection efficiency $\xi(\Lambda)$ in Eq.~\eqref{eq:poplike}, which is evaluated as a Monte-Carlo average over the LVK Collaboration's cumulative O1--O4a simulated-injection campaign~\cite{Essick:2025zed,LVK:GWTC4CumulativeSensitivity}. Both this Monte-Carlo sum and the per-event $N$-sample sums approximating $\mathcal{L}_{i}(\Lambda)$ in Eq.~\eqref{eq:hierarchicalLLfinal} are combined with smooth penalties that suppress certain regions of the hyperparameter space where the corresponding effective sample sizes become too small for the estimator to be reliable~\cite{Tiwari:2017ndi,Farr:2019rap,Essick:2022ojx,Talbot:2023pex,Heinzel:2025ogf}. Writing $w_{i,s} \equiv p(\lambda_{i,s} \mid \Lambda_{\lambda})/p_{\mathrm{pe}}(\lambda_{i,s})$ for the importance weight of the $s$-th posterior sample of event $i$ relative to its parameter-estimation prior $p_{\mathrm{pe}}$, and $w_{j}^{\mathrm{sel}} \equiv p(\lambda_{j} \mid \Lambda_{\lambda})/p_{\mathrm{inj}}(\lambda_{j})$ for the analogous weight on the $j$-th of the $N_{\mathrm{draw}}$ recovered injections drawn from the injection distribution $p_{\mathrm{inj}}$, the per-event and selection effective sample sizes are
-\begin{equation}
+\begin{align}
 \label{eq:neff-event}
-N_{\mathrm{eff}, i}(\Lambda) \equiv \frac{\left(\sum_{s} w_{i,s}\right)^{2}}{\sum_{s} w_{i,s}^{2}}\, 
-\end{equation}
-\begin{equation}
+N_{\mathrm{eff}, i}(\Lambda) &\equiv \frac{\left(\sum_{s} w_{i,s}\right)^{2}}{\sum_{s} w_{i,s}^{2}},\\
 \label{eq:neff-sel}
-N_{\mathrm{eff,sel}}(\Lambda) \equiv \frac{\left(\sum_{j} w_{j}^{\mathrm{sel}}\right)^{2}}{\sum_{j} \left(w_{j}^{\mathrm{sel}}\right)^{2} - \left(\sum_{j} w_{j}^{\mathrm{sel}}\right)^{2} \! / N_{\mathrm{draw}}} \, .
-\end{equation}
+N_{\mathrm{eff,sel}}(\Lambda) &\equiv \frac{\left(\sum_{j} w_{j}^{\mathrm{sel}}\right)^{2}}{\sum_{j} \left(w_{j}^{\mathrm{sel}}\right)^{2} - \left(\sum_{j} w_{j}^{\mathrm{sel}}\right)^{2} \! / N_{\mathrm{draw}}}.
+\end{align}
 We add to the log-likelihood a smooth penalty for each $N_{\mathrm{eff}}$ that ramps linearly below a threshold $N_{\mathrm{crit}}$,
 \begin{align}
 \label{eq:neff-penalty}
-\log \Pi(N_{\mathrm{eff}} \mid N_{\mathrm{crit}}) = \min\!\left(0,\; \frac{N_{\mathrm{eff}} - N_{\mathrm{crit}}}{0.05\, N_{\mathrm{crit}}}\right) \, ,
+\log \Pi(N_{\mathrm{eff}} \mid N_{\mathrm{crit}}) = \min\!\left(0,\; \frac{N_{\mathrm{eff}} - N_{\mathrm{crit}}}{0.05\, N_{\mathrm{crit}}}\right),
 \end{align}
 applied with $N_{\mathrm{crit}} = N_{\mathrm{obs}}$ to $\min_{i}\, N_{\mathrm{eff}, i}(\Lambda)$ and with $N_{\mathrm{crit}} = 4\, N_{\mathrm{obs}}$ to $N_{\mathrm{eff,sel}}(\Lambda)$.
 % The linear-ramp form has bounded gradient $\left(0.05\, N_{\mathrm{crit}}\right)^{-1}$, which avoids the step-size collapse that higher-power penalties would induce when the NUTS chain transiently visits low-$N_{\mathrm{eff}}$ regions of hyperparameter space.
