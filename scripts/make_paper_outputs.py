@@ -654,22 +654,22 @@ def make_tgr_corner(
     color_joint  = "#E69F00"
     
     fig = plt.figure(figsize=(width1, width1))
-    
+
     fig = corner(
-        data_memory,
+        data_joint,
         var_names=["mu_tgr", "sigma_tgr"],
         figsize=(width1, width1),
         plot_density=False,
         plot_contours=True,
         plot_datapoints=False,
         fill_contours=False,
-        color=color_memory,
+        color=color_joint,
         levels=SIGMA_LEVELS_2D,
         fig=fig,
     )
     
     fig = corner(
-        data_joint,
+        data_memory,
         var_names=["mu_tgr", "sigma_tgr"],
         labels=[r"memory $\mu_{\Lambda}$", r"memory $\sigma_{\Lambda}$"],
         figsize=(width1, width1),
@@ -677,7 +677,7 @@ def make_tgr_corner(
         plot_contours=True,
         plot_datapoints=False,
         fill_contours=False,
-        color=color_joint,
+        color=color_memory,
         levels=SIGMA_LEVELS_2D,
         truths=[1, 0],
         truth_color="k",
@@ -692,15 +692,15 @@ def make_tgr_corner(
 
     ax.set_xlim(-18, 18)
     ax.set_ylim(0, 18)
-    
-    mem_line = Line2D([], [], lw=1.5, color=color_memory, label='memory only')
+
     joint_line = Line2D([], [], lw=1.5, color=color_joint, label='joint')
+    mem_line = Line2D([], [], lw=1.5, color=color_memory, label='memory only')
     truth_line = Line2D([], [], lw=1.5, color='k', linestyle='-', label='GR')
     
     ax_empty = axes[0, 1]
     ax_empty.axis("off")
     ax_empty.legend(
-        handles=[mem_line, joint_line, truth_line],
+        handles=[joint_line, mem_line, truth_line],
         loc="upper right",
         frameon=False,
         handlelength=1.2
@@ -779,8 +779,8 @@ def make_forecast(
     joint_dir = find_run("joint")
 
     runs = [
-        ("memory only", load_forecast(memory_dir), color_memory),
         ("joint", load_forecast(joint_dir), color_joint),
+        ("memory only", load_forecast(memory_dir), color_memory),
     ]
 
     targets = [
@@ -875,7 +875,7 @@ def make_forecast(
         ax.set_ylabel(r"Uncertainty on $A$")
 
     ax.grid(alpha=0.3)
-    ax.legend(frameon=True, framealpha=1)
+    ax.legend(frameon=True, framealpha=1, handlelength=1.2)
 
      # --- Conversion functions: number of events <-> observing time since current catalog ---
     rate_O4 = 180   # events/year
