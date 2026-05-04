@@ -894,13 +894,13 @@ def make_forecast(
         return n_ref + np.asarray(t) * rate_O5
     
     # First top axis: O4a runtime since current catalog
-    secax_O4 = ax.secondary_xaxis("top", functions=(N_to_time_O4, time_to_N_O4))
+    secax_O4 = ax.secondary_xaxis(1.05, functions=(N_to_time_O4, time_to_N_O4))
     secax_O4.set_xlabel("Time from current catalog [yr] at O4a sensitivity", labelpad=5)
     secax_O4.tick_params(axis="x", colors='black')
     secax_O4.xaxis.label.set_color('black')
     
     # Second top axis: O5a runtime since current catalog
-    secax_O5 = ax.secondary_xaxis(1.25, functions=(N_to_time_O5, time_to_N_O5))
+    secax_O5 = ax.secondary_xaxis(1.3, functions=(N_to_time_O5, time_to_N_O5))
     secax_O5.set_xlabel("Time from current catalog [yr] at O5a sensitivity", labelpad=5)
     secax_O5.tick_params(axis="x", colors='black')
     secax_O5.xaxis.label.set_color('black')
