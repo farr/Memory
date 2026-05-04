@@ -853,7 +853,7 @@ def make_forecast(
             ls=":",
             lw=1.5,
             color="k",
-            label=rf"current $N=\,${n_ref}" if i == 0 else None,
+            label=rf"current $N_{0}=\,${n_ref}" if i == 0 else None,
         )
 
     ax.set_xlim(0, x_max)
