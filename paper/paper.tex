@@ -117,7 +117,7 @@
 \title{Constraining Gravitational Wave Memory with Hierarchical Inference}
 
 \begin{abstract}
-  With the multitude of gravitational wave observations that have been made in the past ten years, probing the dynamical and nonlinear nature of strong gravity is becoming more and more feasible. One promising way to test the nonlinear nature of Einstein's theory of general relativity (GR) is through the gravitational wave null memory effect: a nonlinear prediction of GR which corresponds to initially co-moving observers being permanently displaced due to a burst of gravitational radiation. Previous studies have shown that, while it is unlikely that the memory effect will be observed in a single event by the LIGO-Virgo-KAGRA (LVK) detectors, evidence for memory in the population of LVK events should be attainable after $\sim$2,000 gravitational wave detections. These works, however, relied on Bayes factors to perform their memory population analyses: an approach that can depend sensitively on the analysis priors and, when naively multiplied across many events, can even favor incorrect conclusions. In this work, using the GWTC-4.0 catalog of binary black hole observations, we instead perform hierarchical Bayesian inference---which is not subject to the issues associated with Bayes factors---to measure the evidence for memory in current LVK observations. We find that we can constrain what we call the memory enhancement factor---the constant appearing in front of the contribution to the strain from the supermomentum flux---to \Aconstraint (with $\pm$ values denoting the 68\% confidence interval), consistent with its GR value of 1. We forecast that $\sim$\NForecastCrossing detections will be needed to constrain the 68\% half-width in the memory enhancement factor to $\lesssim1$.
+  With the multitude of gravitational wave observations that have been made in the past ten years, probing the dynamical and nonlinear nature of strong gravity is becoming more and more feasible. One promising way to test the nonlinear nature of Einstein's theory of general relativity (GR) is through the gravitational wave null memory effect: a nonlinear prediction of GR which corresponds to initially co-moving observers being permanently displaced due to a burst of gravitational radiation. Previous studies have shown that, while it is unlikely that the memory effect will be observed in a single event by the LIGO-Virgo-KAGRA (LVK) detectors, evidence for memory in the population of LVK events should be attainable after $\sim$2,000 gravitational wave detections. These works, however, relied on Bayes factors to perform their memory population analyses: an approach that can depend sensitively on the analysis priors and, when naively multiplied across many events, can even favor incorrect conclusions. In this work, using the GWTC-4.0 catalog of binary black hole observations, we instead perform hierarchical Bayesian inference---which is not subject to the issues associated with Bayes factors---to measure the evidence for memory in current LVK observations. We find that we can constrain what we call the memory enhancement factor---the constant appearing in front of the contribution to the strain from the supermomentum flux---to \Aconstraint (with $\pm$ values denoting the 68\% confidence interval), consistent with its GR value of 1. We forecast that $\sim$\NForecastCrossing detections will be needed to constrain the 68\% half-width of the memory enhancement factor to $\lesssim1$.
 \end{abstract}
 
 \maketitle
@@ -179,7 +179,7 @@ Importantly, Ref.~\cite{Mitman:2020bjf} showed that the NR waveforms produced us
 An important caveat regarding observing the memory, however, is that formally the memory is really only defined as a difference in the strain between non-radiative regimes of future null infinity, e.g., between the two boundaries $u\rightarrow-\infty$ and $u\rightarrow+\infty$. As a result, how one should represent the time evolution of the memory is not obvious. Put differently, there is no meaningful way to define the instantaneous memory at some finite time $u$. For example, one could naturally take the time evolution of the memory 
 \begin{enumerate}
 	\item to be a step-function, in which case it would have a strict $1/f$ dependence in the frequency domain;
-	\item to be that of Eq.~\eqref{eq:memory}, which although agrees with the memory when taking its difference between the boundaries $u\rightarrow-\infty$ and $u\rightarrow+\infty$ may include non-memory content in the intermediate regime;
+	\item to be that of Eq.~\eqref{eq:memory}, which although agrees with the memory when taking its difference between the boundaries $u\rightarrow-\infty$ and $u\rightarrow+\infty$ may include high-frequency content in the intermediate regime;
 	\item or, to be some kind of Isaacson average of Eq.~\eqref{eq:memory}, which assumes the memory's time evolution should be monotonic, which is also not obvious~\cite{Zosso:2026czc}.
 \end{enumerate}
 Unfortunately, because the ground-based LVK detectors are not sensitive to zero-frequency effects, to observe the memory we have to make some choice for a proxy of its time-dependent evolution. Then, one can try to measure the memory by studying the strain model
@@ -191,8 +191,6 @@ for $\lambda$ the 15 intrinsic and extrinsic parameters\footnote{Note that the b
 	
 \section{Methodology}
 \label{sec:methodology}
-
-\figMemoryPosteriors
 
 \subsection{Memory computation}
 
@@ -237,7 +235,7 @@ with uncertainty
 Marginalizing out the memory enhancement factor of the likelihood in Eq.~\eqref{eq:memoryLL} with a flat prior therefore yields the marginal log-likelihood
 \begin{align}
 	\label{eq:marginalLL}
-	\log\overline{\mathcal{L}}&=\log\int\exp(\log\mathcal{L})\,{\rm d} A\nonumber\\&=-\frac{1}{2}\left(||r(\lambda)||^{2}-\sigma^{-2}\mu^{2}\right)+\log\sigma+C.
+	\log\overline{\mathcal{L}}&=\log\int\exp(\log\mathcal{L})\,{\rm d} A\nonumber\\&=-\frac{1}{2}\left(||r(\lambda)||^{2}-\sigma^{-2}\mu^{2}\right)-\frac{1}{2}\log\left(2\pi\sigma^{-2}\right)+C.
 \end{align}
 Thus, starting from posterior samples from the standard memoryless LVK analysis, we can derive a conditional and marginal posterior for the memory parameter $A$.
 
@@ -245,7 +243,7 @@ The sample-level hyperparameters $\mu$ and $\sigma$ respectively yield the prefe
 The log-weight is simply
 \begin{align}
 	\label{eq:weight}
-	\log w&=\log\overline{\mathcal{L}}(\lambda)-\log\mathcal{L}(\lambda)\nonumber\\&=\frac{1}{2}\sigma^{-2}\mu^{2}+\log\sigma.
+	\log w&=\log\overline{\mathcal{L}}(\lambda)-\log\mathcal{L}(\lambda)\nonumber\\&=\frac{1}{2}\sigma^{-2}\mu^{2}-\frac{1}{2}\log\left(2\pi\sigma^{-2}\right).
 \end{align}
 If the memory is not very strong in any individual event, then the importance weights will be very close to 1, and the re-weighted samples will remain close to the originals. Furthermore, each sample can also be augmented by a value of $A$ that is drawn from the Gaussian distribution described by Eqs.~\eqref{eq:mean} and~\eqref{eq:stddev} to obtain a new set of samples that were instead drawn from the posterior on $A$. This procedure is similar to the likelihood-reweightings that have been performed previously in, e.g., Refs.~\cite{Romero-Shaw:2019itr,Payne:2019wmy}.
 
@@ -292,6 +290,8 @@ To establish whether there is evidence for memory in the GW population as predic
 To capture the mean and variance of the distribution of $A$, we follow Ref.~\cite{Isi:2019asy} and set our population model for $A$ to be a Gaussian of arbitrary mean $\mu_\Lambda$ and scale $\sigma_\Lambda$, such that $p(A \mid \Lambda_A) = \mathcal{N}(A \mid \mu_\Lambda, \sigma_\Lambda)$ and $\Lambda_A = \{ \mu_\Lambda, \, \sigma_\Lambda\}$.
 This model serves as a null test, by which consistency with $(\mu_\Lambda = 1, \sigma_\Lambda = 0)$ is required for agreement with the GR expectation of $A=1$.
 
+\figMemoryPosteriors
+
 Under this Gaussian population model for the memory, the integral over the memory parameter $A$ in Eq.~\eqref{eq:hierarchicalLLsimplified} can be performed analytically, yielding
 \begin{align}
 	\label{eq:hierarchicalLLfinal}
@@ -323,36 +323,43 @@ In Fig.~\ref{fig:MemoryPosteriors} we show the distribution of $\mu_{s}$ and $\s
 \subsection{Memory Constraints}
 \label{sec:memoryconstraints}
 
+\figTGR
+
+\figForecast
+
 With the computation of $\mu_{s}$ and $\sigma_{s}$ performed for the posterior samples of all events and all of the available waveform models, we performed two hierarchical analyses: one in which we measured the memory hyperparameters $\mu_{\Lambda}$ and $\sigma_{\Lambda}$ (see Eq.~\eqref{eq:hierarchicalLLfinal}) in addition to all of the other astrophysical parameters, and one in which we measured only $\mu_{\Lambda}$ and $\sigma_{\Lambda}$, leaving the astrophysical population model fixed to the priors that are used in the single-event parameter estimation analyses. When conducting these analyses, we opted to use the following hierarchy for which waveform model to use. If available, we ideally used the NR surrogate, then the effective-one-body (EOB) models, and then the phenomenological (or Phenom) models.\footnote{For certain samples, we found that the waveforms produced by the Phenom models had unphysical spikes at low frequencies that caused anomalously large $\mu_{s}$ values. Because of this, when using the Phenom models, if $|\mu_{s}/\sigma_{s}|$ was $>10$ for any sample, we simply removed that sample from the analysis. This amounts to removing only a few tens of samples from the whole analysis.} This choice was made based on the model accuracy results shown in Fig.~2 of Ref.~\cite{LIGOScientific:2025rsn}, which yielded this ranking. When we used an EOB model, we used \texttt{SEOBNRv5PHM} if available, and otherwise \texttt{SEOBNRv4PHM}~\cite{Bohe:2016gbl,Ossokine:2020kjp,Pompili:2023tna,Ramos-Buades:2023ehm}. When we used a Phenom model, we used \texttt{IMRPhenomXO4a} if available, and otherwise \texttt{IMRPhenomPHM\_SpinTaylor}, or \texttt{IMRPhenomPHM}~\cite{Pratten:2020ceb,Colleoni:2024knd,Hamilton:2021pkf,Thompson:2023ase}.
 
-Our results for this study are highlighted in Fig.~\ref{fig:TGR}, which shows the $1\sigma$, $2\sigma$, and $3\sigma$ credible regions for the posterior of $\mu_{\Lambda}$ and $\sigma_{\Lambda}$. As can be seen, across all of the available events that we analyzed, we can currently constrain the memory $\mu_{\Lambda}$ and $\sigma_{\Lambda}$ hyperparameters to \muLambdaconstraint and \sigmaLambdaconstraint. These values are the median and 68\% confidence interval of each of these variables. They are both obtained from the joint inference analysis. With these, we can compute our main constraint on $A$ by drawing one sample from $\mathcal{N}(\mu_{\Lambda},\sigma_{\Lambda})$ for each of the hypersamples. This yields an $A$ of \Aconstraint. Therefore, we find that, as was expected, with the current catalog of GW observations we cannot claim a detection of the memory as $A$ is not strongly bounded away from 0.
-
-\figTGR
+Our results for this study are highlighted in Fig.~\ref{fig:TGR}, which shows the $1\sigma$, $2\sigma$, and $3\sigma$ credible regions for the posterior of $\mu_{\Lambda}$ and $\sigma_{\Lambda}$. As can be seen, across all of the available events that we analyzed, we can currently constrain the memory $\mu_{\Lambda}$ and $\sigma_{\Lambda}$ hyperparameters to \muLambdaconstraint and \sigmaLambdaconstraint. These values are the median and 68\% confidence interval of each of these variables. They are both obtained from the joint inference analysis. With these, we can compute our main constraint on $A$ by drawing one sample from $\mathcal{N}(\mu_{\Lambda},\sigma_{\Lambda})$ for each of the hypersamples of $(\mu_{\Lambda},\sigma_{\Lambda})$. This yields an $A$ of \Aconstraint. Therefore, we find that, as was expected, with the current catalog of GW observations we cannot claim a detection of the memory as $A$ is not strongly bounded away from 0.
 
 \subsection{Forecasts}
 \label{sec:forecasts}
 
-\figForecast
-
-To forecast the number of events that will be needed to constrain $A$ away from zero, i.e., to confidently measure the memory, we will construct mock catalogs of future GW events by performing the following analysis. First, we note that from the hierarchical inference performed in Sec.~\ref{sec:memoryconstraints}, we have the set of samples $\{\mu_{\Lambda}^{(k)},\sigma_{\Lambda}^{(k)}\}_{k=1}^{N_{0}}$ for $N_{0}$ the current number of observations, i.e., $N_{0}=\,$\Nevents. And, for a future catalog of size $N$, the uncertainty on both $\mu_{\Lambda}$ and $\sigma_{\Lambda}$ will shrink as $1/\sqrt{N}$. Therefore, for some pseudo-catalog realization indexed by $r$, we can draw a catalog-level estimate for our hyperparameters around their GR values as
+To forecast the number of events that will be needed to constrain $A$ away from zero, i.e., to confidently measure the memory, we will construct mock catalogs of future GW events by performing the following analysis. First, we note that from the hierarchical inference performed in Sec.~\ref{sec:memoryconstraints}, we have a set of  hypersamples $\{\mu_{\Lambda}^{(k)},\sigma_{\Lambda}^{(k)}\}$ that were inferred from the current $N_{0}=\text{\Nevents}$ observations. And, for a future catalog of size $N$, the uncertainty on both $\mu_{\Lambda}$ and $\sigma_{\Lambda}$ will shrink as $1/\sqrt{N}$. Therefore, for some pseudo-catalog realization indexed by $r$, we can draw a catalog-level estimate for our hyperparameters around their GR values as
 \begin{align}
 	\hat{\mu}_{r}\sim\mathcal{N}\left(1,s_{\mu}\right)\quad\text{and}\quad
 	\hat{\sigma}_{r}^{2}\sim\mathcal{N}_{[0,\infty)}\left(0,s_{\sigma^{2}}\right),
 \end{align}
 where
+\begin{subequations}
 \begin{align}
-	s_{\mu}\equiv\Delta \mu_{0}\sqrt{\frac{N_{0}}{N}}\quad\text{and}\quad
-	s_{\sigma^{2}}\equiv\Delta \sigma_{0}^{2}\frac{N_{0}}{N}
+	s_{\mu}&\equiv\Delta \mu_{0}\sqrt{\frac{N_{0}}{N}},\\
+	s_{\sigma^{2}}&\equiv\Delta \sigma_{0}^{2}\frac{N_{0}}{N}
 \end{align}
+\end{subequations}
 for $\Delta\mu_{0}$ and $\Delta\sigma_{0}^{2}$ the 68\% half-widths computed from the current $\mu_{\Lambda}$ and $\sigma_{\Lambda}^{2}$ posteriors. From these, we can then draw hyperposterior samples for this pseudo-catalog via
+\begin{subequations}
 \begin{align}
 	\mu_{\Lambda,r}&\sim\mathcal{N}\left(\hat{\mu}_{r},s_{\mu}\right),\\
 	\sigma_{\Lambda,r}^{2}&\sim\mathrm{InvGamma}\left(\alpha,\beta\right)
 \end{align}
+\end{subequations}
 for
+\begin{subequations}
 \begin{align}
-	\alpha\equiv2+\frac{\hat{\sigma}_{r}^{2}}{s_{\sigma^{2}}^{2}}\quad\text{and}\quad\beta\equiv\hat{\sigma}_{r}^{2}(\alpha-1).
+	\alpha&\equiv2+\frac{\hat{\sigma}_{r}^{2}}{s_{\sigma^{2}}^{2}},\\
+	\beta&\equiv\hat{\sigma}_{r}^{2}(\alpha-1).
 \end{align}
+\end{subequations}
 The inverse-gamma distribution used to represent $\sigma_{\Lambda,r}^{2}$ is constructed in this way so that it corresponds to a scaled inverse-$\chi^{2}$ distribution whose expectation value and standard deviation match $\hat{\sigma}_{r}^{2}$ and $s_{\sigma^{2}}$. With each $\mu_{\Lambda,r}$ and $\sigma_{\Lambda,r}^{2}$ sample, we now draw a value for $A_{r}$, i.e., the pseudo-catalog realization of $A$, as $A_{r}\sim\mathcal{N}\left(\mu_{\Lambda,r},\sigma_{\Lambda,r}\right)$. And, finally, across all of the $A_{r}$ draws, we can measure a 68\% half-width $\Delta A_{r}$ to understand how our uncertainty on $A$ changes as we observe more and more GW events. By repeating this over many pseudo-catalog realizations, we can obtain an ensemble of possible future realizations of $\Delta A$ as a function of the total GW catalog size $N$.
 
 In Fig.~\ref{fig:Forecast} we show the results of conducting this analysis for $\Delta\mu_{0}$ and $\Delta\sigma_{0}$ taken from the joint analysis (yellow), and also the less-meaningful memory-only analysis (blue). Unlike previous works, we find that we will likely require $\mathcal{O}(\text{\NForecastCrossing})$ events to constrain the 68\% half-width on the memory enhancement factor to be clearly away from $0$.  Based on the horizontal axes on the top of the figure which show the time required to reach the number of observations shown on the lower horizontal axis for the event rates of \OFourRates and \OFiveRates per year for O4a and O5a~\cite{IGWN:ObservingCapabilities:2026}, this likely means that we will not observe memory until after the O5 observing run, since this is expected to only have an observing window of $\sim$3 years.
@@ -362,7 +369,7 @@ In Fig.~\ref{fig:Forecast} we show the results of conducting this analysis for $
 
 Gravitational wave memory is a key prediction of GR that is a natural target for ground-based GW detectors. It is of immense theoretical interest due to its connection to asymptotic symmetries and soft theorems and for its role in formulating a consistent theory of quantum gravity. Unfortunately, due to its low-frequency nature, it is an incredibly challenging effect to observe in individual events with the current LVK detectors. However, there is reason to believe that with enough observations, we can observe memory in a population of GW detections.
 
-In this study, we used hierarchical Bayesian inference to measure the memory enhancement factor---the constant appearing in front of the contribution to the strain from the supermomentum flux, which is 1 in GR---across the population of GW events up to and including the recent GWTC-4.0 catalog. Unsurprisingly, we found that we can constrain this factor to \Aconstraint, which does not yield a confident measurement of the memory effect. Nonetheless, this work provides the first attempt to measure memory using hierarchical inference and thus the first analysis to successfully account for potential changes in the inferred BBH population due to memory. Unlike previous works, we find that we will likely need $\sim$\NForecastCrossing GW detections to confidently constrain the memory away from zero. Yet, since this number is expected to be achieved with the sixth observing run of the LVK detectors, we find that it is likely that we will measure the memory effect for the first time in a population of events in the next decade.
+In this study, we used hierarchical Bayesian inference to measure the memory enhancement factor---the constant appearing in front of the contribution to the strain from the supermomentum flux, which is 1 in GR---across the population of GW events up to and including the recent GWTC-4.0 catalog. Unsurprisingly, we found that we can constrain this factor to \Aconstraint, which does not yield a confident measurement of the memory effect. Nonetheless, this work provides the first attempt to measure memory using hierarchical inference and thus the first analysis to successfully account for potential changes in the inferred BBH population due to memory. More generally, we also showed how to constrain the memory enhancement factor using future GWTCs and any generic waveform model, without sampling $A$, making this analysis very efficient. Unlike previous works, we find that we will likely need $\sim$\NForecastCrossing GW detections to constrain the memory away from zero. However, since this number is expected to be reached with the sixth observing run of the LVK detectors, we find that it is likely that we will measure memory for the first time in a BBH population in the next decade.
 
 The code used for this analysis and the data that were produced are available at \added[id=KM]{ZENODO\_URL} under an open source license. This includes our estimates of the memory-augmented posteriors for each analyzed event.
 
