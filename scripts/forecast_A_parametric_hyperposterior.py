@@ -137,7 +137,7 @@ def rtruncnorm_pos(rng: np.random.Generator, loc: float, scale: float, size: int
         out[bad] = rng.normal(loc, scale, size=int(np.sum(bad)))
         bad = out < 0.0
         tries += 1
-        if tries > 1000:
+        if tries > 100000:
             raise RuntimeError("truncated-normal rejection sampling failed")
     return out
 
@@ -171,8 +171,12 @@ def simulate_one(rng: np.random.Generator, s_mu: float, s_v: float, mu_truth: fl
     # v_hat is a noisy nonnegative estimator centered on a boundary. It is not
     # modeled as inverse-chi-square because inverse-chi-square cannot be centered
     # at v_truth=0 except as a degenerate distribution.
-    v_hat = float(rtruncnorm_pos(rng, v_truth, s_v, 1)[0])
-
+    use_trunc_norm = False
+    if use_trunc_norm:
+        v_hat = float(rtruncnorm_pos(rng, v_truth, s_v, 1)[0])
+    else:
+        v_hat = float(rng.normal(v_truth, s_v, 1)[0])
+        
     mu_lam = rng.normal(mu_hat, s_mu, size=nsamp)
     v_lam = draw_v_posterior(rng, v_hat, s_v, nsamp, v_model)
     a = mu_lam + np.sqrt(np.maximum(v_lam, 0.0)) * rng.normal(size=nsamp)

@@ -148,12 +148,10 @@ def forecast_csv_for_kind(prod_dir: Path, kind: str) -> Path | None:
 
     csv_names = (
         "forecast_A_parametric.csv",
-        "forecast_A_parametric_v2.csv",
     )
 
     candidate_dirs = (
-        prod_dir / f"forecast_parameteric_invchi2_{kind}",  # current typo
-        prod_dir / f"forecast_parametric_invchi2_{kind}",   # corrected spelling
+        prod_dir / f"forecast_parametric_invchi2_no_trunc_{kind}",
     )
 
     for run_dir in candidate_dirs:
@@ -719,8 +717,8 @@ def make_forecast(
 
     Expected forecast directories, relative to RESULTS_DIR:
 
-        forecast_parameteric_invchi2_memory/
-        forecast_parameteric_invchi2_joint/
+        forecast_parametric_invchi2_no_trunc_memory/
+        forecast_parametric_invchi2_no_trunc_joint/
     """
 
     color_memory = "#0072B2"
@@ -748,8 +746,7 @@ def make_forecast(
 
     def find_run(kind: str) -> Path:
         candidates = [
-            prod_dir / f"forecast_parameteric_invchi2_{kind}",  # matches current typo
-            prod_dir / f"forecast_parametric_invchi2_{kind}",   # corrected spelling
+            prod_dir / f"forecast_parametric_invchi2_no_trunc_{kind}"
         ]
 
         if kind in forecast_run.name and has_forecast_csv(forecast_run):
@@ -990,9 +987,7 @@ def main() -> None:
 
     memory_analysis = REPO_DIR / "analysis"
     
-    forecast_run = results_dir / "forecast_fisher"
-
-    forecast_run_joint = results_dir / "forecast_fisher_joint"
+    forecast_run = results_dir / "forecast_parametric_invchi2_no_trunc_joint"
 
     write_macros(
         macros_output,
