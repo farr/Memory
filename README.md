@@ -6,8 +6,11 @@ This repository contains the analysis code used to produce the results of
 > *Constraining Gravitational Wave Memory with Hierarchical Inference*,
 > arXiv:XXXX.XXXXX (LIGO Document [LIGO-P2600229](https://dcc.ligo.org/LIGO-P2600229)).
 
-The methodology and the scientific results are described in the paper; this
-README only covers what is needed to reproduce them.
+Data produced by the code in this repository (up to RNG seed values) are available at
+[10.5281/zenodo.20347300](https://doi.org/10.5281/zenodo.20347300).
+
+The methodology and the scientific results are described in the paper;
+this README only covers what is needed to reproduce them.
 
 ## Installation
 
@@ -124,7 +127,7 @@ and this code release. Placeholder BibTeX:
   author = {Mitman, Keefe and Isi, Maximiliano and Farr, Will M.},
   title  = {Code for ``Constraining Gravitational Wave Memory with Hierarchical Inference''},
   year   = {2026},
-  doi    = {10.5281/zenodo.XXXXXXX},
+  doi    = {10.5281/zenodo.20347300},
   url    = {https://dcc.ligo.org/LIGO-P2600229},
 }
 ```
