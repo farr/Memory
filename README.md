@@ -109,8 +109,8 @@ paper used 4 GPUs.
 
 ## Citation
 
-If you use this code in a scientific publication, please cite both the paper
-and this code release. Placeholder BibTeX:
+If you use this code (data) in a scientific publication, please cite the paper
+and this code (data) release. BibTeX:
 
 ```bibtex
 @article{Mitman_Isi_Farr_2026,
@@ -127,7 +127,17 @@ and this code release. Placeholder BibTeX:
   author = {Mitman, Keefe and Isi, Maximiliano and Farr, Will M.},
   title  = {Code for ``Constraining Gravitational Wave Memory with Hierarchical Inference''},
   year   = {2026},
-  doi    = {10.5281/zenodo.20347300},
+  doi    = {10.5281/zenodo.XXXXXXXX},
   url    = {https://dcc.ligo.org/LIGO-P2600229},
+}
+
+@dataset{memory_data,
+	author       = {Mitman, Keefe and Isi, Maximiliano and Farr, Will},
+	title        = {Data produced in "Constraining Gravitational Wave Memory with Hierarchical Inference"},
+	month        = may,
+	year         = 2026,
+	publisher    = {Zenodo},
+	doi          = {10.5281/zenodo.20347301},
+	url          = {https://doi.org/10.5281/zenodo.20347301},
 }
 ```
