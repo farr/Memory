@@ -4,6 +4,7 @@ This repository contains the analysis code used to produce the results of
 
 > Mitman, Isi, & Farr,
 > *Constraining Gravitational Wave Memory with Hierarchical Inference*,
+> 
 > arXiv:XXXX.XXXXX (LIGO Document [LIGO-P2600229](https://dcc.ligo.org/LIGO-P2600229)).
 
 Data produced by the code in this repository (up to RNG seed values) are available at
@@ -14,7 +15,7 @@ this README only covers what is needed to reproduce them.
 
 ## Installation
 
-The full environment is specified in [`pyproject.toml`](pyproject.toml) and
+The environment is specified in [`pyproject.toml`](pyproject.toml) and
 can be reproduced with any compatible package manager. For example, using
 [`uv`](https://docs.astral.sh/uv/),
 
@@ -25,7 +26,7 @@ uv sync
 from the repo root resolves and installs all dependencies, including the
 local `memory` package.
 
-A few large data assets (the NRSur7dq4 surrogate and the selection-injection
+A few data assets (the NRSur7dq4 surrogate and the selection-injection
 files) are not in the repo. Fetch them with
 
 ```bash
@@ -66,13 +67,15 @@ robustness checks are downloaded by `data/download.sh`.
 
 ## Reproducing the analysis
 
-Three scripts cover the full pipeline:
+Four scripts cover the full pipeline. Below we describe their typical usage,
+but users will find that certain arguments need to be set/modified based on their setup
+(e.g., there are certain user-dependent paths that need to be specified).
 
 1. [`scripts/compute_gw_memory_for_GWTC.py`](scripts/compute_gw_memory_for_GWTC.py) —
-   computes per-event memory-amplitude posteriors $(\hat{A}, A_\sigma)$ from
+   computes per-event memory-amplitude posteriors $(\mu_{s}, \sigma_{s})$ from
    the GWTC parameter-estimation files. Outputs one
-   `{output_dir}/{event_name}/memory_results.h5` per event, grouped by
-   waveform label.
+   `{output_dir}/{event_name}/memory_results.h5` file per event as well as
+   diagnostic plots for each waveform model.
 
    ```bash
    uv run python scripts/compute_gw_memory_for_GWTC.py \
@@ -95,7 +98,21 @@ Three scripts cover the full pipeline:
        --outdir results/hierarchical/
    ```
 
-3. [`scripts/make_paper_outputs.py`](scripts/make_paper_outputs.py) —
+3. [`scripts/forecast_A_parametric_hyperposterior.py`](scripts/forecast_A_parametric_hyperposterior.py) —
+   runs the forecast analysis on top of the hierarchical inference results; this should be run for both the
+   ``joint`` results and the ``memory results`.
+
+   ```bash
+   uv run python scripts/forecast_A_parametric_hyperposterior.py \
+   --posterior-nc results/hierarchical/result_joint.nc \
+   --include-events-file results/hierarchical/analyzed_events.txt \
+   --mu-scale-power 0.5 \
+   --sigma2-scale-power 1.0 \
+   --sigma2-posterior invchi2 \
+   --outdir results/forecast/forecast_parametric_invchi2_no_trunc_joint
+   ```
+
+4. [`scripts/make_paper_outputs.py`](scripts/make_paper_outputs.py) —
    regenerates the figures and LaTeX macros that appear in the paper from a
    completed hierarchical run.
 
