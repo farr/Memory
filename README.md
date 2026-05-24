@@ -69,7 +69,7 @@ robustness checks are downloaded by `data/download.sh`.
 
 Four scripts cover the full pipeline. Below we describe their typical usage,
 but users will find that certain arguments need to be set/modified based on their setup
-(e.g., there are certain user-dependent paths that need to be specified).
+(e.g., there are user-dependent paths that need to be specified).
 
 1. [`scripts/compute_gw_memory_for_GWTC.py`](scripts/compute_gw_memory_for_GWTC.py) —
    computes per-event memory-amplitude posteriors $(\mu_{s}, \sigma_{s})$ from
