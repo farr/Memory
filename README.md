@@ -141,11 +141,16 @@ and this code (data) release. BibTeX:
 }
 
 @software{memory_code,
-  author = {Mitman, Keefe and Isi, Maximiliano and Farr, Will M.},
-  title  = {Code for ``Constraining Gravitational Wave Memory with Hierarchical Inference''},
-  year   = {2026},
-  doi    = {10.5281/zenodo.XXXXXXXX},
-  url    = {https://dcc.ligo.org/LIGO-P2600229},
+	author       = {Mitman, Keefe and
+	Isi, Maximiliano and
+	Farr, Will M.},
+	title        = {farr/Memory: Initial arXiv release},
+	month        = may,
+	year         = 2026,
+	publisher    = {Zenodo},
+	version      = {v1.0.0},
+	doi          = {10.5281/zenodo.20398639},
+	url          = {https://doi.org/10.5281/zenodo.20398639},
 }
 
 @dataset{memory_data,
