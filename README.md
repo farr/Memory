@@ -141,9 +141,7 @@ and this code (data) release. BibTeX:
 }
 
 @software{memory_code,
-	author       = {Mitman, Keefe and
-	Isi, Maximiliano and
-	Farr, Will M.},
+	author       = {Mitman, Keefe and Isi, Maximiliano and Farr, Will M.},
 	title        = {farr/Memory: Initial arXiv release},
 	month        = may,
 	year         = 2026,
