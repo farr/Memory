@@ -149,7 +149,7 @@ and this code (data) release. BibTeX:
 }
 
 @dataset{memory_data,
-	author       = {Mitman, Keefe and Isi, Maximiliano and Farr, Will},
+	author       = {Mitman, Keefe and Isi, Maximiliano and Farr, Will M.},
 	title        = {Data produced in "Constraining Gravitational Wave Memory with Hierarchical Inference"},
 	month        = may,
 	year         = 2026,
