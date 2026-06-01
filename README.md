@@ -5,7 +5,7 @@ This repository contains the analysis code used to produce the results of
 > Mitman, Isi, & Farr,
 > *Constraining Gravitational Wave Memory with Hierarchical Inference*,
 > 
-> arXiv:XXXX.XXXXX (LIGO Document [LIGO-P2600229](https://dcc.ligo.org/LIGO-P2600229)).
+> [arXiv:2605.27500](https://arxiv.org/abs/2605.27500) (LIGO Document [LIGO-P2600229](https://dcc.ligo.org/LIGO-P2600229)).
 
 Data produced by the code in this repository (up to RNG seed values) are available at
 [10.5281/zenodo.20347300](https://doi.org/10.5281/zenodo.20347300).
