@@ -79,6 +79,11 @@ logger = logging.getLogger(__name__)
 
 logger.info("Using %d devices on %s", device_count, platform)
 
+# --- Default exclusions ---
+DEFAULT_EXCLUDE = [
+    "GW240406_062847",  # ER16; excluded in GWTC-5 population analysis
+]
+
 from memory.hierarchical import (  # noqa: E402
     generate_data,
     generate_tgr_only_data,
@@ -122,6 +127,12 @@ def _resolve_injection_file(args):
         return os.path.join(
             REPO_DIR,
             "data/selection/mixture-semi_o1_o2-real_o3_o4a-cartesian_spins_20250503134659UTC.hdf",
+        )
+    if args.injection_runs == "o1+o2+o3+o4a+o4b":
+        return os.path.join(
+            REPO_DIR,
+            "data/selection/"
+            "mixture-semi_o1_o2-real_o3_o4a_o4b-polar_spins_20260410130052UTC-clipped.hdf",
         )
     raise ValueError(f"Unrecognized injection runs: {args.injection_runs}")
 
@@ -349,6 +360,7 @@ def _load_event_posteriors(event_files, waveform, per_event_labels=None):
                 posterior_samples,
                 filename=filename,
                 label=chosen,
+                prior_was_reconstructed=(computed_log_prior is not None),
             )
             posteriors.append(posterior_samples)
             kept_files.append(filename)
@@ -431,9 +443,14 @@ def _build_parser():
     )
     parser.add_argument(
         "--injection-runs",
-        default="o4a",
-        choices=["o4a", "o3+o4a", "o1+o2+o3+o4a"],
-        help="Which injection campaign to use (default: o4a)",
+        default="o1+o2+o3+o4a+o4b",
+        choices=[
+            "o4a",
+            "o3+o4a",
+            "o1+o2+o3+o4a",
+            "o1+o2+o3+o4a+o4b",
+        ],
+        help="Which injection campaign to use",
     )
     parser.add_argument(
         "--exclude",
@@ -571,20 +588,24 @@ def main():
         seed = args.seed
     prng = jax.random.PRNGKey(seed)
 
-    # --- Paths & output directory -----------------------------------------
-    injection_file = _resolve_injection_file(args)
-    logger.info("Using injection file: %s", injection_file)
-
-    outdir = args.outdir or "results_memory"
-    os.makedirs(outdir, exist_ok=True)
-
     # --- Which analyses to run --------------------------------------------
     analyze = set(args.analyze)
     run_memory = "memory" in analyze
-    run_astro  = "astro"  in analyze
-    run_joint  = "joint"  in analyze
+    run_astro = "astro" in analyze
+    run_joint = "joint" in analyze
     need_memory_data = run_memory or run_joint
     waveform = _normalize_waveform_arg(args.waveform)
+    needs_selection_data = run_astro or run_joint or (run_memory and args.enforce_selection)
+    
+    # --- Paths & output directory -----------------------------------------
+    injection_file = _resolve_injection_file(args) if needs_selection_data else None
+    logger.info(
+        "Using injection file: %s",
+        injection_file if injection_file is not None else "(not used)",
+    )
+    
+    outdir = args.outdir or "results_memory"
+    os.makedirs(outdir, exist_ok=True)
 
     if need_memory_data and args.memory_dir is None:
         raise ValueError(
@@ -611,7 +632,7 @@ def main():
     logger.info("Running in output directory: %s", outdir)
 
     # --- Discover event files and load all posteriors ---------------------
-    exclude = list(args.exclude)
+    exclude = DEFAULT_EXCLUDE + list(args.exclude) 
     event_files, discarded_files = _collect_event_files(args.data_paths, exclude)
 
     logger.info("Discarded %d files", len(discarded_files))
@@ -620,7 +641,7 @@ def main():
 
     if not event_files:
         raise FileNotFoundError(f"No event files found: {args.data_paths}")
-    if not os.path.exists(injection_file):
+    if needs_selection_data and not os.path.exists(injection_file):
         raise FileNotFoundError(f"Injection file not found: {injection_file}")
 
     # --- Filter to memory events and load memory data (if needed) ---------

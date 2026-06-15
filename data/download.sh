@@ -81,3 +81,15 @@ fi
 # On this system, a symlink data/SEOBNRv4ROM_v3.0.hdf5 -> the ceph copy is used.
 
 echo "Download complete!"
+
+echo "Downloading GWTC-5 cumulative semi-O1+O2 / real-O3+O4a+O4b polar-spin selection file..."
+curl -L -C - \
+  -z selection/mixture-semi_o1_o2-real_o3_o4a_o4b-polar_spins_20260410130052UTC-clipped.hdf \
+  --fail \
+  -o selection/mixture-semi_o1_o2-real_o3_o4a_o4b-polar_spins_20260410130052UTC-clipped.hdf \
+  "https://zenodo.org/records/19500052/files/mixture-semi_o1_o2-real_o3_o4a_o4b-polar_spins_20260410130052UTC-clipped.hdf?download=1"
+
+echo "Verifying md5 of GWTC-5 cumulative selection file..."
+cumulative_md5_check \
+  selection/mixture-semi_o1_o2-real_o3_o4a_o4b-polar_spins_20260410130052UTC-clipped.hdf \
+  1498cc813a770e6b5da86c8fbf2b3126

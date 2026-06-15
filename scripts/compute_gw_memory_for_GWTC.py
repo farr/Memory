@@ -43,7 +43,13 @@ def parse_args():
     parser.add_argument(
         "--base-dirs",
         type=list,
-        default=["/mnt/home/ccalvk/ceph/"], #,"/mnt/home/misi/ceph/rp.04/catalogs/GWTC-5/GWTC5-Draft_Release-6/15d62fc1_17/bbh_only"],
+        default=[
+            "/mnt/home/misi/ceph/rp.04/catalogs/GWTC-1/GWTC-1_sample_release/",
+            "/mnt/home/misi/ceph/rp.04/catalogs/GWTC-2.1/data-release/",
+            "/mnt/home/misi/ceph/rp.04/catalogs/GWTC-3/data-release/",
+            "/mnt/home/misi/ceph/rp.04/catalogs/GWTC-4p1/GWTC4p1-Stable_Release-3/18965dda8_5/bbh_only/",
+            "/mnt/home/misi/ceph/rp.04/catalogs/GWTC-5/GWTC5-Stable_Release-8/4c51f4201_25/bbh_only/"
+        ],
         help="Base directories containing GWTC subdirectories.",
     )
 
@@ -384,24 +390,21 @@ def process_event(filepath, event, args, event_dir, multiprocess):
           * append/replace that label into memory_results.h5
           * write that label's histogram plot
     """
-    if not "misi" in filepath:
-        if not "kmitman" in filepath or "GW190521" in filepath:
-            labels = get_waveform_labels_from_hdf5(filepath)
-        else:
-            if event != "GW250114_082203":
-                labels = ['Bilby:NRSur7dq4']
-            else:
-                if "NRSur7dq4" in filepath:
-                    labels = ["bilby-NRSur7dq4_prod-reweighted"]
-                elif "PhenomXO4a" in filepath:
-                    labels = ['bilby-IMRPhenomXO4a_prod-reweighted']
-                elif "PhenomXPHM" in filepath:
-                    labels = ['bilby-IMRPhenomXPHM-SpinTaylor_prod-reweighted']
-                elif "SEOBNRv5PHM" in filepath:
-                    labels = ['bilby-SEOBNRv5PHM-reweighted']
+    if not "kmitman" in filepath or "GW190521" in filepath:
+        labels = get_waveform_labels_from_hdf5(filepath)
     else:
-        labels = get_waveform_labels_from_hdf5(filepath, "bilby-")
-        
+        if event != "GW250114_082203":
+            labels = ['Bilby:NRSur7dq4']
+        else:
+            if "NRSur7dq4" in filepath:
+                labels = ["bilby-NRSur7dq4_prod-reweighted"]
+            elif "PhenomXO4a" in filepath:
+                labels = ['bilby-IMRPhenomXO4a_prod-reweighted']
+            elif "PhenomXPHM" in filepath:
+                labels = ['bilby-IMRPhenomXPHM-SpinTaylor_prod-reweighted']
+            elif "SEOBNRv5PHM" in filepath:
+                labels = ['bilby-SEOBNRv5PHM-reweighted']
+           
     results = {}
     h5_path = Path(event_dir) / "memory_results.h5"
 
@@ -409,23 +412,20 @@ def process_event(filepath, event, args, event_dir, multiprocess):
         if "Mixed" in label:
             continue
 
-        if not "misi" in filepath:
-            if not "kmitman" in filepath or "GW190521" in filepath:
-                approximant_name = parse_approximant_from_label(label)
-            else:
-                if event != "GW250114_082203":
-                    approximant_name = "NRSur7dq4"
-                else:
-                    if "NRSur7dq4" in filepath:
-                        approximant_name = "NRSur7dq4"
-                    elif "PhenomXO4a" in filepath:
-                        approximant_name = "IMRPhenomXO4a"
-                    elif "PhenomXPHM" in filepath:
-                        approximant_name = "IMRPhenomXPHM"
-                    elif "SEOBNRv5PHM" in filepath:
-                        approximant_name = "SEOBNRv5PHM"
+        if not "kmitman" in filepath or "GW190521" in filepath:
+            approximant_name = parse_approximant_from_label(label)
         else:
-            approximant_name = parse_approximant_from_label(label, "bilby-").split("-SpinTaylor")[0]
+            if event != "GW250114_082203":
+                approximant_name = "NRSur7dq4"
+            else:
+                if "NRSur7dq4" in filepath:
+                    approximant_name = "NRSur7dq4"
+                elif "PhenomXO4a" in filepath:
+                    approximant_name = "IMRPhenomXO4a"
+                elif "PhenomXPHM" in filepath:
+                    approximant_name = "IMRPhenomXPHM"
+                elif "SEOBNRv5PHM" in filepath:
+                    approximant_name = "SEOBNRv5PHM"
             
         if (not args.overwrite) and label_is_finished(Path(event_dir), label):
             print(f"[{event}] skipping finished model {approximant_name}.", flush=True)
@@ -500,6 +500,7 @@ def process_event_wrapper(task, multiprocess=False):
         return None
 
     if results is None or len(results) == 0:
+        print("No successful labels.")
         # No successful labels; keep directory (or remove if you prefer)
         return None
 

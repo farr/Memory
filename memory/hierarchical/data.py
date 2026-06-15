@@ -32,13 +32,14 @@ MIN_MASS_QUANTILE = 0.01
 # The latter match the GWTC-3 populations paper's 69-event BBH sample
 # (arXiv:2111.03634, Sec. VIII / Fig. 22).
 _EXCLUDED_EVENTS = frozenset({
-    "GW200105_162426",  # NSBH
-    "GW200115_042309",  # NSBH
-    "GW230518_125908",  # NSBH
-    "GW230529_181500",  # NSBH
-    "GW190514_065416",  # IAS / GWTC-2.1 only
-    "GW190916_200658",  # 3-OGC / GWTC-2.1 only
-    "GW190926_050336",  # 3-OGC / GWTC-2.1 only
+    "GW240406_062847",  # ER16; excluded in GWTC-5 population analysis
+    "GW200105_162426",
+    "GW200115_042309",
+    "GW230518_125908",
+    "GW230529_181500",
+    "GW190514_065416",
+    "GW190916_200658",
+    "GW190926_050336",
 })
 
 # Per-sample sanity threshold: individual samples with |A_hat / A_sigma|
@@ -344,6 +345,7 @@ def validate_posterior_prior_consistency(
     *,
     filename=None,
     label=None,
+    prior_was_reconstructed=False,
 ):
     """Best-effort validation that stored prior weights match sample metadata.
 
@@ -436,11 +438,28 @@ def validate_posterior_prior_consistency(
         ]
     )
     z_mismatch = np.max(np.abs(z_expected - redshift))
-    if z_mismatch > 5e-4:
-        raise ValueError(
+
+    # Public O4/GWTC-4.1/GWTC-5 PE files can have redshift columns that differ
+    # from the cosmology reconstructed from the analytic luminosity-distance
+    # prior metadata at the ~1e-4--1e-3 level.  This metadata check should not
+    # kill the hierarchical run when the release already provides stored PE prior
+    # weights.  It should remain fatal if we reconstructed the prior from the
+    # metadata, or if the mismatch is genuinely large.
+    _Z_MISMATCH_WARN = 5e-4
+    _Z_MISMATCH_FATAL = 5e-3
+    
+    if z_mismatch > _Z_MISMATCH_WARN:
+        msg = (
             f"{prefix}: sample redshifts are inconsistent with the cosmology "
-            f"encoded in the luminosity-distance prior metadata (max |dz| = "
-            f"{z_mismatch:.3e})."
+            f"encoded in the luminosity-distance prior metadata "
+            f"(max |dz| = {z_mismatch:.3e})."
+        )
+        if prior_was_reconstructed or z_mismatch > _Z_MISMATCH_FATAL:
+            raise ValueError(msg)
+        logger.warning(
+            "%s Continuing because stored PE prior weights are present and "
+            "the mismatch is below the fatal tolerance.",
+            msg,
         )
 
     source_mass_pairs = [
@@ -455,11 +474,20 @@ def validate_posterior_prior_consistency(
         source_expected = detector_mass / (1.0 + redshift)
         denom = np.maximum(np.abs(source_expected), 1e-12)
         rel_mismatch = np.max(np.abs(source_expected - source_mass) / denom)
-        if rel_mismatch > 5e-4:
-            raise ValueError(
+
+        _MASS_MISMATCH_WARN = 5e-4
+        _MASS_MISMATCH_FATAL = 5e-3
+        if rel_mismatch > _MASS_MISMATCH_WARN:
+            msg = (
                 f"{prefix}: {source_name} is inconsistent with {detector_name} "
                 "and the cosmology-adjusted redshift samples "
                 f"(max relative mismatch = {rel_mismatch:.3e})."
+            )
+            if prior_was_reconstructed or rel_mismatch > _MASS_MISMATCH_FATAL:
+                raise ValueError(msg)
+            logger.warning(
+                "%s Continuing because the mismatch is below the fatal tolerance.",
+                msg,
             )
 
     if has_log_prior:

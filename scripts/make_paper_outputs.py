@@ -35,7 +35,7 @@ SIGMA_LEVELS_2D = tuple(1.0 - np.exp(-0.5 * np.arange(1, 4) ** 2))
 REPO_DIR = Path(__file__).resolve().parent.parent
 
 # Paper data provenance: update this checked-in path when refreshing results.
-RESULTS_DIR = Path("results") / "prod_20260428b"
+RESULTS_DIR = Path("results") / "prod_20260601"
 DEFAULT_MACROS_OUTPUT = Path("paper") / "results_macros.tex"
 DEFAULT_PLOT_OUTPUT = Path("figures")
 
@@ -318,7 +318,7 @@ def choose_runs(
         memory_run = _choose_named_run(runs, memory_run_name, "memory")
     elif joint_run is not None:
         preferred = [
-            _matching_memory_label(joint_run.label, "memory-selected"),
+            _matching_memory_label(joint_run.label, "memory_selected"),
             _matching_memory_label(joint_run.label, "memory"),
         ]
         memory_by_label = {run.label: run for run in memory_runs}
@@ -635,7 +635,8 @@ def make_memory_mean_and_uncertainty(
         frameon=False,
     )
     fig.align_ylabels()
-    path.parent.mkdir(parents=True, exist_ok=True)
+    
+    path.mkdir(parents=True, exist_ok=True)
     plt.savefig(path / "memory_mean_stddev_from_posteriors.pdf", dpi=dpi, bbox_inches="tight")
     plt.close(fig)
 
@@ -645,67 +646,84 @@ def make_tgr_corner(
     joint_run: ResultRun | None,
     dpi: int,
 ) -> None:
-    data_memory = az.from_netcdf(memory_run.nc_file)
-    data_joint = az.from_netcdf(joint_run.nc_file)
-    
+    if joint_run is None:
+        raise ValueError("make_tgr_corner requires a joint run for comparison plotting")
+
+    # Use the same flattened samples as the macro summaries, avoiding any
+    # ambiguity about ArviZ conversion, variable order, or chain/draw stacking.
+    memory_samples = load_tgr_samples(memory_run.nc_file)
+    joint_samples = load_tgr_samples(joint_run.nc_file)
+
     color_memory = "#0072B2"
-    color_joint  = "#E69F00"
-    
+    color_joint = "#E69F00"
+
+    view_mu_lim = (-8.5, 8.5)
+    view_sigma_lim = (0.0, 12.5)
+
+    labels = [r"$\mu_{\Lambda}$", r"$\sigma_{\Lambda}$"]
+
+    def common_corner_kwargs() -> dict:
+        return dict(
+            labels=labels,
+            bins=40,
+            plot_density=False,
+            plot_contours=True,
+            plot_datapoints=False,
+            fill_contours=False,
+            no_fill_contours=True,
+            levels=SIGMA_LEVELS_2D,
+            hist_kwargs={
+                "density": True,
+                "histtype": "step",
+                "linewidth": 1.5,
+            },
+        )
+
     fig = plt.figure(figsize=(width1, width1))
 
     fig = corner(
-        data_joint,
-        var_names=["mu_tgr", "sigma_tgr"],
-        figsize=(width1, width1),
-        plot_density=False,
-        plot_contours=True,
-        plot_datapoints=False,
-        fill_contours=False,
-        color=color_joint,
-        levels=SIGMA_LEVELS_2D,
+        joint_samples,
         fig=fig,
+        color=color_joint,
+        **common_corner_kwargs(),
     )
-    
+
     fig = corner(
-        data_memory,
-        var_names=["mu_tgr", "sigma_tgr"],
-        labels=[r"memory $\mu_{\Lambda}$", r"memory $\sigma_{\Lambda}$"],
-        figsize=(width1, width1),
-        plot_density=False,
-        plot_contours=True,
-        plot_datapoints=False,
-        fill_contours=False,
+        memory_samples,
+        fig=fig,
         color=color_memory,
-        levels=SIGMA_LEVELS_2D,
         truths=[1, 0],
         truth_color="k",
-        fig=fig,
+        **common_corner_kwargs(),
     )
-    
+
     axes = np.array(fig.axes).reshape((2, 2))
-    for ax in axes[-1, :]:  # bottom row
-        ax.xaxis.set_label_coords(0.5, -0.2)
-    for ax in axes[:, 0]:  # left column
-        ax.yaxis.set_label_coords(-0.2, 0.5)
 
-    ax.set_xlim(-18, 18)
-    ax.set_ylim(0, 18)
+    axes[0, 0].set_xlim(*view_mu_lim)
+    axes[1, 0].set_xlim(*view_mu_lim)
+    axes[1, 0].set_ylim(*view_sigma_lim)
+    axes[1, 1].set_xlim(*view_sigma_lim)
 
-    joint_line = Line2D([], [], lw=1.5, color=color_joint, label='joint')
-    mem_line = Line2D([], [], lw=1.5, color=color_memory, label='memory only')
-    truth_line = Line2D([], [], lw=1.5, color='k', linestyle='-', label='GR')
-    
+    for this_ax in axes[-1, :]:
+        this_ax.xaxis.set_label_coords(0.5, -0.2)
+    for this_ax in axes[:, 0]:
+        this_ax.yaxis.set_label_coords(-0.2, 0.5)
+
+    joint_line = Line2D([], [], lw=1.5, color=color_joint, label="joint")
+    mem_line = Line2D([], [], lw=1.5, color=color_memory, label="memory only")
+    truth_line = Line2D([], [], lw=1.5, color="k", linestyle="-", label="GR")
+
     ax_empty = axes[0, 1]
     ax_empty.axis("off")
     ax_empty.legend(
         handles=[joint_line, mem_line, truth_line],
         loc="upper right",
         frameon=False,
-        handlelength=1.2
+        handlelength=1.2,
     )
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(path / "tgr_comparison_corner.pdf", dpi=dpi, bbox_inches="tight")
+    path.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path / "tgr_comparison_corner.pdf", dpi=dpi, bbox_inches="tight")
     plt.close(fig)
 
 def make_forecast(
@@ -813,7 +831,8 @@ def make_forecast(
         x_max = max(x_max, int(1.2 * max(n_refs)))
     else:
         x_max = all_max_n
-    x_max = 6000
+        
+    x_max = 5000
 
     fig, ax = plt.subplots(figsize=(width2, 0.35 * width2))
 
@@ -844,14 +863,18 @@ def make_forecast(
         label=rf"$1\sigma$ away from zero",
     )
 
-    for i, n_ref in enumerate(sorted(set(n_refs))):
-        ax.axvline(
-            n_ref,
-            ls=":",
-            lw=1.5,
-            color="k",
-            label=rf"current $N_{0}=\,${n_ref}" if i == 0 else None,
-        )
+    n_ref_values = sorted(set(n_refs))
+    if len(n_ref_values) != 1:
+        raise ValueError(f"Memory and joint forecasts have inconsistent n_ref values: {n_ref_values}")
+    n_ref = n_ref_values[0]
+    
+    ax.axvline(
+        n_ref,
+        ls=":",
+        lw=1.5,
+        color="k",
+        label=rf"current $N_0=\,${n_ref}",
+    )
 
     ax.set_xlim(0, x_max)
     
@@ -929,7 +952,7 @@ def parse_args() -> argparse.Namespace:
         "--memory-run",
         help=(
             "Memory result subdirectory to summarize/plot. Defaults to the "
-            "memory-selected run matching the joint run, if present."
+            "memory_selected run matching the joint run, if present."
         ),
     )
     parser.add_argument(
@@ -985,7 +1008,7 @@ def main() -> None:
         runs, args.memory_run, args.joint_run, args.memory_count_run
     )
 
-    memory_analysis = REPO_DIR / "analysis"
+    memory_analysis = REPO_DIR / "analysis_w_4p1_5"
     
     forecast_run = results_dir / "forecast_parametric_invchi2_no_trunc_joint"
 

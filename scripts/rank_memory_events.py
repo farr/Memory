@@ -400,11 +400,11 @@ def _load_run_inputs(
     scale_tgr_override: Optional[bool],
     ignore_memory_weights_override: Optional[bool],
 ) -> Tuple[np.ndarray, np.ndarray, List[str], List[np.ndarray], np.ndarray, np.ndarray, np.ndarray, float, RunConfig]:
-    posterior_nc = posterior_nc or results_dir / "prod_20260414/auto_o3o4a_memory/result_memory.nc"
-    event_files_path = event_files_path or results_dir / "prod_20260414/auto_o3o4a_memory/event_files.txt"
-    command_path = results_dir / "prod_20260414/auto_o3o4a_memory/command.txt"
-    ifar_cache_path = results_dir / "prod_20260414/auto_o3o4a_memory/event_ifars.txt"
-    analyzed_events_path = results_dir / "prod_20260414/auto_o3o4a_memory/analyzed_events.txt"
+    posterior_nc = posterior_nc or results_dir / "prod_20260601/auto_o1o2o3o4ao4b_joint/result_joint.nc"
+    event_files_path = event_files_path or results_dir / "prod_20260601/auto_o1o2o3o4ao4b_joint/event_files.txt"
+    command_path = results_dir / "prod_20260601/auto_o1o2o3o4ao4b_joint/command.txt"
+    ifar_cache_path = results_dir / "prod_20260601/auto_o1o2o3o4ao4b_joint/event_ifars.txt"
+    analyzed_events_path = results_dir / "prod_20260601/auto_o1o2o3o4ao4b_joint/analyzed_events.txt"
 
     if not posterior_nc.exists():
         raise FileNotFoundError(f"Posterior file not found: {posterior_nc}")
