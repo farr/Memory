@@ -45,6 +45,7 @@ GWTC releases listed in [`provenance.txt`](provenance.txt):
 | GWTC-2.1  | v2      | [10.5281/zenodo.6513631](https://doi.org/10.5281/zenodo.6513631) |
 | GWTC-3    | v2      | [10.5281/zenodo.8177023](https://doi.org/10.5281/zenodo.8177023) |
 | GWTC-4    | v2      | [10.5281/zenodo.17014085](https://doi.org/10.5281/zenodo.17014085) |
+| GWTC-5    | v2      | [10.5281/zenodo.20348004](https://doi.org/10.5281/zenodo.20348004) |
 
 For GWTC-3 we use the `*_nocosmo*` files; their `log_prior` is consistent with
 the sample distribution, whereas the `cosmo` files have been resampled but
@@ -52,17 +53,17 @@ retain the original prior field.
 
 ### Selection injections
 
-The hierarchical analysis uses the LVK GWTC-4.0 sensitivity-estimate
+The hierarchical analysis uses the LVK GWTC-5.0 sensitivity-estimate
 injections of Essick et al. ([arXiv:2508.10638](https://arxiv.org/abs/2508.10638),
 dataset [10.5281/zenodo.16740128](https://doi.org/10.5281/zenodo.16740128)).
 The default file used for the paper is
 
 ```
-data/selection/mixture-semi_o1_o2-real_o3_o4a-cartesian_spins_20250503134659UTC.hdf
+data/selection/mixture-semi_o1_o2-real_o3_o4a_o4b-polar_spins_20260410130052UTC-clipped.hdf
 ```
 
-which provides cumulative O1+O2+O3+O4a sensitivity (semi-analytic for O1+O2,
-search-pipeline-recovered for O3+O4a). Other selection files used for
+which provides cumulative O1+O2+O3+O4a+O4b sensitivity (semi-analytic for O1+O2,
+search-pipeline-recovered for O3+O4a+O4b). Other selection files used for
 robustness checks are downloaded by `data/download.sh`.
 
 ## Reproducing the analysis
@@ -93,7 +94,7 @@ but users will find that certain arguments need to be set/modified based on thei
    uv run python scripts/run_hierarchical_analysis.py \
        "path/to/posteriors/*.h5" \
        --memory-dir results/memory_gwtc/ \
-       --injection-file data/selection/mixture-semi_o1_o2-real_o3_o4a-cartesian_spins_20250503134659UTC.hdf \
+       --injection-file data/selection/mixture-semi_o1_o2-real_o3_o4a_o4b-polar_spins_20260410130052UTC-clipped.hdf \
        --analyze astro memory joint \
        --outdir results/hierarchical/
    ```
