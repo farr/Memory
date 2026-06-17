@@ -8,7 +8,7 @@ This repository contains the analysis code used to produce the results of
 > [arXiv:2605.27500](https://arxiv.org/abs/2605.27500) (LIGO Document [LIGO-P2600229](https://dcc.ligo.org/LIGO-P2600229)).
 
 Data produced by the code in this repository (up to RNG seed values) are available at
-[10.5281/zenodo.20347300](https://doi.org/10.5281/zenodo.20347300).
+[10.5281/zenodo.20734696](https://doi.org/10.5281/zenodo.20734696).
 
 The methodology and the scientific results are described in the paper;
 this README only covers what is needed to reproduce them.
@@ -142,23 +142,35 @@ and this code (data) release. BibTeX:
 }
 
 @software{memory_code,
-	author       = {Mitman, Keefe and Isi, Maximiliano and Farr, Will M.},
-	title        = {farr/Memory: Initial arXiv release},
-	month        = may,
-	year         = 2026,
-	publisher    = {Zenodo},
-	version      = {v1.0.0},
-	doi          = {10.5281/zenodo.20398639},
-	url          = {https://doi.org/10.5281/zenodo.20398639},
+  author       = {Mitman, Keefe and
+                  Isi, Maximiliano and
+                  Farr, Will},
+  title        = {farr/Memory: Second arXiv release},
+  month        = jun,
+  year         = 2026,
+  publisher    = {Zenodo},
+  version      = {v1.1.0},
+  doi          = {10.5281/zenodo.20734873},
+  url          = {https://doi.org/10.5281/zenodo.20734873},
+  swhid        = {swh:1:dir:f197fa0be05fdce9a7fca5a6e34eaabcc2d02310
+                   ;origin=https://doi.org/10.5281/zenodo.20398638;vi
+                   sit=swh:1:snp:861d80f030f12a294423e738f15b2ce5fe93
+                   2a5c;anchor=swh:1:rel:530331834c6f97771a433f098d7a
+                   7d37452125c4;path=farr-Memory-7c7b814
+                  },
 }
 
 @dataset{memory_data,
-	author       = {Mitman, Keefe and Isi, Maximiliano and Farr, Will M.},
-	title        = {Data produced in "Constraining Gravitational Wave Memory with Hierarchical Inference"},
-	month        = may,
-	year         = 2026,
-	publisher    = {Zenodo},
-	doi          = {10.5281/zenodo.20347301},
-	url          = {https://doi.org/10.5281/zenodo.20347301},
+  author       = {Mitman, Keefe and
+                  Isi, Maximiliano and
+                  Farr, Will},
+  title        = {Data produced in "Constraining Gravitational Wave
+                   Memory with Hierarchical Inference"
+                  },
+  month        = jun,
+  year         = 2026,
+  publisher    = {Zenodo},
+  doi          = {10.5281/zenodo.20734696},
+  url          = {https://doi.org/10.5281/zenodo.20734696},
 }
 ```
