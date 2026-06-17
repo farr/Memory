@@ -55,7 +55,7 @@ retain the original prior field.
 
 The hierarchical analysis uses the LVK GWTC-5.0 sensitivity-estimate
 injections of Essick et al. ([arXiv:2508.10638](https://arxiv.org/abs/2508.10638),
-dataset [10.5281/zenodo.16740128](https://doi.org/10.5281/zenodo.16740128)).
+dataset [10.5281/zenodo.19500052](https://doi.org/10.5281/zenodo.19500052)).
 The default file used for the paper is
 
 ```
@@ -132,13 +132,13 @@ and this code (data) release. BibTeX:
 
 ```bibtex
 @article{Mitman_Isi_Farr_2026,
-  author  = {Mitman, Keefe and Isi, Maximiliano and Farr, Will M.},
-  title   = {Constraining Gravitational Wave Memory with Hierarchical Inference},
-  journal = {arXiv e-prints},
-  year    = {2026},
-  eprint  = {XXXX.XXXXX},
-  archivePrefix = {arXiv},
-  note    = {LIGO Document LIGO-P2600229},
+    author = "Mitman, Keefe and Isi, Maximiliano and Farr, Will M.",
+    title = "{Constraining Gravitational Wave Memory with Hierarchical Inference}",
+    eprint = "2605.27500",
+    archivePrefix = "arXiv",
+    primaryClass = "gr-qc",
+    month = "5",
+    year = "2026"
 }
 
 @software{memory_code,
