@@ -44,7 +44,7 @@ GWTC releases listed in [`provenance.txt`](provenance.txt):
 |-----------|---------|-------------------------------------------------------|
 | GWTC-2.1  | v2      | [10.5281/zenodo.6513631](https://doi.org/10.5281/zenodo.6513631) |
 | GWTC-3    | v2      | [10.5281/zenodo.8177023](https://doi.org/10.5281/zenodo.8177023) |
-| GWTC-4    | v2      | [10.5281/zenodo.17014085](https://doi.org/10.5281/zenodo.17014085) |
+| GWTC-4    | v3      | [10.5281/zenodo.17602505](https://doi.org/10.5281/zenodo.17602505) |
 | GWTC-5    | v2      | [10.5281/zenodo.20348004](https://doi.org/10.5281/zenodo.20348004) |
 
 For GWTC-3 we use the `*_nocosmo*` files; their `log_prior` is consistent with
