@@ -1,0 +1,70 @@
+We thank the referee for their careful reading of our manuscript and their
+thorough review. Below we address their comments directly and detail the
+corresponding edits that we have made to the manuscript. Furthermore, to make
+our edits more apparent, we have included a PDF of the differences between the
+revised manuscript and the submitted version.
+
+Major comments:
+
+First, we would like to notify the referee that we have significantly modified
+the portions of the text that grouped Ref. 47 in with the other works that
+relied on Bayes factors. Also, we have clarified that part of why our work is
+significant in relation to Ref. 47 is that by inferring both the mean and the
+variance of the memory enhancement factor through hierarchical inference we are
+able to perform a meaningful null test of GR. We stress that measuring the mean
+alone does not enable this, as one must also demonstrate that the variance of
+the underlying distribution is zero to verify that A = 1.
+
+Nonetheless, the referee is completely correct that assuming the population
+model is described by a Gaussian is an assumption that could induce a bias on
+the analysis. However, in the limit of infinite observations (and no data /
+waveform systematics), using a Gaussian as the population model will indeed
+measure whether or not the true population is consistent with a delta function
+at A = 1. This is because the Gaussian log-likelihood is minimized exactly at
+the point where the Gaussian's mean and variance are equal to the underlying
+distribution's mean and variance. Consequently, this population model is
+perfectly sufficient for performing a null test of GR, which is the aim of this
+work.
+
+If one instead wanted to measure the population assuming that the underlying was
+not A = 1, then although the Gaussian population model would still measure the
+exact mean and variance of the underlying distribution, it would clearly be an
+insufficient model (as it would be unable to measure the higher moments of the
+distribution). But, since this is not the aim of this work, we do not believe
+it is relevant to the analysis or results that we present to conduct an
+investigation of how Gaussian population models are biased when fit to a wide
+range of population models with a finite number of observations.
+
+We have clarified this important point in the text below Eq. 3.10.
+
+Minor comments:
+
+>>> "Refs. [43-47] conducted various studies on memory using LVK catalogs…”:
+this is incorrect—Refs. 44 and 46 only analysed simulated events."
+
+We have changed this paragraph to highlight these differences.
+
+>>> "“All of these analyses, however, relied on Bayes factors for this
+projection…”, which refers to references 43-47, although as noted above it is
+an incorrect statement about two of the reference. There is a footnote that
+notes the statement “All of these analyses…” is not true for Ref. 47, implying
+that statement is applicable for two out of three of the references. This
+footnote and whole discussion are misleading and dishonest toward Ref. 47, which
+in fact did do an analysis deriving a population-level constraint on the memory
+enhancement factor."
+
+In addition to the changes made to address the previous point, in our rewrite of
+this paragraph we have separated Ref. 47 from those which only worked with Bayes
+factors. We have also clarified that Ref. 47 performed hierarchical inference
+and used a delta-function as their population model, which is insufficient for
+performing a null test of GR and motivates our work, which uniquely measures
+the variance of the memory parameter across the population of GW observations.
+
+>>> "Equation 2.7 and surrounding text needs to be appropriately referenced as
+this work is not the first to use this memory amplitude term. It was first
+introduced in Scargle et al (which, as the authors point out, is now withdrawn,
+but should still be acknowledged here), and then used for inference in Cheung et
+al. This should be appropriately acknowledged."
+
+Below Eq. (2.7), we have added the sentence "This expression has been used
+previously in Refs.~\cite{Scargle:2021lqz,Cheung:2024zow}".

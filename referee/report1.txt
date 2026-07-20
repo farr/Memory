@@ -1,0 +1,71 @@
+----------------------------------------------------------------------
+Report of the Referee -- DT18235/Mitman
+----------------------------------------------------------------------
+
+Mitman, Isi and Farr analyse the LIGO-Virgo-KAGRA fifth catalog of
+gravitational-wave events using a hierarchical model that includes
+gravitational-wave memory in an attempt to measure the so-called “memory
+enhancement factor”. Unsurprisingly, and consistent with previous works, they
+measure something consistent with general relativity, but also consistent with
+zero memory. Consistent with many other works, they also find around 2,000
+events will need to be measured to positively detect memory.
+
+The paper is well-enough written, although I encourage the authors to think
+deeply about their writing style as the manuscript often obfuscates relatively
+standard mathematics with unnecessarily complex language. The result is
+important as it provides the next round of updates on the ongoing effort to
+detect gravitational-wave memory updated to the latest catalog of events. In
+addition, the work is the first to perform full hierarchical inference of the
+population and memory, and does so by introducing a neat formalism that allows
+for these things to be calculated easily (albeit in the case when simple
+event-level and population priors are used).
+
+I do have a number of concerns about the presentation of the paper detailed
+below. Upon satisfactory responses to these I will be happy to recommend this
+work for publication.
+
+Toward the end of the introduction, the authors write: “All of these analyses,
+however, relied on Bayes factors for this projection—an approach that can yield
+incorrect results when combining many events [49–51]…”. References 49-51 operate
+in a completely different analysis and physics regime to work being done in
+gravitational-wave memory. As it stands, this manuscript presents most previous
+work (other than Ref. 47, which is being dismissed for other reasons — see
+comment below) as being wrong or misleading, but without any concrete evidence
+backing this up. If the authors are to make statements like this, then they need
+to be backed up with concrete calculations showing evidence those papers have
+drawn incorrect conclusions.
+
+Note this is not the only place in the paper with claims like this. Foe example,
+the abstract reads “These works, however, largely relied on Bayes factors to
+perform their memory analysis: an approach that … can even favor incorrect
+conclusions.”
+
+A key assumption in the work is the parameterised population model that is used
+for the usual binary black hole parameters. However there are many different
+ways of doing this parameterisation, or in fact using much more data-driven
+methods. Regardless, given the simplicity, the model used is almost certainly
+misspecified to some degree, which will have flow-on effects for inference of
+the hierarchical A parameter. How large are these effects for “reasonable”
+choices of population inference? What potential biases in the memory enhancement
+factor can/have been introduced because of model misspecification? How much of
+an effect is there on population prior choices?
+
+Minor comments:
+
+Refs. [43-47] conducted various studies on memory using LVK catalogs…”: this is
+incorrect—Refs. 44 and 46 only analysed simulated events.
+
+“All of these analyses, however, relied on Bayes factors for this projection…”,
+which refers to references 43-47, although as noted above it is an incorrect
+statement about two of the reference. There is a footnote that notes the
+statement “All of these analyses…” is not true for Ref. 47, implying that
+statement is applicable for two out of three of the references. This footnote
+and whole discussion are misleading and dishonest toward Ref. 47, which in fact
+did do an analysis deriving a population-level constraint on the memory
+enhancement factor.
+
+Equation 2.7 and surrounding text needs to be appropriately referenced as this
+work is not the first to use this memory amplitude term. It was first introduced
+in Scargle et al (which, as the authors point out, is now withdrawn, but should
+still be acknowledged here), and then used for inference in Cheung et al. This
+should be appropriately acknowledged.
