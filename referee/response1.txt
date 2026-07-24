@@ -11,8 +11,8 @@ the portions of the text that grouped Ref. 47 in with the other works that
 relied on Bayes factors. Also, we have clarified that part of why our work is
 significant in relation to Ref. 47 is that by inferring both the mean and the
 variance of the memory enhancement factor through hierarchical inference we are
-able to perform a meaningful null test of GR. We stress that measuring the mean
-alone does not enable this, as one must also demonstrate that the variance of
+able to perform a more meaningful null test of GR. We stress that measuring the
+mean alone is a weaker test, as one must also demonstrate that the variance of
 the underlying distribution is zero to verify that A = 1.
 
 Nonetheless, the referee is completely correct that assuming the population
@@ -56,8 +56,8 @@ enhancement factor."
 In addition to the changes made to address the previous point, in our rewrite of
 this paragraph we have separated Ref. 47 from those which only worked with Bayes
 factors. We have also clarified that Ref. 47 performed hierarchical inference
-and used a delta-function as their population model, which is insufficient for
-performing a null test of GR and motivates our work, which uniquely measures
+and used a delta-function as their population model, which is corresponds to a
+weaker null test of GR and motivates our work, which uniquely measures
 the variance of the memory parameter across the population of GW observations.
 
 >>> "Equation 2.7 and surrounding text needs to be appropriately referenced as
@@ -66,5 +66,5 @@ introduced in Scargle et al (which, as the authors point out, is now withdrawn,
 but should still be acknowledged here), and then used for inference in Cheung et
 al. This should be appropriately acknowledged."
 
-Below Eq. (2.7), we have added the sentence "This expression has been used
+Below Eq. (2.7), we have added the sentence "This formulation has been used
 previously in Refs.~\cite{Scargle:2021lqz,Cheung:2024zow}".
