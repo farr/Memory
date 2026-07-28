@@ -13,7 +13,11 @@ significant in relation to Ref. 47 is that by inferring both the mean and the
 variance of the memory enhancement factor through hierarchical inference we are
 able to perform a more meaningful null test of GR. We stress that measuring the
 mean alone is a weaker test, as one must also demonstrate that the variance of
-the underlying distribution is zero to verify that A = 1.
+the underlying distribution is zero to verify that A = 1. Moreoever, we should
+expect that most perturbations from GR will result in a nonzero variance, since
+the true deviation will likely project differently on our A parameter for
+different events. Consequently, our constraint on the variance is not an
+insignificant upgrade to previous analyses.
 
 Nonetheless, the referee is completely correct that assuming the population
 model is described by a Gaussian is an assumption that could induce a bias on
@@ -26,7 +30,7 @@ distribution's mean and variance. Consequently, this population model is
 perfectly sufficient for performing a null test of GR, which is the aim of this
 work.
 
-If one instead wanted to measure the population assuming that the underlying was
+If one instead wanted to reconstruct the population assuming the underlying was
 not A = 1, then although the Gaussian population model would still measure the
 exact mean and variance of the underlying distribution, it would clearly be an
 insufficient model (as it would be unable to measure the higher moments of the
@@ -46,7 +50,7 @@ We have changed this paragraph to highlight these differences.
 
 >>> "“All of these analyses, however, relied on Bayes factors for this
 projection…”, which refers to references 43-47, although as noted above it is
-an incorrect statement about two of the reference. There is a footnote that
+an incorrect statement about two of the references. There is a footnote that
 notes the statement “All of these analyses…” is not true for Ref. 47, implying
 that statement is applicable for two out of three of the references. This
 footnote and whole discussion are misleading and dishonest toward Ref. 47, which
@@ -56,7 +60,7 @@ enhancement factor."
 In addition to the changes made to address the previous point, in our rewrite of
 this paragraph we have separated Ref. 47 from those which only worked with Bayes
 factors. We have also clarified that Ref. 47 performed hierarchical inference
-and used a delta-function as their population model, which is corresponds to a
+and used a delta-function as their population model, which corresponds to a
 weaker null test of GR and motivates our work, which uniquely measures
 the variance of the memory parameter across the population of GW observations.
 
